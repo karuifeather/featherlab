@@ -7,7 +7,7 @@ export const CLUSTER = "featherlab";
 export const WORKSTATION = "featherlab-workstation";
 export const IMAGE =
   process.env.FEATHERLAB_IMAGE ||
-  "ghcr.io/karuifeather/featherlab-workstation:0.1.0";
+  "ghcr.io/karuifeather/featherlab-workstation:0.1.1";
 export const STATE = path.join(os.homedir(), ".featherlab");
 const NODE_IMAGE =
   "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5";
