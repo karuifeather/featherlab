@@ -4,13 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
   quality:
-    name: Formatting, lint, tests, build
+    name: Formatting, lint, content, unit tests, build, package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -21,6 +22,62 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      - name: Validate exercise content (no Docker or cluster needed)
+        run: npm run validate-content
       - run: npm test
       - run: npm run build
-      - run: npm pack --dry-run
+      - name: Verify the npm tarball contents
+        run: npm run pack:check
+      - name: Install the packed tarball and run the CLI from it
+        run: |
+          set -euo pipefail
+          WORK="$(mktemp -d)"
+          npm pack --pack-destination "$WORK" >/dev/null
+          cd "$WORK" && npm init -y >/dev/null
+          npm install ./featherlab-*.tgz --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/featherlab validate-content
+          ./node_modules/.bin/featherlab exercises
+
+  integration:
+    name: Real kind cluster and browser end-to-end
+    needs: [quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install kind
+        run: |
+          curl -fsSL -o kind "https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64"
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+      - name: Build the workstation image from this commit
+        run: docker build -t featherlab-workstation:dev docker
+      - run: npm ci
+      - run: npm run build
+      # Both suites create and delete their own featherlab-test-<id> cluster; neither can
+      # address a cluster named "featherlab" (see test/helpers/isolated-environment.mjs).
+      - name: Exercise lifecycle against a disposable kind cluster
+        env:
+          FEATHERLAB_IMAGE: featherlab-workstation:dev
+        run: npm run test:kind
+      - run: npx playwright install --with-deps chromium
+      - name: Browser end-to-end against the real backend
+        env:
+          FEATHERLAB_IMAGE: featherlab-workstation:dev
+        run: npm run test:e2e
+      - name: Upload browser traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          if-no-files-found: ignore
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker ps -a || true
+          kind get clusters || true

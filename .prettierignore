@@ -6,3 +6,5 @@ coverage/
 .claude/
 *.tgz
 *.log
+test-results/
+playwright-report/

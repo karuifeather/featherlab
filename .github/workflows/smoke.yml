@@ -24,6 +24,7 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      - run: npm run validate-content
       - run: npm run build
       - run: npm test
       - name: Build local workstation image
@@ -46,6 +47,15 @@ jobs:
           docker exec featherlab-workstation kubectl wait --for=condition=Ready pod/web --timeout=120s
           curl -fsS -X POST http://127.0.0.1:4317/api/check | tee check.json
           node -e 'if (!JSON.parse(require("fs").readFileSync("check.json","utf8")).success) process.exit(1)'
+      - name: Exercise lifecycle (activate, check, reset) on a disposable test cluster
+        run: npm run test:kind
+        env:
+          FEATHERLAB_IMAGE: featherlab-workstation:dev
+      - run: npx playwright install --with-deps chromium
+      - name: Browser end-to-end on a disposable test cluster
+        run: npm run test:e2e
+        env:
+          FEATHERLAB_IMAGE: featherlab-workstation:dev
       - name: Diagnostics on failure
         if: failure()
         run: |

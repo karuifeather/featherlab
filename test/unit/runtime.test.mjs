@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { IMAGE } from "../src/lib/runtime.mjs";
+import { IMAGE } from "../../src/lib/runtime.mjs";
 
-const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../package.json");
+const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../package.json");
 const { version } = JSON.parse(readFileSync(pkgPath, "utf8"));
 
 test("IMAGE default derives from package.json version", () => {

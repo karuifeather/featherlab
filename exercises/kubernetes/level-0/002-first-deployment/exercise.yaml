@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: k8s-0002
+type: task
+title: Run a Deployment
+summary: Create a labelled two-replica Deployment in an existing namespace.
+track: kubernetes
+level: 0
+difficulty: beginner
+estimatedMinutes: 8
+tags: [deployments, labels, namespaces, kubectl]
+prerequisites: [k8s-0001]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `staging` (already created for you)"
+  - "Deployment name: `api`"
+  - "Container image: `nginx:1.27`"
+  - "Replicas: `2`, and both must become available"
+  - "The Deployment itself must carry the label `tier=backend`"
+
+hints:
+  - "`kubectl create deployment --help` shows how to set the image and replica count."
+  - "Remember the namespace: add `-n staging`, or the Deployment lands in `default`."
+  - "Labels on the Deployment object can be added later with `kubectl label`."
+
+lifecycle:
+  setup:
+    manifests: [setup/namespace.yaml]
+  reset:
+    delete:
+      - { kind: Deployment, name: api, namespace: staging }
+
+checks:
+  - id: namespace
+    type: k8s.resource-exists
+    label: Namespace staging exists
+    params: { kind: Namespace, name: staging }
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Deployment api exists in namespace staging
+    params: { kind: Deployment, name: api, namespace: staging }
+  - id: image
+    type: k8s.container-image
+    label: Container uses nginx:1.27
+    params: { kind: Deployment, name: api, namespace: staging, image: "nginx:1.27" }
+  - id: desired
+    type: k8s.replicas-desired
+    label: Deployment requests 2 replicas
+    params: { kind: Deployment, name: api, namespace: staging, replicas: 2 }
+  - id: available
+    type: k8s.replicas-available
+    label: Both replicas are available
+    weight: 2
+    params: { kind: Deployment, name: api, namespace: staging, replicas: 2 }
+  - id: label
+    type: k8s.labels
+    label: Deployment is labelled tier=backend
+    params:
+      kind: Deployment
+      name: api
+      namespace: staging
+      labels: { tier: backend }

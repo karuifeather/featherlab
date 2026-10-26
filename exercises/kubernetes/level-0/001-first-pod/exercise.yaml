@@ -1,0 +1,48 @@
+schemaVersion: 1
+id: k8s-0001
+type: task
+title: Your first Pod
+summary: Create a single nginx Pod and get it running.
+track: kubernetes
+level: 0
+difficulty: beginner
+estimatedMinutes: 5
+tags: [pods, kubectl]
+
+environment:
+  profile: kind-default
+
+requirements:
+  - "Pod name: `web`"
+  - "Namespace: `default`"
+  - "Container image: `nginx:1.27`"
+  - "The Pod must be `Running` and `Ready`."
+
+hints:
+  - "Try `kubectl run --help` to see how to create a single Pod from an image."
+  - "`kubectl run NAME --image=IMAGE` creates a Pod. Watch it with `kubectl get pod`."
+
+# Removed when the learner resets the exercise.
+lifecycle:
+  reset:
+    delete:
+      - { kind: Pod, name: web, namespace: default }
+
+# Grading inspects the resulting cluster state, never the commands that were typed.
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: Pod web exists in default namespace
+    params: { kind: Pod, name: web, namespace: default }
+  - id: image
+    type: k8s.container-image
+    label: Container uses nginx:1.27
+    params: { kind: Pod, name: web, namespace: default, image: "nginx:1.27" }
+  - id: running
+    type: k8s.pod-phase
+    label: Pod is Running
+    params: { name: web, namespace: default, phase: Running }
+  - id: ready
+    type: k8s.pod-ready
+    label: Pod Ready condition is True
+    params: { name: web, namespace: default }

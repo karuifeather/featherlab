@@ -1,14 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import pkg from "../../package.json" with { type: "json" };
+import {
+  DEFAULT_CLUSTER,
+  DEFAULT_IMAGE,
+  DEFAULT_STATE_DIR,
+  DEFAULT_WORKSTATION,
+  resolveEnvironment,
+} from "../infrastructure/environment.mjs";
 
-export const CLUSTER = "featherlab";
-export const WORKSTATION = "featherlab-workstation";
-export const IMAGE =
-  process.env.FEATHERLAB_IMAGE || `ghcr.io/karuifeather/featherlab-workstation:${pkg.version}`;
-export const STATE = path.join(os.homedir(), ".featherlab");
+// Kept for existing importers; new code should take an EnvironmentConfig instead.
+export const CLUSTER = DEFAULT_CLUSTER;
+export const WORKSTATION = DEFAULT_WORKSTATION;
+export const IMAGE = DEFAULT_IMAGE;
+export const STATE = DEFAULT_STATE_DIR;
 const NODE_IMAGE =
   "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5";
 
@@ -26,145 +31,143 @@ export function run(binary, args, options = {}) {
   }
 }
 
-export function doctor() {
-  const checks = [
-    ["Docker CLI", () => run("docker", ["--version"])],
-    ["Docker daemon", () => run("docker", ["info", "--format", "{{.ServerVersion}}"])],
-    ["kind", () => run("kind", ["version"])],
-  ];
-  let ok = true;
-  for (const [name, check] of checks) {
+/**
+ * Docker/kind provisioning for one environment. `exec(binary, args, options)` is injectable
+ * so tests can verify exactly which commands would run without running them.
+ */
+export function createRuntime(overrides = {}, { exec = run, log = console } = {}) {
+  const config = resolveEnvironment(overrides);
+
+  function doctor() {
+    const checks = [
+      ["Docker CLI", () => exec("docker", ["--version"])],
+      ["Docker daemon", () => exec("docker", ["info", "--format", "{{.ServerVersion}}"])],
+      ["kind", () => exec("kind", ["version"])],
+    ];
+    let ok = true;
+    for (const [name, check] of checks) {
+      try {
+        log.log(`  ✓ ${name}: ${String(check()).trim()}`);
+      } catch (error) {
+        log.error(`  ✗ ${name}: ${error.message}`);
+        ok = false;
+      }
+    }
+    return ok;
+  }
+
+  function containerState() {
     try {
-      console.log(`  ✓ ${name}: ${String(check()).trim()}`);
-    } catch (error) {
-      console.error(`  ✗ ${name}: ${error.message}`);
-      ok = false;
+      return exec("docker", [
+        "inspect",
+        "--format",
+        "{{.State.Running}}",
+        config.workstation,
+      ]).trim();
+    } catch {
+      return "missing";
     }
   }
-  return ok;
-}
 
-function containerState() {
-  try {
-    return run("docker", ["inspect", "--format", "{{.State.Running}}", WORKSTATION]).trim();
-  } catch {
-    return "missing";
+  function clusterExists() {
+    return exec("kind", ["get", "clusters"]).trim().split(/\s+/).includes(config.cluster);
   }
-}
 
-export function provision() {
-  if (!doctor()) throw new Error("Install or start Docker and kind. See README prerequisites.");
-  mkdirSync(STATE, { recursive: true, mode: 0o700 });
-  const clusters = run("kind", ["get", "clusters"]).trim().split(/\s+/);
-  if (!clusters.includes(CLUSTER)) {
-    console.log("Creating isolated kind cluster (first launch may download images)...");
-    run(
+  function provision() {
+    if (!doctor()) throw new Error("Install or start Docker and kind. See README prerequisites.");
+    mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
+    if (!clusterExists()) {
+      log.log("Creating isolated kind cluster (first launch may download images)...");
+      exec(
+        "kind",
+        [
+          "create",
+          "cluster",
+          "--name",
+          config.cluster,
+          "--wait",
+          "180s",
+          "--image",
+          NODE_IMAGE,
+          // Never let kind merge this cluster into the user's ~/.kube/config.
+          "--kubeconfig",
+          path.join(config.stateDir, "host-kubeconfig"),
+        ],
+        { timeout: 360000, stdio: "inherit" },
+      );
+    }
+    const kubeconfig = exec("kind", ["get", "kubeconfig", "--name", config.cluster, "--internal"]);
+    const kubeconfigPath = path.join(config.stateDir, "workstation-kubeconfig");
+    writeFileSync(kubeconfigPath, kubeconfig, { mode: 0o600 });
+    // The learner container uses UID 1000; its read-only bind mount must be readable.
+    // The parent state directory remains owner-only (0700).
+    chmodSync(kubeconfigPath, 0o644);
+    const status = containerState();
+    if (status === "true") return;
+    if (status === "false") {
+      log.log("Starting existing workstation...");
+      exec("docker", ["start", config.workstation]);
+      return;
+    }
+
+    // Use the local image if available; otherwise pull it.
+    let imageExists = false;
+    try {
+      exec("docker", ["image", "inspect", config.image]);
+      imageExists = true;
+    } catch {
+      // Image is not available locally.
+    }
+    if (imageExists) {
+      log.log(`Using local workstation image: ${config.image}`);
+    } else {
+      log.log(`Pulling workstation image: ${config.image}`);
+      exec("docker", ["pull", config.image], { timeout: 360000, stdio: "inherit" });
+    }
+
+    log.log("Creating isolated learner workstation...");
+    exec("docker", [
+      "run",
+      "-d",
+      "--name",
+      config.workstation,
+      ...Object.entries(config.labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+      "--network",
       "kind",
-      [
-        "create",
-        "cluster",
-        "--name",
-        CLUSTER,
-        "--wait",
-        "180s",
-        "--image",
-        NODE_IMAGE,
-        "--kubeconfig",
-        path.join(STATE, "host-kubeconfig"),
-      ],
-      { timeout: 360000, stdio: "inherit" },
-    );
-  }
-  const config = run("kind", ["get", "kubeconfig", "--name", CLUSTER, "--internal"]);
-  const kubeconfigPath = path.join(STATE, "workstation-kubeconfig");
-  writeFileSync(kubeconfigPath, config, { mode: 0o600 });
-  // The learner container uses UID 1000; its read-only bind mount must be readable.
-  // The parent ~/.featherlab directory remains owner-only (0700).
-  chmodSync(kubeconfigPath, 0o644);
-  const status = containerState();
-  if (status === "true") return;
-  if (status === "false") {
-    console.log("Starting existing workstation...");
-    run("docker", ["start", WORKSTATION]);
-    return;
+      "--security-opt",
+      "no-new-privileges",
+      "--cap-drop",
+      "ALL",
+      "--pids-limit",
+      "256",
+      "--memory",
+      "512m",
+      "--user",
+      "learner",
+      "-e",
+      "KUBECONFIG=/home/learner/.kube/config",
+      "--mount",
+      `type=bind,src=${kubeconfigPath},dst=/home/learner/.kube/config,readonly`,
+      config.image,
+    ]);
   }
 
-  // Use the local image if available; otherwise pull it.
-  let imageExists = false;
-
-  try {
-    run("docker", ["image", "inspect", IMAGE]);
-    imageExists = true;
-  } catch {
-    // Image is not available locally.
+  function stop() {
+    if (containerState() === "true") exec("docker", ["stop", config.workstation]);
+    log.log("Workstation stopped. Kubernetes cluster and progress preserved.");
   }
 
-  if (imageExists) {
-    console.log(`Using local workstation image: ${IMAGE}`);
-  } else {
-    console.log(`Pulling workstation image: ${IMAGE}`);
-    run("docker", ["pull", IMAGE], {
-      timeout: 360000,
-      stdio: "inherit",
-    });
+  function status() {
+    log.log(`Cluster: ${clusterExists() ? config.cluster : "not created"}`);
+    log.log(`Workstation: ${containerState()}`);
+    log.log(`Image: ${config.image}`);
   }
 
-  console.log("Creating isolated learner workstation...");
-  run("docker", [
-    "run",
-    "-d",
-    "--name",
-    WORKSTATION,
-    "--network",
-    "kind",
-    "--security-opt",
-    "no-new-privileges",
-    "--cap-drop",
-    "ALL",
-    "--pids-limit",
-    "256",
-    "--memory",
-    "512m",
-    "--user",
-    "learner",
-    "-e",
-    "KUBECONFIG=/home/learner/.kube/config",
-    "--mount",
-    `type=bind,src=${kubeconfigPath},dst=/home/learner/.kube/config,readonly`,
-    IMAGE,
-  ]);
+  return { config, doctor, provision, stop, status, containerState, clusterExists };
 }
 
-export function stop() {
-  const status = containerState();
-  if (status === "true") run("docker", ["stop", WORKSTATION]);
-  console.log("Workstation stopped. Kubernetes cluster and progress preserved.");
-}
-
-export function status() {
-  console.log(
-    `Cluster: ${run("kind", ["get", "clusters"]).includes(CLUSTER) ? CLUSTER : "not created"}`,
-  );
-  console.log(`Workstation: ${containerState()}`);
-  console.log(`Image: ${IMAGE}`);
-}
-
-export function resetExercise() {
-  run(
-    "docker",
-    [
-      "exec",
-      WORKSTATION,
-      "kubectl",
-      "-n",
-      "default",
-      "delete",
-      "pod",
-      "web",
-      "--ignore-not-found=true",
-      "--wait=false",
-    ],
-    { timeout: 25000 },
-  );
-  console.log("First exercise reset.");
-}
+const defaults = createRuntime();
+export const doctor = defaults.doctor;
+export const provision = defaults.provision;
+export const stop = defaults.stop;
+export const status = defaults.status;
