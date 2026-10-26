@@ -6,7 +6,14 @@ import react from "eslint-plugin-react";
 
 export default [
   {
-    ignores: ["node_modules/**", "dist/**", "coverage/**", ".husky/_/**"],
+    ignores: [
+      "node_modules/**",
+      "dist/**",
+      "coverage/**",
+      "test-results/**",
+      "playwright-report/**",
+      ".husky/_/**",
+    ],
   },
   {
     files: ["**/*.{js,jsx,mjs,cjs}"],
@@ -21,6 +28,7 @@ export default [
   {
     files: [
       "bin/**/*.{js,mjs,cjs}",
+      "scripts/**/*.{js,mjs,cjs}",
       "src/**/*.{js,mjs,cjs}",
       "test/**/*.{js,mjs,cjs}",
       "web/vite.config.js",
@@ -28,6 +36,11 @@ export default [
       "*.config.js",
     ],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // Playwright specs pass functions into the page, so they reference browser globals.
+    files: ["test/e2e/**/*.mjs"],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
     files: ["web/src/**/*.{js,jsx}"],
