@@ -1,0 +1,64 @@
+.sidebar {
+  border-right: 1px solid var(--border-default);
+  background: #111722;
+  padding: 20px 12px;
+  position: relative;
+}
+
+.sidebar-head {
+  font-size: 11px;
+  letter-spacing: 1.3px;
+  font-weight: 700;
+  color: #96a4b8;
+  padding: 0 9px 21px;
+}
+
+.level {
+  font-size: 13px;
+  color: #d6e1f5;
+  padding: 11px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+
+  &.active {
+    background: #1e2a3a;
+  }
+}
+
+.lesson {
+  border: 0;
+  background: transparent;
+  color: #9ba9bb;
+  text-align: left;
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 17px;
+  border-radius: 6px;
+  font-size: 12px;
+
+  &.selected {
+    background: #263551;
+    color: #bfd1ff;
+  }
+}
+
+.sidebar-bottom {
+  position: absolute;
+  bottom: 22px;
+  left: 20px;
+  font-size: 12px;
+  color: #8795ab;
+}
+
+@media (max-width: 1000px) {
+  .sidebar-bottom {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar {
+    display: none;
+  }
+}

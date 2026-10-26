@@ -1,3 +1,5 @@
+import "./CheckResults.scss";
+
 const ICON = { passed: "✓", failed: "○", error: "!" };
 
 function heading(result) {
@@ -8,7 +10,7 @@ function heading(result) {
 
 export function CheckResults({ result }) {
   return (
-    <section className="results">
+    <section className="results" data-testid="check-results">
       <h3>{heading(result)}</h3>
       {result.checks.map((check) => (
         <div className="check" key={check.id}>

@@ -1,0 +1,52 @@
+.terminal-shell {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: #10141b;
+}
+
+.terminal-bar {
+  height: 42px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 15px;
+  background: #1a202b;
+  border-bottom: 1px solid #303847;
+  color: #a6b4c8;
+  font-size: 12px;
+}
+
+.terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 7px;
+  overflow: hidden;
+
+  .xterm {
+    height: 100%;
+  }
+}
+
+.terminal-reconnect {
+  margin-right: 8px;
+  padding: 3px 10px;
+  border: 1px solid #3a4558;
+  border-radius: 6px;
+  background: #232b39;
+  color: #dbe4ef;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover {
+    background: #2c3647;
+  }
+}
+
+@media (max-width: 760px) {
+  .terminal {
+    min-height: 200px;
+  }
+}

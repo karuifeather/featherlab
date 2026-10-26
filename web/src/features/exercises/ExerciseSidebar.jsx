@@ -1,3 +1,5 @@
+import "./ExerciseSidebar.scss";
+
 export function ExerciseSidebar({ track, exercises, selectedId, onSelect }) {
   const levels = Map.groupBy(exercises, (e) => e.level);
   return (
@@ -12,6 +14,7 @@ export function ExerciseSidebar({ track, exercises, selectedId, onSelect }) {
             <button
               key={exercise.id}
               className={`lesson ${exercise.id === selectedId ? "selected" : ""}`}
+              data-testid="lesson"
               onClick={() => onSelect(exercise.id)}
             >
               {String(i + 1).padStart(2, "0")} <span>{exercise.title}</span>

@@ -1,0 +1,71 @@
+@use "tokens";
+@use "reset";
+
+// App shell
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: 60px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 26px;
+  background: #10151d;
+}
+
+.logo {
+  background: none;
+  border: 0;
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  font-size: 17px;
+}
+
+.brand-icon {
+  color: #9abaff;
+  margin-right: 7px;
+}
+
+.local {
+  color: #a3adb9;
+  font-size: 12px;
+}
+
+// Shared between App topbar and PracticeTerminal
+.status-led {
+  display: inline-block;
+  border-radius: 100%;
+  width: 7px;
+  height: 7px;
+  background: var(--color-amber);
+  margin-right: 7px;
+
+  &.green {
+    background: var(--color-green);
+  }
+}
+
+// Shared utility classes
+.muted {
+  color: #9faaba;
+  font-size: 13px;
+}
+
+.error {
+  color: var(--color-error);
+  padding: 10px;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .app {
+    height: 100dvh;
+  }
+}

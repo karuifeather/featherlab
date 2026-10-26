@@ -1,3 +1,5 @@
+import "./Launcher.scss";
+
 export function Launcher({ onEnter }) {
   return (
     <div className="launcher">

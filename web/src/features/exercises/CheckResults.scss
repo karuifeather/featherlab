@@ -1,0 +1,33 @@
+.results {
+  margin-top: 20px;
+  border: 1px solid #344251;
+  border-radius: 8px;
+  padding: 12px;
+
+  h3 {
+    font-size: 14px;
+    margin: 2px 0 12px;
+  }
+}
+
+.check {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  padding: 6px 0;
+  color: #bfc9d6;
+}
+
+.passed {
+  color: var(--color-passed);
+}
+
+.failed {
+  color: var(--color-failed);
+}
+
+.feedback {
+  color: #8d9bb0;
+  font-size: 11px;
+  margin-top: 3px;
+}

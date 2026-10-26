@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./Hints.scss";
 import { api } from "../../api/client.js";
 import { Inline } from "../../components/Markdown.jsx";
 import { useAction } from "./useAction.js";
@@ -14,7 +15,7 @@ export function Hints({ exerciseId, total }) {
   return (
     <>
       {shown.map((text, i) => (
-        <p className="hint" key={i}>
+        <p className="hint" data-testid="hint" key={i}>
           <Inline text={text} />
         </p>
       ))}
@@ -23,7 +24,11 @@ export function Hints({ exerciseId, total }) {
           ◈ {shown.length === 0 ? "Need a hint?" : `Next hint (${shown.length}/${total})`}
         </button>
       )}
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error" data-testid="error-message">
+          {error}
+        </div>
+      )}
     </>
   );
 }

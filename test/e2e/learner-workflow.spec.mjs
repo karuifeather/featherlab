@@ -25,7 +25,8 @@ test.beforeAll(async ({ browser }) => {
 });
 test.afterAll(async () => page?.close());
 
-const terminalConnected = () => page.locator(".terminal-bar .status-led.green");
+const terminalConnected = () =>
+  page.locator('[data-testid="terminal-connection-status"][data-connected="true"]');
 
 async function runInTerminal(command) {
   await page.locator(".xterm-screen").click();
@@ -33,7 +34,7 @@ async function runInTerminal(command) {
   await page.keyboard.press("Enter");
 }
 
-const lessons = () => page.locator(".lesson");
+const lessons = () => page.locator('[data-testid="lesson"]');
 const checkButton = () => page.getByRole("button", { name: "Check solution" });
 const resetButton = () => page.getByRole("button", { name: "Reset task" });
 
@@ -48,18 +49,18 @@ test("launcher offers the Kubernetes track, which lists both exercises", async (
 
 test("the first exercise is loaded dynamically from the API", async () => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your first Pod");
-  await expect(page.locator(".problem")).toContainText(
+  await expect(page.locator('[data-testid="exercise-panel"]')).toContainText(
     "Use the terminal to create a Pod in the default namespace",
   );
-  const requirements = page.locator(".requirements li");
+  const requirements = page.locator('[data-testid="requirements"] li');
   await expect(requirements).toHaveCount(4);
   await expect(requirements.first()).toContainText("web");
   await expect(requirements.nth(2)).toContainText("nginx:1.27");
 
   await page.getByRole("button", { name: "Need a hint?" }).click();
-  await expect(page.locator(".hint")).toContainText("kubectl run --help");
+  await expect(page.locator('[data-testid="hint"]')).toContainText("kubectl run --help");
   await page.getByRole("button", { name: /Next hint/ }).click();
-  await expect(page.locator(".hint")).toHaveCount(2);
+  await expect(page.locator('[data-testid="hint"]')).toHaveCount(2);
 });
 
 test("a real terminal connects and runs kubectl against the test cluster", async () => {
@@ -72,8 +73,8 @@ test("a real terminal connects and runs kubectl against the test cluster", async
 
 test("checking before solving shows failing checks", async () => {
   await checkButton().click();
-  await expect(page.locator(".results h3")).toContainText("0/4 checks passed");
-  await expect(page.locator(".results")).toContainText("was not found");
+  await expect(page.locator('[data-testid="check-results"] h3')).toContainText("0/4 checks passed");
+  await expect(page.locator('[data-testid="check-results"]')).toContainText("was not found");
 });
 
 test("solving the exercise in the browser terminal passes grading", async () => {
@@ -82,13 +83,13 @@ test("solving the exercise in the browser terminal passes grading", async () => 
   await expect(terminalText()).toContainText("condition met", { timeout: 260_000 });
 
   await checkButton().click();
-  await expect(page.locator(".results h3")).toHaveText("✓ Passed");
+  await expect(page.locator('[data-testid="check-results"] h3')).toHaveText("✓ Passed");
 });
 
 test("switching exercises keeps the same terminal session", async () => {
   await lessons().nth(1).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Run a Deployment");
-  await expect(page.locator(".requirements li").first()).toContainText("staging");
+  await expect(page.locator('[data-testid="requirements"] li').first()).toContainText("staging");
 
   await expect(terminalConnected()).toBeVisible();
   await runInTerminal('echo "$FL_MARK-survived"');
@@ -96,8 +97,8 @@ test("switching exercises keeps the same terminal session", async () => {
 
   // Exercise 2 starts failing, while exercise 1's pod is untouched.
   await checkButton().click();
-  await expect(page.locator(".results h3")).not.toHaveText("✓ Passed");
-  await expect(page.locator(".results")).toContainText("Deployment");
+  await expect(page.locator('[data-testid="check-results"] h3')).not.toHaveText("✓ Passed");
+  await expect(page.locator('[data-testid="check-results"]')).toContainText("Deployment");
   await runInTerminal("kubectl get pod web -o name");
   await expect(terminalText()).toContainText("pod/web");
 });
@@ -106,15 +107,15 @@ test("resetting an exercise removes the learner's work", async () => {
   await lessons().nth(0).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your first Pod");
   await checkButton().click();
-  await expect(page.locator(".results h3")).toHaveText("✓ Passed");
+  await expect(page.locator('[data-testid="check-results"] h3')).toHaveText("✓ Passed");
 
   await resetButton().click();
-  await expect(page.locator(".results")).toHaveCount(0);
+  await expect(page.locator('[data-testid="check-results"]')).toHaveCount(0);
   await runInTerminal("kubectl get pod web");
   await expect(terminalText()).toContainText('pods "web" not found');
 
   await checkButton().click();
-  await expect(page.locator(".results h3")).toContainText("0/4 checks passed");
+  await expect(page.locator('[data-testid="check-results"] h3')).toContainText("0/4 checks passed");
 });
 
 test("a dropped terminal can be reconnected", async () => {
@@ -133,7 +134,9 @@ test("API failures are shown as readable errors and the page stays usable", asyn
   // 1. Network-level failure.
   await page.route("**/api/exercises/*/check", (route) => route.abort());
   await checkButton().click();
-  await expect(page.locator(".error")).toContainText("Could not reach the featherlab server");
+  await expect(page.locator('[data-testid="error-message"]')).toContainText(
+    "Could not reach the featherlab server",
+  );
   await page.unroute("**/api/exercises/*/check");
   await expect(checkButton()).toBeEnabled();
 
@@ -143,8 +146,12 @@ test("API failures are shown as readable errors and the page stays usable", asyn
   try {
     await checkButton().click();
     // An unreachable cluster is "could not grade", never a misleading wrong answer.
-    await expect(page.locator(".results h3")).toHaveText("Could not finish grading");
-    await expect(page.locator(".results")).toContainText("practice workstation is not reachable");
+    await expect(page.locator('[data-testid="check-results"] h3')).toHaveText(
+      "Could not finish grading",
+    );
+    await expect(page.locator('[data-testid="check-results"]')).toContainText(
+      "practice workstation is not reachable",
+    );
     await expect(checkButton()).toBeEnabled();
   } finally {
     execFileSync("docker", ["unpause", workstation]);
@@ -152,6 +159,6 @@ test("API failures are shown as readable errors and the page stays usable", asyn
 
   // 3. Recovery without reloading the page.
   await checkButton().click();
-  await expect(page.locator(".results h3")).toContainText("checks passed");
-  await expect(page.locator(".error")).toHaveCount(0);
+  await expect(page.locator('[data-testid="check-results"] h3')).toContainText("checks passed");
+  await expect(page.locator('[data-testid="error-message"]')).toHaveCount(0);
 });

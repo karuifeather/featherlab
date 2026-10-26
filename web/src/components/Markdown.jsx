@@ -1,4 +1,5 @@
 import { parseInline, parseMarkdown } from "../lib/markdown.js";
+import "./Markdown.scss";
 
 function InlineParts({ parts }) {
   return parts.map((part, i) =>

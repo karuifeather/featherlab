@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./Workspace.scss";
 import { ExercisePanel } from "../exercises/ExercisePanel.jsx";
 import { ExerciseSidebar } from "../exercises/ExerciseSidebar.jsx";
 import { useExerciseList } from "../exercises/useExerciseList.js";
@@ -8,8 +9,13 @@ export function Workspace({ track }) {
   const { exercises, error } = useExerciseList(track);
   const [chosenId, setChosenId] = useState(null);
 
-  if (!exercises) return <div className="launcher muted">Loading exercises…</div>;
-  if (error) return <div className="launcher error">{error}</div>;
+  if (!exercises) return <div className="workspace-loading muted">Loading exercises…</div>;
+  if (error)
+    return (
+      <div className="workspace-loading error" data-testid="error-message">
+        {error}
+      </div>
+    );
 
   const selected = exercises.find((e) => e.id === chosenId) ?? exercises[0];
   const ordinal = selected
@@ -27,7 +33,9 @@ export function Workspace({ track }) {
       {selected ? (
         <ExercisePanel key={selected.id} exerciseId={selected.id} ordinal={ordinal} />
       ) : (
-        <div className="problem muted">No exercises available for this track yet.</div>
+        <div className="workspace-panel-placeholder muted">
+          No exercises available for this track yet.
+        </div>
       )}
       <PracticeTerminal />
     </div>

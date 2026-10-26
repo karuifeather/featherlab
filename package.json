@@ -54,6 +54,7 @@
     "prettier": "3.9.10",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "sass-embedded": "1.106.1",
     "vite": "^7.1.0"
   },
   "repository": {

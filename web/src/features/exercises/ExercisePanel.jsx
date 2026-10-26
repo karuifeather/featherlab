@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./ExercisePanel.scss";
 import { api } from "../../api/client.js";
 import { Inline, Markdown } from "../../components/Markdown.jsx";
 import { CheckResults } from "./CheckResults.jsx";
@@ -56,14 +57,21 @@ export function ExercisePanel({ exerciseId, ordinal }) {
 
   if (loadError)
     return (
-      <div className="problem">
-        <div className="error">{loadError}</div>
+      <div className="problem" data-testid="exercise-panel">
+        <div className="error" data-testid="error-message">
+          {loadError}
+        </div>
       </div>
     );
-  if (!exercise) return <div className="problem muted">Loading…</div>;
+  if (!exercise)
+    return (
+      <div className="problem muted" data-testid="exercise-panel">
+        Loading…
+      </div>
+    );
 
   return (
-    <div className="problem">
+    <div className="problem" data-testid="exercise-panel">
       <div className="crumb">
         Level {exercise.level} / Exercise {String(ordinal).padStart(2, "0")}
       </div>
@@ -72,7 +80,7 @@ export function ExercisePanel({ exerciseId, ordinal }) {
         <span className="difficulty">{exercise.difficulty}</span>
       </div>
       <Markdown source={exercise.description} />
-      <div className="requirements">
+      <div className="requirements" data-testid="requirements">
         <h3>Requirements</h3>
         <ul>
           {exercise.requirements.map((requirement) => (
@@ -83,11 +91,17 @@ export function ExercisePanel({ exerciseId, ordinal }) {
         </ul>
       </div>
       {setup.state === "failed" && (
-        <div className="error">Could not prepare the environment: {setup.message}</div>
+        <div className="error" data-testid="error-message">
+          Could not prepare the environment: {setup.message}
+        </div>
       )}
       <Hints exerciseId={exercise.id} total={exercise.hintCount} />
       {result && <CheckResults result={result} />}
-      {(check.error || reset.error) && <div className="error">{check.error || reset.error}</div>}
+      {(check.error || reset.error) && (
+        <div className="error" data-testid="error-message">
+          {check.error || reset.error}
+        </div>
+      )}
       <div className="problem-actions">
         <button className="check-btn" disabled={disabled} onClick={check.run}>
           {check.busy ? "Checking…" : "Check solution"}

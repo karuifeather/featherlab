@@ -1,0 +1,36 @@
+// Loading and error states rendered before the workspace grid is available
+.workspace-loading {
+  max-width: 900px;
+  margin: auto;
+  padding: 40px 24px;
+  width: 100%;
+}
+
+// Fills the problem-panel column when no exercise is selected
+.workspace-panel-placeholder {
+  padding: 26px 25px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #26303e;
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(325px, 39%) minmax(300px, 1fr);
+}
+
+@media (max-width: 1000px) {
+  .workspace {
+    grid-template-columns: 170px minmax(260px, 1fr) minmax(260px, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr 1fr;
+  }
+}

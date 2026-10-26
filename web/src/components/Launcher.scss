@@ -1,0 +1,94 @@
+.launcher {
+  max-width: 900px;
+  margin: auto;
+  padding: 40px 24px;
+  width: 100%;
+
+  h1 {
+    font-size: clamp(32px, 4vw, 52px);
+    line-height: 1.12;
+    letter-spacing: -1.5px;
+    margin: 18px 0;
+
+    em {
+      font-style: normal;
+      color: #a6befe;
+    }
+  }
+
+  > p {
+    font-size: 16px;
+    max-width: 580px;
+    line-height: 1.6;
+    color: #abb7c7;
+  }
+
+  footer {
+    font-size: 12px;
+    color: #748196;
+    margin-top: 30px;
+  }
+}
+
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  color: #9fb9eb;
+}
+
+.tracks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 36px;
+}
+
+.track {
+  text-align: left;
+  padding: 24px;
+  border: 1px solid #34425a;
+  border-radius: 13px;
+  background: #171e2a;
+  color: var(--text-primary);
+  min-height: 220px;
+
+  &:not(.disabled):hover {
+    border-color: #95b9ff;
+    background: #1c293b;
+  }
+
+  &.disabled {
+    opacity: 0.52;
+    cursor: default;
+  }
+
+  h2 {
+    font-size: 20px;
+    margin: 12px 0 5px;
+  }
+
+  p {
+    color: #aebccc;
+    line-height: 1.5;
+    margin: 0 0 24px;
+    font-size: 14px;
+  }
+}
+
+.track-icon {
+  font-size: 30px;
+  color: #a1bbf2;
+}
+
+.track-link {
+  color: #a8c2ff;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .tracks {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "./PracticeTerminal.scss";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -85,7 +86,12 @@ export function PracticeTerminal() {
     <section className="terminal-shell">
       <div className="terminal-bar">
         <span>
-          <span className={`status-led ${connected ? "green" : ""}`} /> Linux workstation
+          <span
+            className={`status-led ${connected ? "green" : ""}`}
+            data-testid="terminal-connection-status"
+            data-connected={String(connected)}
+          />{" "}
+          Linux workstation
         </span>
         <span>
           {closed && (
