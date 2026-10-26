@@ -60,7 +60,12 @@ export function createWorkstationRunner({
             reject(new EnvironmentError("Could not run the command.", { cause: error }));
           },
         );
-        if (stdin !== undefined) child.stdin.end(stdin);
+        if (stdin !== undefined) {
+          // EPIPE races with fast child exit (process closes the read end before we write).
+          // The execFile callback handles the exit outcome; silence the socket error.
+          child.stdin.on?.("error", () => {});
+          child.stdin.end(stdin);
+        }
       });
     },
   };
