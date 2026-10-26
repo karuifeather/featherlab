@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.nyc_output/
+.husky/_/
+.claude/
+*.tgz
+*.log

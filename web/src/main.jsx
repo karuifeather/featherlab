@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -57,11 +57,7 @@ function PracticeTerminal() {
       terminal.focus();
     };
     socket.onmessage = (event) =>
-      terminal.write(
-        typeof event.data === "string"
-          ? event.data
-          : new Uint8Array(event.data),
-      );
+      terminal.write(typeof event.data === "string" ? event.data : new Uint8Array(event.data));
     socket.onclose = () => {
       setConnected(false);
       terminal.write("\r\n[Terminal disconnected. Refresh to reconnect.]\r\n");
@@ -81,8 +77,7 @@ function PracticeTerminal() {
     <section className="terminal-shell">
       <div className="terminal-bar">
         <span>
-          <span className={`status-led ${connected ? "green" : ""}`} /> Linux
-          workstation
+          <span className={`status-led ${connected ? "green" : ""}`} /> Linux workstation
         </span>
         <span>bash · kubectl</span>
       </div>
@@ -105,8 +100,7 @@ function App() {
     try {
       const response = await fetch(path, { method: "POST" });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.error || `Request failed (${response.status})`);
+      if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
       callback(data);
     } catch (e) {
       setError(e.message);
@@ -134,8 +128,7 @@ function App() {
             <em>Prove them in the terminal.</em>
           </h1>
           <p>
-            Real Kubernetes, practical exercises, no cloud account. Pick a track
-            to get started.
+            Real Kubernetes, practical exercises, no cloud account. Pick a track to get started.
           </p>
           <div className="tracks">
             <button className="track" onClick={() => setSession(true)}>
@@ -180,8 +173,7 @@ function App() {
               <span className="difficulty">Beginner</span>
             </div>
             <p>
-              Use the terminal to create a Pod in the <code>default</code>{" "}
-              namespace.
+              Use the terminal to create a Pod in the <code>default</code> namespace.
             </p>
             <div className="requirements">
               <h3>Requirements</h3>
@@ -198,30 +190,26 @@ function App() {
               </ul>
             </div>
             <p className="note">
-              There is no single required command. featherlab grades the
-              resulting Kubernetes resources.
+              There is no single required command. featherlab grades the resulting Kubernetes
+              resources.
             </p>
             <button className="hint-button" onClick={() => setHint(!hint)}>
               ◈ {hint ? "Hide hint" : "Need a hint?"}
             </button>
             {hint && (
               <p className="hint">
-                Try <code>kubectl run --help</code> to see how to create a
-                single Pod using an image.
+                Try <code>kubectl run --help</code> to see how to create a single Pod using an
+                image.
               </p>
             )}
             {result && (
               <section className="results">
                 <h3>
-                  {result.success
-                    ? "✓ Passed"
-                    : `${result.passed}/${result.total} checks passed`}
+                  {result.success ? "✓ Passed" : `${result.passed}/${result.total} checks passed`}
                 </h3>
                 {result.checks.map((c) => (
                   <div className="check" key={c.id}>
-                    <span className={c.pass ? "passed" : "failed"}>
-                      {c.pass ? "✓" : "○"}
-                    </span>
+                    <span className={c.pass ? "passed" : "failed"}>{c.pass ? "✓" : "○"}</span>
                     {c.label}
                   </div>
                 ))}
@@ -239,9 +227,7 @@ function App() {
               <button
                 className="reset-btn"
                 disabled={resetting}
-                onClick={() =>
-                  action("/api/reset", setResetting, () => setResult(null))
-                }
+                onClick={() => action("/api/reset", setResetting, () => setResult(null))}
               >
                 {resetting ? "Resetting…" : "Reset task"}
               </button>

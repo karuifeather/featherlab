@@ -1,4 +1,5 @@
 name: Release npm CLI and workstation image
+
 on:
   push:
     tags: ["v*"]
@@ -8,15 +9,24 @@ permissions:
 
 jobs:
   workstation:
+    name: Build and push workstation image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    outputs:
+      image: "${{ steps.coords.outputs.name }}:${{ steps.coords.outputs.version }}"
     steps:
       - uses: actions/checkout@v6
-      - name: Prepare image coordinates
-        id: image
-        shell: bash
+      - name: Verify tag matches package.json version
+        run: |
+          PKG_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")
+          if [ "${GITHUB_REF_NAME}" != "v${PKG_VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version v${PKG_VERSION}" >&2
+            exit 1
+          fi
+      - name: Image coordinates
+        id: coords
         run: |
           echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/featherlab-workstation" >> "$GITHUB_OUTPUT"
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -33,13 +43,68 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.version }}
-            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.coords.outputs.name }}:${{ steps.coords.outputs.version }}
+            ${{ steps.coords.outputs.name }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=featherlab Workstation
-  npm:
+
+  smoke:
+    name: Integration smoke test
     needs: [workstation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install kind
+        run: |
+          curl -fsSL -o kind "https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64"
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull published workstation image
+        run: docker pull "${{ needs.workstation.outputs.image }}"
+      - run: npm ci
+      - run: npm run build
+      - name: Start app and verify end-to-end
+        env:
+          FEATHERLAB_IMAGE: ${{ needs.workstation.outputs.image }}
+        run: |
+          set -euo pipefail
+          node bin/featherlab.mjs start --no-open >featherlab.log 2>&1 &
+          APP_PID=$!
+          for n in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:4317/api/status >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$APP_PID" 2>/dev/null; then cat featherlab.log; exit 1; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:4317/api/status
+          docker exec featherlab-workstation kubectl cluster-info
+          docker exec featherlab-workstation kubectl run web --image=nginx:1.27
+          docker exec featherlab-workstation kubectl wait --for=condition=Ready pod/web --timeout=120s
+          curl -fsS -X POST http://127.0.0.1:4317/api/check | tee check.json
+          node -e 'if (!JSON.parse(require("fs").readFileSync("check.json","utf8")).success) process.exit(1)'
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          cat featherlab.log || true
+          docker ps -a || true
+          kind get clusters || true
+
+  npm:
+    name: Publish to npm
+    needs: [workstation, smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -50,10 +115,11 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-      - name: Verify release tag matches package version
-        run: test "${GITHUB_REF_NAME}" = "v$(node -p 'JSON.parse(require("fs").readFileSync("package.json", "utf8")).version')"
-      - run: npm install --no-audit --no-fund
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
       - run: npm test
       - run: npm run build
+      - run: npm pack --dry-run
       - run: npm publish --access public

@@ -10,10 +10,7 @@ import { WORKSTATION, resetExercise } from "./lib/runtime.mjs";
 import { gradePod, TASK } from "./lib/result.mjs";
 
 const execFileAsync = promisify(execFile);
-const root = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../dist/web",
-);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist/web");
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -44,8 +41,7 @@ async function inspectPod() {
     );
     return JSON.parse(stdout);
   } catch (error) {
-    if (/NotFound|not found/i.test(`${error.stderr} ${error.message}`))
-      return null;
+    if (/NotFound|not found/i.test(`${error.stderr} ${error.message}`)) return null;
     throw error;
   }
 }
@@ -61,11 +57,7 @@ function reply(res, code, data) {
 
 function originAllowed(req, port) {
   const origin = req.headers.origin;
-  return (
-    !origin ||
-    origin === `http://127.0.0.1:${port}` ||
-    origin === `http://localhost:${port}`
-  );
+  return !origin || origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
 }
 
 async function staticFile(req, res) {
@@ -83,8 +75,7 @@ async function staticFile(req, res) {
     const info = await stat(realFile);
     if (!info.isFile()) throw new Error("Not a file");
     res.writeHead(200, {
-      "Content-Type":
-        mime[path.extname(realFile)] || "application/octet-stream",
+      "Content-Type": mime[path.extname(realFile)] || "application/octet-stream",
       "X-Content-Type-Options": "nosniff",
     });
     res.end(await readFile(realFile));
@@ -106,13 +97,11 @@ export async function startServer(port = 4317) {
           exercise: TASK,
         });
       if (req.url === "/api/check" && req.method === "POST") {
-        if (!originAllowed(req, allowedPort))
-          return reply(res, 403, { error: "Forbidden origin" });
+        if (!originAllowed(req, allowedPort)) return reply(res, 403, { error: "Forbidden origin" });
         return reply(res, 200, gradePod(await inspectPod()));
       }
       if (req.url === "/api/reset" && req.method === "POST") {
-        if (!originAllowed(req, allowedPort))
-          return reply(res, 403, { error: "Forbidden origin" });
+        if (!originAllowed(req, allowedPort)) return reply(res, 403, { error: "Forbidden origin" });
         resetExercise();
         return reply(res, 200, { reset: true });
       }
@@ -125,8 +114,7 @@ export async function startServer(port = 4317) {
   });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   server.on("upgrade", (req, socket, head) => {
-    if (req.url !== "/ws/terminal" || !originAllowed(req, allowedPort))
-      return socket.destroy();
+    if (req.url !== "/ws/terminal" || !originAllowed(req, allowedPort)) return socket.destroy();
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws));
   });
   wss.on("connection", async (ws) => {
@@ -148,18 +136,13 @@ export async function startServer(port = 4317) {
         if (ws.readyState === 1) ws.send(buf, { binary: true });
       });
       stream.on("error", (e) => {
-        if (ws.readyState === 1)
-          ws.send(`\r\nTerminal error: ${e.message}\r\n`);
+        if (ws.readyState === 1) ws.send(`\r\nTerminal error: ${e.message}\r\n`);
       });
       stream.on("end", () => ws.close());
       ws.on("message", async (raw) => {
         try {
           const msg = JSON.parse(raw.toString());
-          if (
-            msg.type === "input" &&
-            typeof msg.data === "string" &&
-            msg.data.length < 65536
-          )
+          if (msg.type === "input" && typeof msg.data === "string" && msg.data.length < 65536)
             stream.write(msg.data);
           if (
             msg.type === "resize" &&

@@ -2,12 +2,12 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import pkg from "../../package.json" with { type: "json" };
 
 export const CLUSTER = "featherlab";
 export const WORKSTATION = "featherlab-workstation";
 export const IMAGE =
-  process.env.FEATHERLAB_IMAGE ||
-  "ghcr.io/karuifeather/featherlab-workstation:0.1.1";
+  process.env.FEATHERLAB_IMAGE || `ghcr.io/karuifeather/featherlab-workstation:${pkg.version}`;
 export const STATE = path.join(os.homedir(), ".featherlab");
 const NODE_IMAGE =
   "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5";
@@ -29,10 +29,7 @@ export function run(binary, args, options = {}) {
 export function doctor() {
   const checks = [
     ["Docker CLI", () => run("docker", ["--version"])],
-    [
-      "Docker daemon",
-      () => run("docker", ["info", "--format", "{{.ServerVersion}}"]),
-    ],
+    ["Docker daemon", () => run("docker", ["info", "--format", "{{.ServerVersion}}"])],
     ["kind", () => run("kind", ["version"])],
   ];
   let ok = true;
@@ -49,28 +46,18 @@ export function doctor() {
 
 function containerState() {
   try {
-    return run("docker", [
-      "inspect",
-      "--format",
-      "{{.State.Running}}",
-      WORKSTATION,
-    ]).trim();
+    return run("docker", ["inspect", "--format", "{{.State.Running}}", WORKSTATION]).trim();
   } catch {
     return "missing";
   }
 }
 
 export function provision() {
-  if (!doctor())
-    throw new Error(
-      "Install or start Docker and kind. See README prerequisites.",
-    );
+  if (!doctor()) throw new Error("Install or start Docker and kind. See README prerequisites.");
   mkdirSync(STATE, { recursive: true, mode: 0o700 });
   const clusters = run("kind", ["get", "clusters"]).trim().split(/\s+/);
   if (!clusters.includes(CLUSTER)) {
-    console.log(
-      "Creating isolated kind cluster (first launch may download images)...",
-    );
+    console.log("Creating isolated kind cluster (first launch may download images)...");
     run(
       "kind",
       [
@@ -88,13 +75,7 @@ export function provision() {
       { timeout: 360000, stdio: "inherit" },
     );
   }
-  const config = run("kind", [
-    "get",
-    "kubeconfig",
-    "--name",
-    CLUSTER,
-    "--internal",
-  ]);
+  const config = run("kind", ["get", "kubeconfig", "--name", CLUSTER, "--internal"]);
   const kubeconfigPath = path.join(STATE, "workstation-kubeconfig");
   writeFileSync(kubeconfigPath, config, { mode: 0o600 });
   // The learner container uses UID 1000; its read-only bind mount must be readable.
@@ -157,9 +138,7 @@ export function provision() {
 export function stop() {
   const status = containerState();
   if (status === "true") run("docker", ["stop", WORKSTATION]);
-  console.log(
-    "Workstation stopped. Kubernetes cluster and progress preserved.",
-  );
+  console.log("Workstation stopped. Kubernetes cluster and progress preserved.");
 }
 
 export function status() {
