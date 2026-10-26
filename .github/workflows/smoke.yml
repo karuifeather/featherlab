@@ -1,0 +1,50 @@
+name: Real kind smoke test
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install kind
+        run: |
+          curl -fsSL -o kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: npm test
+      - name: Build local workstation image
+        run: docker build -t featherlab-workstation:dev docker
+      - name: Start app and check live scenario
+        env:
+          featherlab_IMAGE: featherlab-workstation:dev
+        run: |
+          set -euo pipefail
+          node bin/featherlab.mjs start --no-open > /tmp/featherlab.log 2>&1 &
+          for n in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:4317/api/status > /tmp/status.json; then break; fi
+            if ! kill -0 "$!" 2>/dev/null; then cat /tmp/featherlab.log; exit 1; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:4317/api/status
+          docker exec featherlab-workstation kubectl cluster-info
+          docker exec featherlab-workstation kubectl run web --image=nginx:1.27
+          docker exec featherlab-workstation kubectl wait --for=condition=Ready pod/web --timeout=120s
+          curl -fsS -X POST http://127.0.0.1:4317/api/check | tee /tmp/check.json
+          node -e 'if (!JSON.parse(require("fs").readFileSync("/tmp/check.json", "utf8")).success) process.exit(1)'
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          cat /tmp/featherlab.log || true
+          docker ps -a || true
+          kind get clusters || true
