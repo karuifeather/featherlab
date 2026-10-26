@@ -65,51 +65,104 @@ export function ExercisePanel({ exerciseId, ordinal }) {
     );
   if (!exercise)
     return (
-      <div className="problem muted" data-testid="exercise-panel">
-        Loading…
+      <div className="problem" data-testid="exercise-panel">
+        <div className="problem-scroll">
+          <ExercisePanelSkeleton />
+        </div>
       </div>
     );
 
   return (
     <div className="problem" data-testid="exercise-panel">
-      <div className="crumb">
-        Level {exercise.level} / Exercise {String(ordinal).padStart(2, "0")}
-      </div>
-      <div className="problem-header">
-        <h1>{exercise.title}</h1>
-        <span className="difficulty">{exercise.difficulty}</span>
-      </div>
-      <Markdown source={exercise.description} />
-      <div className="requirements" data-testid="requirements">
-        <h3>Requirements</h3>
-        <ul>
-          {exercise.requirements.map((requirement) => (
-            <li key={requirement}>
-              <Inline text={requirement} />
-            </li>
-          ))}
-        </ul>
-      </div>
-      {setup.state === "failed" && (
-        <div className="error" data-testid="error-message">
-          Could not prepare the environment: {setup.message}
+      <div className="problem-scroll">
+        <div className="crumb">
+          <span>Level {exercise.level}</span>
+          <span className="crumb-sep">/</span>
+          <span>Exercise {String(ordinal).padStart(2, "0")}</span>
+          {exercise.estimatedMinutes ? (
+            <>
+              <span className="crumb-sep">/</span>
+              <span>~{exercise.estimatedMinutes} min</span>
+            </>
+          ) : null}
         </div>
-      )}
-      <Hints exerciseId={exercise.id} total={exercise.hintCount} />
-      {result && <CheckResults result={result} />}
-      {(check.error || reset.error) && (
-        <div className="error" data-testid="error-message">
-          {check.error || reset.error}
+
+        <div className="problem-header">
+          <h1>{exercise.title}</h1>
+          <span className={`difficulty diff-${String(exercise.difficulty).toLowerCase()}`}>
+            {exercise.difficulty}
+          </span>
         </div>
-      )}
+
+        {exercise.summary && <p className="problem-summary">{exercise.summary}</p>}
+
+        <Markdown source={exercise.description} />
+
+        <div className="requirements" data-testid="requirements">
+          <h3>Requirements</h3>
+          <ul>
+            {exercise.requirements.map((requirement) => (
+              <li key={requirement}>
+                <Inline text={requirement} />
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {setup.state === "failed" && (
+          <div className="error" data-testid="error-message">
+            Could not prepare the environment: {setup.message}
+          </div>
+        )}
+
+        <Hints exerciseId={exercise.id} total={exercise.hintCount} />
+
+        {result && <CheckResults result={result} />}
+
+        {(check.error || reset.error) && (
+          <div className="error" data-testid="error-message">
+            {check.error || reset.error}
+          </div>
+        )}
+      </div>
+
       <div className="problem-actions">
-        <button className="check-btn" disabled={disabled} onClick={check.run}>
-          {check.busy ? "Checking…" : "Check solution"}
-        </button>
-        <button className="reset-btn" disabled={disabled} onClick={reset.run}>
-          {reset.busy ? "Resetting…" : "Reset task"}
-        </button>
+        <div className={`action-progress ${check.busy ? "active" : ""}`} aria-hidden="true">
+          <span className="action-progress-bar" />
+        </div>
+        <div className="action-buttons">
+          <button
+            className="check-btn"
+            data-busy={check.busy ? "true" : undefined}
+            disabled={disabled}
+            onClick={check.run}
+          >
+            {check.busy ? (
+              <>
+                <span className="btn-spinner" aria-hidden="true" />
+                Checking…
+              </>
+            ) : (
+              "Check solution"
+            )}
+          </button>
+          <button className="reset-btn" disabled={disabled} onClick={reset.run}>
+            {reset.busy ? "Resetting…" : "Reset task"}
+          </button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function ExercisePanelSkeleton() {
+  return (
+    <div className="problem-skeleton" aria-hidden="true">
+      <div className="sk sk-crumb" />
+      <div className="sk sk-title" />
+      <div className="sk sk-line" />
+      <div className="sk sk-line short" />
+      <div className="sk sk-block" />
     </div>
   );
 }

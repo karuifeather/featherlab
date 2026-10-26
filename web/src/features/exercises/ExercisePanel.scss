@@ -1,101 +1,305 @@
 .problem {
-  padding: 26px 25px;
-  overflow: auto;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #26303e;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-page);
+}
+
+.problem-scroll {
+  flex: 1;
+  min-height: 0;
+  // Block flow, not flex column: a flex column shrinks tall children (e.g. multi-line
+  // code blocks) to fit instead of letting this container scroll, which clipped commands.
+  display: block;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 24px 26px 20px;
 
   h1 {
-    font-size: 25px;
-    letter-spacing: -0.6px;
-    margin: 14px 0;
+    font-size: 24px;
+    letter-spacing: -0.5px;
+    margin: 10px 0;
+    line-height: 1.2;
   }
 
   p,
   ul {
     font-size: 14px;
-    color: #bdc7d6;
+    color: var(--text-secondary);
     line-height: 1.7;
   }
 
   code {
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    background: #202a38;
-    color: #dceaff;
-    padding: 2px 5px;
-    border-radius: 4px;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    background: var(--surface-2);
+    color: var(--primary-bright);
+    padding: 2px 6px;
+    border-radius: 5px;
     font-size: 12px;
+    border: 1px solid var(--border-subtle);
   }
 }
 
 .crumb {
-  color: #8b9cb4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.crumb-sep {
+  opacity: 0.5;
 }
 
 .problem-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
 }
 
+.problem-summary {
+  color: var(--text-secondary);
+  font-size: 15px !important;
+  margin-top: -2px;
+}
+
 .difficulty {
-  border: 1px solid #2c644e;
-  color: #83e6b5;
-  border-radius: 15px;
-  padding: 3px 8px;
+  flex-shrink: 0;
+  margin-top: 12px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
   font-size: 11px;
+  font-weight: 600;
   text-transform: capitalize;
+  white-space: nowrap;
+
+  &.diff-beginner,
+  &.diff-easy {
+    color: var(--color-passed);
+    border-color: color-mix(in srgb, var(--color-passed) 45%, transparent);
+    background: color-mix(in srgb, var(--color-passed) 10%, transparent);
+  }
+  &.diff-intermediate,
+  &.diff-medium {
+    color: var(--color-amber);
+    border-color: color-mix(in srgb, var(--color-amber) 45%, transparent);
+    background: color-mix(in srgb, var(--color-amber) 10%, transparent);
+  }
+  &.diff-advanced,
+  &.diff-hard {
+    color: var(--secondary);
+    border-color: color-mix(in srgb, var(--secondary) 45%, transparent);
+    background: color-mix(in srgb, var(--secondary) 10%, transparent);
+  }
 }
 
 .requirements {
-  margin-top: 14px;
-  border: 1px solid #2c3646;
-  background: #141b26;
-  border-radius: 8px;
-  padding: 12px 16px;
+  margin-top: 16px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
 
   h3 {
-    font-size: 12px;
-    color: #a8b8cc;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 6px;
   }
 
   ul {
     font-size: 13px;
-    line-height: 2.3;
+    line-height: 2.1;
     padding-left: 20px;
+    margin: 4px 0 0;
   }
 }
 
+// Pinned action bar.
 .problem-actions {
-  margin-top: auto;
-  padding-top: 25px;
+  position: relative;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-1);
+}
+
+.action-buttons {
   display: flex;
   gap: 10px;
+  padding: 14px 26px;
 }
 
 .check-btn,
 .reset-btn {
-  padding: 11px 14px;
-  border-radius: 7px;
-  border: 0;
-  font-size: 12px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 650;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
 }
 
 .check-btn {
-  background: #a4bff9;
-  color: #13213a;
+  flex: 1;
+  max-width: 220px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--primary-bright) 40%, transparent) inset;
+
+  &:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  &:disabled {
+    opacity: 0.55;
+  }
+  &[data-busy="true"] {
+    opacity: 0.9;
+  }
 }
 
 .reset-btn {
-  background: #212b39;
-  color: #bdc9d9;
-  border: 1px solid #38465b;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+
+  &:hover:not(:disabled) {
+    background: var(--surface-3);
+    color: var(--text-primary);
+  }
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  &:disabled {
+    opacity: 0.55;
+  }
+}
+
+.btn-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--primary-foreground) 35%, transparent);
+  border-top-color: var(--primary-foreground);
+  animation: btn-spin 0.7s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Indeterminate progress line that rides the top edge of the action bar while checking.
+// It is honest: it conveys "work in progress", not a fabricated percentage.
+.action-progress {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+
+  &.active {
+    opacity: 1;
+  }
+}
+
+.action-progress-bar {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  transform: translateX(-100%);
+}
+
+.action-progress.active .action-progress-bar {
+  animation: progress-slide 1.1s var(--ease-in-out) infinite;
+}
+
+@keyframes progress-slide {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+// Loading skeleton.
+.problem-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.sk {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-3) 37%,
+    var(--surface-2) 63%
+  );
+  background-size: 400% 100%;
+  animation: sk-shimmer 1.4s ease infinite;
+}
+
+.sk-crumb {
+  width: 160px;
+  height: 12px;
+}
+.sk-title {
+  width: 70%;
+  height: 26px;
+}
+.sk-line {
+  width: 100%;
+  height: 13px;
+}
+.sk-line.short {
+  width: 55%;
+}
+.sk-block {
+  width: 100%;
+  height: 90px;
+  margin-top: 6px;
+}
+
+@keyframes sk-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
 }
 
 @media (max-width: 760px) {
-  .problem {
-    padding: 14px;
+  .problem-scroll {
+    padding: 16px;
+  }
+  .action-buttons {
+    padding: 12px 16px;
   }
 }

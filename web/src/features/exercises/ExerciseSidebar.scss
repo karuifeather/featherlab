@@ -1,64 +1,234 @@
 .sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-right: 1px solid var(--border-default);
-  background: #111722;
-  padding: 20px 12px;
-  position: relative;
+  background: var(--surface-1);
+  padding: 14px 10px;
+  overflow: hidden;
 }
 
 .sidebar-head {
-  font-size: 11px;
-  letter-spacing: 1.3px;
-  font-weight: 700;
-  color: #96a4b8;
-  padding: 0 9px 21px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 14px;
 }
 
-.level {
-  font-size: 13px;
-  color: #d6e1f5;
-  padding: 11px 8px;
-  border-radius: 6px;
-  margin-bottom: 4px;
+.sidebar-title {
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  &.active {
-    background: #1e2a3a;
+.sidebar-collapse {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+
+  &:hover {
+    background: var(--surface-3);
+    color: var(--text-primary);
   }
 }
 
+.sidebar-levels {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.level-group {
+  margin-bottom: 4px;
+}
+
+.level-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  padding: 9px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text-primary);
+  }
+}
+
+.level-caret {
+  font-size: 10px;
+  transition: transform var(--dur-base) var(--ease-out);
+  transform: rotate(-90deg);
+
+  &.open {
+    transform: rotate(0deg);
+  }
+}
+
+.level-label {
+  flex: 1;
+  text-align: left;
+}
+
+.level-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+}
+
+.level-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 4px;
+}
+
 .lesson {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
   border: 0;
   background: transparent;
-  color: #9ba9bb;
+  color: var(--text-secondary);
   text-align: left;
-  display: flex;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 17px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text-primary);
+  }
+
+  // Brand rail on the active lesson.
   &.selected {
-    background: #263551;
-    color: #bfd1ff;
+    background: var(--tint-primary);
+    color: var(--text-primary);
+
+    &::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 3px;
+      border-radius: var(--radius-pill);
+      background: var(--primary);
+    }
+  }
+}
+
+.lesson-ord {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lesson-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.difficulty-dots {
+  flex-shrink: 0;
+  display: inline-flex;
+  gap: 2px;
+
+  .dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--border-strong);
+
+    &.on {
+      background: var(--color-passed);
+    }
+  }
+
+  &.rank-2 .dot.on {
+    background: var(--color-amber);
+  }
+  &.rank-3 .dot.on {
+    background: var(--secondary);
   }
 }
 
 .sidebar-bottom {
-  position: absolute;
-  bottom: 22px;
-  left: 20px;
-  font-size: 12px;
-  color: #8795ab;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 12px 8px 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-@media (max-width: 1000px) {
+// Collapsed rail: show only carets/ordinals, hide text.
+.sidebar-collapsed {
+  .sidebar-title,
+  .lesson-title,
+  .difficulty-dots,
+  .level-count,
+  .level-label,
   .sidebar-bottom {
     display: none;
   }
+
+  .sidebar-head {
+    justify-content: center;
+  }
+
+  .level-header,
+  .lesson {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .level-items {
+    padding-left: 0;
+  }
 }
 
-@media (max-width: 760px) {
-  .sidebar {
+@media (max-width: 900px) {
+  // In drawer mode the sidebar always shows its full content.
+  .sidebar-collapse {
     display: none;
   }
 }

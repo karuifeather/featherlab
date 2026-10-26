@@ -13,15 +13,23 @@ export function Hints({ exerciseId, total }) {
   });
   if (total === 0) return null;
   return (
-    <>
+    <div className="hints">
       {shown.map((text, i) => (
         <p className="hint" data-testid="hint" key={i}>
-          <Inline text={text} />
+          <span className="hint-index" aria-hidden="true">
+            {i + 1}
+          </span>
+          <span className="hint-text">
+            <Inline text={text} />
+          </span>
         </p>
       ))}
       {shown.length < total && (
         <button className="hint-button" disabled={busy} onClick={run}>
-          ◈ {shown.length === 0 ? "Need a hint?" : `Next hint (${shown.length}/${total})`}
+          <span className="hint-glyph" aria-hidden="true">
+            ◈
+          </span>
+          {shown.length === 0 ? "Need a hint?" : `Next hint (${shown.length}/${total})`}
         </button>
       )}
       {error && (
@@ -29,6 +37,6 @@ export function Hints({ exerciseId, total }) {
           {error}
         </div>
       )}
-    </>
+    </div>
   );
 }

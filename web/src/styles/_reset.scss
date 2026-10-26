@@ -1,5 +1,4 @@
 :root {
-  color-scheme: dark;
   font-family:
     Inter,
     ui-sans-serif,
@@ -9,6 +8,8 @@
     "Segoe UI",
     sans-serif;
   font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -31,4 +32,25 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+// A single, visible focus ring for keyboard users across every interactive control.
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+// Reduced-motion users get the same functionality with motion neutralised.
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

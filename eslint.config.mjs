@@ -39,7 +39,7 @@ export default [
   },
   {
     // Playwright specs pass functions into the page, so they reference browser globals.
-    files: ["test/e2e/**/*.mjs"],
+    files: ["test/e2e/**/*.mjs", "test/browser/**/*.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {

@@ -1,4 +1,4 @@
-// Loading and error states rendered before the workspace grid is available
+// Loading and error states rendered before the workspace grid is available.
 .workspace-loading {
   max-width: 900px;
   margin: auto;
@@ -6,31 +6,218 @@
   width: 100%;
 }
 
-// Fills the problem-panel column when no exercise is selected
+// Fills the problem column when no exercise is selected.
 .workspace-panel-placeholder {
   padding: 26px 25px;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #26303e;
 }
 
 .workspace {
+  --sidebar-w: 236px;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(325px, 39%) minmax(300px, 1fr);
-}
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  position: relative;
 
-@media (max-width: 1000px) {
-  .workspace {
-    grid-template-columns: 170px minmax(260px, 1fr) minmax(260px, 1fr);
+  &.sidebar-collapsed {
+    --sidebar-w: 54px;
   }
 }
 
-@media (max-width: 760px) {
+.work-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// Split region: problem | handle | terminal. The first column width is driven by --pw,
+// written straight to the DOM by useSplitPane during drag (no React re-render, no transition).
+.split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--pw, 42%) 10px minmax(0, 1fr);
+
+  // Terminal-focus: collapse to a single full-width track. A single explicit column
+  // (not `0 0 1fr`) is required so the still-present terminal auto-places into the wide
+  // track instead of a zero-width one once its siblings are removed from the grid.
+  &.split--focus-terminal {
+    grid-template-columns: minmax(0, 1fr);
+
+    .split-problem,
+    .split-handle {
+      display: none;
+    }
+  }
+}
+
+.split-problem {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--border-default);
+}
+
+.split-terminal {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+// Resize handle: a thin column with a wider invisible hit area and a visible grip.
+.split-handle {
+  position: relative;
+  cursor: col-resize;
+  background: var(--border-subtle);
+  transition: background var(--dur-fast) var(--ease-out);
+  touch-action: none;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0 -5px; // widen the pointer target without widening the column
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--primary) 55%, var(--border-strong));
+  }
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.split-handle-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.split-handle:hover .split-handle-grip,
+.split-handle:focus-visible .split-handle-grip {
+  background: var(--primary-foreground);
+}
+
+// Disable text selection and smooth the cursor everywhere while dragging.
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+// Narrow-screen tabs + lessons drawer trigger; hidden on wide layouts.
+.work-tabs {
+  display: none;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-1);
+}
+
+.work-tab {
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+
+  &.active {
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border-color: var(--border-default);
+  }
+
+  &.lessons-tab {
+    margin-right: auto;
+  }
+}
+
+.drawer-scrim {
+  display: none;
+}
+
+@media (max-width: 900px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 1fr 1fr;
+  }
+
+  // Sidebar becomes an off-canvas drawer.
+  .sidebar {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-out);
+    box-shadow: var(--shadow-2);
+  }
+
+  .workspace.drawer-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .drawer-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    border: 0;
+    background: rgba(0, 0, 0, 0.45);
+    animation: scrim-in var(--dur-base) var(--ease-out);
+  }
+
+  .work-tabs {
+    display: flex;
+    align-items: center;
+  }
+
+  // One panel at a time; both stay mounted so the terminal session survives tab switches.
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .split-handle {
+    display: none;
+  }
+
+  .split-problem,
+  .split-terminal {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 0;
+  }
+
+  .split[data-mobile-tab="problem"] .split-terminal {
+    display: none;
+  }
+
+  .split[data-mobile-tab="terminal"] .split-problem {
+    display: none;
+  }
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

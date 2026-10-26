@@ -1,33 +1,164 @@
 .results {
   margin-top: 20px;
-  border: 1px solid #344251;
-  border-radius: 8px;
-  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--surface-1);
+  animation: results-in var(--dur-base) var(--ease-out) both;
+
+  // Outcome-driven accents, distinct from an ordinary incorrect answer.
+  &[data-success="true"] {
+    border-color: color-mix(in srgb, var(--color-passed) 55%, var(--border-default));
+    background: color-mix(in srgb, var(--color-passed) 7%, var(--surface-1));
+  }
+  &[data-outcome="incomplete"] {
+    border-color: color-mix(in srgb, var(--color-warning) 50%, var(--border-default));
+    background: color-mix(in srgb, var(--color-warning) 7%, var(--surface-1));
+  }
+}
+
+.results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 
   h3 {
     font-size: 14px;
-    margin: 2px 0 12px;
+    margin: 2px 0;
+    letter-spacing: -0.2px;
   }
+}
+
+.results[data-success="true"] .results-head h3 {
+  color: var(--color-passed);
+}
+.results[data-outcome="incomplete"] .results-head h3 {
+  color: var(--color-warning);
+}
+
+.results-score {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.results-meter {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+  margin: 10px 0 4px;
+
+  span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-failed);
+    transition: width var(--dur-slow) var(--ease-out);
+  }
+
+  &.is-full span {
+    background: var(--color-passed);
+  }
+}
+
+.checks {
+  margin-top: 6px;
 }
 
 .check {
   display: flex;
   gap: 10px;
-  font-size: 12px;
-  padding: 6px 0;
-  color: #bfc9d6;
+  font-size: 12.5px;
+  padding: 7px 0;
+  color: var(--text-secondary);
+  // Capped stagger: even long check lists finish entering quickly.
+  animation: check-in var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(min(var(--i), 6) * 26ms);
 }
 
-.passed {
-  color: var(--color-passed);
+.check-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 1px;
+  transition:
+    background var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
 }
 
-.failed {
+.status-passed .check-icon {
+  color: var(--primary-foreground);
+  background: var(--color-passed);
+}
+.status-failed .check-icon {
   color: var(--color-failed);
+  background: color-mix(in srgb, var(--color-failed) 16%, transparent);
+}
+.status-error .check-icon {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+}
+
+.check-body {
+  min-width: 0;
+}
+
+.check-label {
+  color: var(--text-primary);
+}
+.status-passed .check-label {
+  color: var(--text-secondary);
 }
 
 .feedback {
-  color: #8d9bb0;
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: 11.5px;
   margin-top: 3px;
+  line-height: 1.5;
+}
+
+// One-shot emphasis when a check flips to passing on a retry.
+.check.pulse .check-icon {
+  animation: check-pop 0.55s var(--ease-spring);
+}
+
+@keyframes results-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes check-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes check-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
 }

@@ -1,8 +1,16 @@
 .code-block {
-  background: #151c28;
-  border: 1px solid #263044;
-  border-radius: 6px;
-  padding: 10px 12px;
+  background: var(--terminal-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
   overflow-x: auto;
   font-size: 12px;
+  line-height: 1.6;
+
+  code {
+    background: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    color: var(--terminal-fg) !important;
+  }
 }
