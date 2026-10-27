@@ -1,6 +1,6 @@
 # FeatherLab
 
-A local-first Kubernetes practice playground. **This repository is a v0.1 starter, not yet a publicly published package.** It includes the npm CLI, a Docker workstation, a real kind cluster, a React launcher, a browser terminal, and a data-driven exercise engine with two graded Kubernetes exercises.
+A local-first Kubernetes practice playground. It includes the npm CLI, a Docker workstation, a real kind cluster, a React launcher, a browser terminal, and a data-driven exercise engine with graded Kubernetes exercises.
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ Alternatively, test the actual packaged CLI without an npm registry publication:
 ```bash
 npm run build
 npm pack
-npm install -g ./featherlab-0.1.0.tgz
+npm install -g ./featherlab-0.2.0.tgz
 FEATHERLAB_IMAGE=featherlab-workstation:dev featherlab
 ```
 
@@ -39,19 +39,30 @@ This `npm pack` approach exercises the same tarball structure users will install
 ## CLI
 
 ```bash
-featherlab             # start workstation and browser UI
+featherlab             # start workstation and browser UI (alias: featherlab start)
+featherlab stop        # gracefully stop a running featherlab, or stop resources directly
 featherlab doctor      # check Docker daemon and kind
 featherlab status      # show runtime status
 featherlab exercises   # list available exercises
 featherlab reset [id]  # reset an exercise (default k8s-0001) to its initial state
 featherlab validate-content [dir]  # validate exercise definitions offline (no Docker needed)
-featherlab stop        # stop the workstation, leave kind cluster intact
+featherlab --version   # print version (alias: -V)
 featherlab --help
 ```
 
-Environment overrides: `FEATHERLAB_IMAGE` (default `ghcr.io/karuifeather/featherlab-workstation:<package version>`) and `featherlab_PORT` (default 4317).
+Environment overrides:
 
-To completely remove the local lab: `featherlab stop`, then `docker rm featherlab-workstation`, `kind delete cluster --name featherlab`, and optionally delete `~/.featherlab` (this also deletes lab-specific files). **Never run these cleanup commands for clusters you wish to keep.**
+| Variable               | Default                                                 | Notes                     |
+| ---------------------- | ------------------------------------------------------- | ------------------------- |
+| `FEATHERLAB_IMAGE`     | `ghcr.io/karuifeather/featherlab-workstation:<version>` | Workstation image         |
+| `featherlab_PORT`      | `4317`                                                  | HTTP port; must be ≥ 1024 |
+| `FEATHERLAB_STATE_DIR` | `~/.featherlab`                                         | Kubeconfigs, PID file     |
+
+**Graceful shutdown:** `featherlab stop` reads `~/.featherlab/featherlab.pid`. If the file exists and the recorded process is still the FeatherLab CLI (verified by entry-point path and process start time, not just the PID), it sends SIGTERM and waits up to 15 seconds for a clean exit. If no running instance is found, it stops the workstation container and kind node containers directly. The cluster and its workloads are always preserved; only the containers are stopped.
+
+Ctrl+C while `featherlab` is running triggers the same graceful shutdown. A second Ctrl+C forces an immediate exit.
+
+To completely remove the local lab: `featherlab stop`, then `docker rm featherlab-workstation`, `kind delete cluster --name featherlab`, and optionally delete `~/.featherlab`. **Never run these cleanup commands for clusters you wish to keep.**
 
 ## Release pipeline: test distribution from day one
 
@@ -86,10 +97,14 @@ One GitHub repository (`karuifeather/featherlab` assumed; change package.json an
 
 ```text
 npm CLI (host Node.js process)
+  ├─ LifecycleCoordinator — state machine (stopped/starting/running/stopping/failed);
+  │    idempotent requestShutdown(); SIGINT/SIGTERM → graceful teardown
   ├─ local HTTP server: serves bundled React UI and the exercise API
   │    └─ application service → exercise engine (YAML-defined exercises, validators, lifecycle)
-  ├─ WebSocket: Docker exec API TTY stream (interactive terminal)
+  ├─ WebSocket: Docker exec API TTY stream (interactive terminal, close frame on shutdown)
   ├─ kind CLI: controls isolated real Kubernetes cluster
+  │    └─ kind-nodes helper — stopClusterNodes/startClusterNodes (ownership-verified via
+  │         io.x-k8s.kind.cluster label); waitForClusterReady (exponential backoff poll)
   ├─ Docker CLI: pulls and creates learner workstation
   └─ management runner: allow-listed `kubectl` via docker exec, for grading and reset
 
@@ -139,6 +154,7 @@ shared cluster-admin credential limitation.
 - This is a **local trusted-user application**, not a multi-tenant sandbox and not a secure hosted service. The learner holds admin credentials for the _dedicated kind training cluster_, never your existing clusters.
 - Start the UI on loopback only. Do not expose it over a public tunnel or bind to a public address without auth, TLS, and additional security review.
 - The CLI can control Docker on the host, so only install it from a trusted release. The learner workstation cannot access the Docker socket.
+- `featherlab stop` validates the PID file by checking both the process entry-point path (`bin/featherlab.mjs`) and its start time before sending any signal. A stale PID file or a recycled PID never causes an unrelated application to be signaled.
 - Only task exercises exist. No progress database, curriculum/locking engine, or CKS hardened VM labs are included yet.
 - The CLI currently **requires kind installed** rather than auto-downloading its binary. This is deliberate for the first working milestone; auto-bootstrap can follow.
 - The terminal uses real Docker exec TTY streams and WebSockets. Comprehensive cross-platform PTY testing and backpressure handling remain to be completed.
