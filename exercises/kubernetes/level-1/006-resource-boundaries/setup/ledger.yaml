@@ -1,0 +1,26 @@
+# `app` has no resource settings yet; the `metrics` helper already has its own.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+  namespace: fl-k8s-0006
+  labels: { app: ledger }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: ledger }
+  template:
+    metadata:
+      labels: { app: ledger }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: app
+          image: nginx:1.27
+          ports: [{ name: http, containerPort: 80 }]
+        - name: metrics
+          image: nginx:1.27
+          command: ["sleep", "infinity"]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 32Mi }

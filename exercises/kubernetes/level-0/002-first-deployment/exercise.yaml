@@ -2,13 +2,14 @@ schemaVersion: 1
 id: k8s-0002
 type: task
 title: Run a Deployment
-summary: Create a labelled two-replica Deployment in an existing namespace.
+summary: Create a labelled two-replica Deployment and watch it roll out.
 track: kubernetes
 level: 0
+order: 6
 difficulty: beginner
 estimatedMinutes: 8
 tags: [deployments, labels, namespaces, kubectl]
-prerequisites: [k8s-0001]
+prerequisites: [k8s-0012]
 
 environment:
   profile: kind-default
@@ -18,7 +19,7 @@ content:
   solution: solution.md
 
 requirements:
-  - "Namespace: `staging` (already created for you)"
+  - "Namespace: `fl-k8s-0002` (already created for you)"
   - "Deployment name: `api`"
   - "Container image: `nginx:1.27`"
   - "Replicas: `2`, and both must become available"
@@ -26,43 +27,35 @@ requirements:
 
 hints:
   - "`kubectl create deployment --help` shows how to set the image and replica count."
-  - "Remember the namespace: add `-n staging`, or the Deployment lands in `default`."
-  - "Labels on the Deployment object can be added later with `kubectl label`."
+  - "Remember the namespace: add `-n fl-k8s-0002`, or the Deployment lands in `default`."
+  - "Labels on the Deployment object (not only its Pods) can be added afterwards with `kubectl label deployment`."
 
 lifecycle:
-  setup:
-    manifests: [setup/namespace.yaml]
-  reset:
-    delete:
-      - { kind: Deployment, name: api, namespace: staging }
+  namespaces: [fl-k8s-0002]
 
 checks:
-  - id: namespace
-    type: k8s.resource-exists
-    label: Namespace staging exists
-    params: { kind: Namespace, name: staging }
   - id: exists
     type: k8s.resource-in-namespace
-    label: Deployment api exists in namespace staging
-    params: { kind: Deployment, name: api, namespace: staging }
+    label: Deployment api exists in namespace fl-k8s-0002
+    params: { kind: Deployment, name: api, namespace: fl-k8s-0002 }
   - id: image
     type: k8s.container-image
     label: Container uses nginx:1.27
-    params: { kind: Deployment, name: api, namespace: staging, image: "nginx:1.27" }
+    params: { kind: Deployment, name: api, namespace: fl-k8s-0002, image: "nginx:1.27" }
   - id: desired
     type: k8s.replicas-desired
     label: Deployment requests 2 replicas
-    params: { kind: Deployment, name: api, namespace: staging, replicas: 2 }
+    params: { kind: Deployment, name: api, namespace: fl-k8s-0002, replicas: 2 }
   - id: available
-    type: k8s.replicas-available
-    label: Both replicas are available
+    type: k8s.rollout-complete
+    label: Rollout finished with both replicas available
     weight: 2
-    params: { kind: Deployment, name: api, namespace: staging, replicas: 2 }
+    params: { name: api, namespace: fl-k8s-0002, replicas: 2 }
   - id: label
     type: k8s.labels
     label: Deployment is labelled tier=backend
     params:
       kind: Deployment
       name: api
-      namespace: staging
+      namespace: fl-k8s-0002
       labels: { tier: backend }

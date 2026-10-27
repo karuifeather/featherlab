@@ -122,6 +122,14 @@ export class IsolatedEnvironment {
     return this.#exec("docker", ["exec", this.config.workstation, "kubectl", ...args]);
   }
 
+  /** kubectl in the workstation with `input` on stdin (e.g. `apply -f -`), as the learner. */
+  kubectlWithInput(input, ...args) {
+    return this.#exec("docker", ["exec", "-i", this.config.workstation, "kubectl", ...args], {
+      input,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
+
   docker(...args) {
     return this.#exec("docker", args);
   }

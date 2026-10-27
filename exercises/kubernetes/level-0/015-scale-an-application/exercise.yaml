@@ -1,0 +1,63 @@
+schemaVersion: 1
+id: k8s-0015
+type: task
+title: Scale an Application
+summary: Change how many replicas two Deployments run, and watch Kubernetes converge.
+track: kubernetes
+level: 0
+order: 7
+difficulty: beginner
+estimatedMinutes: 8
+tags: [deployments, scaling, replicas, kubectl]
+prerequisites: [k8s-0002]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0015` (already contains Deployments `frontend` and `worker`)"
+  - "`frontend` runs 3 replicas, all available (it currently runs 1)"
+  - "`worker` runs 1 replica, available (it currently runs 3)"
+  - "Both keep running `nginx:1.27`"
+
+hints:
+  - "`kubectl get deployments -n fl-k8s-0015` shows READY as available/desired. Desired is what the Deployment asks for; available is what is actually running."
+  - "The replica count is the Deployment's `spec.replicas`. Changing it is enough: the Deployment's ReplicaSet creates or removes Pods to match."
+  - "`kubectl scale deployment <name> --replicas=<n> -n fl-k8s-0015`, or edit `spec.replicas` in the manifest and apply it. Watch with `kubectl get pods -n fl-k8s-0015 --watch`."
+
+lifecycle:
+  namespaces: [fl-k8s-0015]
+  setup:
+    manifests: [setup/deployments.yaml]
+
+checks:
+  - id: frontend-desired
+    type: k8s.replicas-desired
+    label: frontend asks for 3 replicas
+    params: { kind: Deployment, name: frontend, namespace: fl-k8s-0015, replicas: 3 }
+  - id: frontend-available
+    type: k8s.rollout-complete
+    label: frontend has 3 available replicas
+    weight: 2
+    params: { name: frontend, namespace: fl-k8s-0015, replicas: 3 }
+  - id: worker-desired
+    type: k8s.replicas-desired
+    label: worker asks for 1 replica
+    params: { kind: Deployment, name: worker, namespace: fl-k8s-0015, replicas: 1 }
+  - id: worker-available
+    type: k8s.rollout-complete
+    label: worker has 1 available replica
+    params: { name: worker, namespace: fl-k8s-0015, replicas: 1 }
+  - id: images
+    type: all-of
+    label: Both Deployments still run nginx:1.27
+    params:
+      checks:
+        - type: k8s.container-image
+          params: { kind: Deployment, name: frontend, namespace: fl-k8s-0015, image: "nginx:1.27" }
+        - type: k8s.container-image
+          params: { kind: Deployment, name: worker, namespace: fl-k8s-0015, image: "nginx:1.27" }

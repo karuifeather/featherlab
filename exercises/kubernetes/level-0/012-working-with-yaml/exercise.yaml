@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0012
+type: task
+title: Working With YAML
+summary: Describe a Pod in a manifest, apply it, and let Kubernetes make it so.
+track: kubernetes
+level: 0
+order: 3
+difficulty: beginner
+estimatedMinutes: 10
+tags: [yaml, manifests, pods, labels, kubectl]
+prerequisites: [k8s-0001]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0012` (already created for you)"
+  - "A Pod named `notes` whose container is named `web` and runs `nginx:1.27`"
+  - "The Pod carries the labels `app=notes` and `tier=frontend`"
+  - "The Pod is `Running` and `Ready`"
+
+hints:
+  - "Every manifest has the same four top-level fields: `apiVersion`, `kind`, `metadata` and `spec`. The description shows a skeleton; fill in the blanks."
+  - "The container name lives in `spec.containers[].name`, the labels in `metadata.labels`, and the namespace in `metadata.namespace`. `kubectl explain pod.spec.containers` describes every field."
+  - "Save the manifest as a file (for example `vim notes.yaml`) and run `kubectl apply -f notes.yaml`. Applying the same file again changes nothing: it already matches."
+
+lifecycle:
+  namespaces: [fl-k8s-0012]
+
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Pod notes exists in namespace fl-k8s-0012
+    params: { kind: Pod, name: notes, namespace: fl-k8s-0012 }
+  - id: container
+    type: k8s.container-image
+    label: Container web runs nginx:1.27
+    params: { kind: Pod, name: notes, namespace: fl-k8s-0012, container: web, image: "nginx:1.27" }
+  - id: labels
+    type: k8s.labels
+    label: Pod carries app=notes and tier=frontend
+    params:
+      kind: Pod
+      name: notes
+      namespace: fl-k8s-0012
+      labels: { app: notes, tier: frontend }
+  - id: ready
+    type: k8s.pod-ready
+    label: Pod notes is Ready
+    params: { name: notes, namespace: fl-k8s-0012 }

@@ -2,47 +2,51 @@ schemaVersion: 1
 id: k8s-0001
 type: task
 title: Your first Pod
-summary: Create a single nginx Pod and get it running.
+summary: Create a single nginx Pod in the exercise namespace and get it running.
 track: kubernetes
 level: 0
+order: 1
 difficulty: beginner
 estimatedMinutes: 5
-tags: [pods, kubectl]
+tags: [pods, namespaces, kubectl]
 
 environment:
   profile: kind-default
 
+content:
+  description: description.md
+  solution: solution.md
+
 requirements:
+  - "Namespace: `fl-k8s-0001` (already created for you)"
   - "Pod name: `web`"
-  - "Namespace: `default`"
   - "Container image: `nginx:1.27`"
   - "The Pod must be `Running` and `Ready`."
 
 hints:
-  - "Try `kubectl run --help` to see how to create a single Pod from an image."
-  - "`kubectl run NAME --image=IMAGE` creates a Pod. Watch it with `kubectl get pod`."
+  - "`kubectl run --help` shows how to create a single Pod from an image."
+  - "kubectl works in the `default` namespace unless told otherwise. Add `-n fl-k8s-0001` to every command in this exercise."
+  - "After creating the Pod, `kubectl get pod web -n fl-k8s-0001 --watch` shows it move from `ContainerCreating` to `Running`."
 
-# Removed when the learner resets the exercise.
+# Everything this exercise owns lives in its namespace. Reset deletes and recreates it.
 lifecycle:
-  reset:
-    delete:
-      - { kind: Pod, name: web, namespace: default }
+  namespaces: [fl-k8s-0001]
 
 # Grading inspects the resulting cluster state, never the commands that were typed.
 checks:
   - id: exists
-    type: k8s.resource-exists
-    label: Pod web exists in default namespace
-    params: { kind: Pod, name: web, namespace: default }
+    type: k8s.resource-in-namespace
+    label: Pod web exists in namespace fl-k8s-0001
+    params: { kind: Pod, name: web, namespace: fl-k8s-0001 }
   - id: image
     type: k8s.container-image
     label: Container uses nginx:1.27
-    params: { kind: Pod, name: web, namespace: default, image: "nginx:1.27" }
+    params: { kind: Pod, name: web, namespace: fl-k8s-0001, image: "nginx:1.27" }
   - id: running
     type: k8s.pod-phase
     label: Pod is Running
-    params: { name: web, namespace: default, phase: Running }
+    params: { name: web, namespace: fl-k8s-0001, phase: Running }
   - id: ready
     type: k8s.pod-ready
     label: Pod Ready condition is True
-    params: { name: web, namespace: default }
+    params: { name: web, namespace: fl-k8s-0001 }

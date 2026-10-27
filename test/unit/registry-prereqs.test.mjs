@@ -128,14 +128,14 @@ test("exercises without prerequisites remain available (no error, empty prereqs)
 
 // ── Packaged exercises ────────────────────────────────────────────────────────
 
-test("packaged exercises (k8s-0002 prerequisites: [k8s-0001]) load without errors", () => {
+test("packaged exercises (k8s-0002 prerequisites: [k8s-0012]) load without errors", () => {
   assert.doesNotThrow(
     () => createApp({ runner: createFakeCluster(), logger: quiet }),
     "packaged exercises should load cleanly",
   );
 });
 
-test("packaged k8s-0002 has k8s-0001 as prerequisite", () => {
+test("packaged k8s-0002 now follows Working With YAML (k8s-0012)", () => {
   const { registry } = createApp({ runner: createFakeCluster(), logger: quiet });
-  assert.deepEqual(registry.get("k8s-0002").prerequisites, ["k8s-0001"]);
+  assert.deepEqual(registry.get("k8s-0002").prerequisites, ["k8s-0012"]);
 });

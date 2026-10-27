@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { startServer } from "../../src/server.mjs";
 import { appFor, exerciseFiles } from "../helpers/content.mjs";
 import { createApp } from "../../src/app.mjs";
-import { createFakeCluster, deployment, readyPod } from "../helpers/fake-cluster.mjs";
+import { createFakeCluster, readyPod } from "../helpers/fake-cluster.mjs";
+import { CURRICULUM_ORDER } from "../helpers/curriculum.mjs";
 
 const quiet = { warn() {}, error() {} };
 const SOLUTION = "SOLUTION-MARKER-kubectl-run-secret";
@@ -33,7 +34,7 @@ const safeJson = (text) => {
 };
 
 before(async () => {
-  cluster = createFakeCluster({ resources: [readyPod(), deployment()] });
+  cluster = createFakeCluster();
   await boot(createApp({ runner: cluster, logger: quiet }).service);
 });
 after(() => server.close());
@@ -41,27 +42,16 @@ after(() => server.close());
 test("GET /api/status", async () => {
   const { status, body } = await call("/api/status");
   assert.equal(status, 200);
-  // v0.1 fields (`track`, `exercise`) stay; `exercises` is the v0.2 addition.
-  assert.deepEqual(body, {
-    ready: true,
-    cluster: "featherlab",
-    track: "kubernetes",
-    exercise: {
-      id: "k8s-0001",
-      title: "Your first Pod",
-      name: "web",
-      namespace: "default",
-      image: "nginx:1.27",
-    },
-    exercises: 2,
-  });
+  // The v0.1 `track`/`exercise` fields were removed with the /api/check alias (M5.1).
+  assert.deepEqual(body, { ready: true, cluster: "featherlab", exercises: 18 });
 });
 
 test("GET /api/exercises lists summaries and supports filters", async () => {
   const { body } = await call("/api/exercises");
   assert.deepEqual(
     body.exercises.map((e) => e.id),
-    ["k8s-0001", "k8s-0002"],
+    CURRICULUM_ORDER,
+    "the API returns curriculum order, which is not id order",
   );
   assert.deepEqual(Object.keys(body.exercises[0]).sort(), [
     "difficulty",
@@ -78,9 +68,23 @@ test("GET /api/exercises lists summaries and supports filters", async () => {
   const byTag = await call("/api/exercises?tag=labels");
   assert.deepEqual(
     byTag.body.exercises.map((e) => e.id),
-    ["k8s-0002"],
+    [
+      "k8s-0011",
+      "k8s-0012",
+      "k8s-0014",
+      "k8s-0002",
+      "k8s-0016",
+      "k8s-0017",
+      "k8s-0018",
+      "k8s-0003",
+      "k8s-0007",
+    ],
   );
-  assert.equal((await call("/api/exercises?level=1")).body.exercises.length, 0);
+  assert.deepEqual(
+    (await call("/api/exercises?level=1")).body.exercises.map((e) => e.id),
+    ["k8s-0003", "k8s-0006"],
+  );
+  assert.equal((await call("/api/exercises?level=3")).body.exercises.length, 0);
   assert.equal((await call("/api/exercises?level=abc")).status, 400);
 });
 
@@ -89,7 +93,8 @@ test("GET /api/exercises/:id returns the learner-facing detail", async () => {
   assert.equal(status, 200);
   assert.equal(body.exercise.title, "Your first Pod");
   assert.ok(body.exercise.requirements.length >= 3);
-  assert.equal(body.exercise.hintCount, 2);
+  assert.equal(body.exercise.hintCount, 3);
+  assert.match(body.exercise.requirements[0], /fl-k8s-0001/, "the namespace is stated first");
   assert.match(body.exercise.description, /terminal/);
   assert.equal(body.exercise.hints, undefined);
 });
@@ -98,8 +103,8 @@ test("hints are served one at a time, 1-based, in range", async () => {
   const first = await call("/api/exercises/k8s-0001/hints/1");
   assert.deepEqual(Object.keys(first.body.hint).sort(), ["exerciseId", "index", "text", "total"]);
   assert.equal(first.body.hint.index, 1);
-  assert.equal(first.body.hint.total, 2);
-  assert.equal((await call("/api/exercises/k8s-0001/hints/3")).status, 404);
+  assert.equal(first.body.hint.total, 3);
+  assert.equal((await call("/api/exercises/k8s-0001/hints/4")).status, 404);
   assert.equal((await call("/api/exercises/k8s-0001/hints/0")).status, 404);
 });
 
@@ -147,18 +152,18 @@ test("POST activate and reset follow the lifecycle", async () => {
   });
   assert.equal(activated.status, 200);
   assert.equal(activated.body.environment, "fresh");
-  assert.ok(activated.body.steps.includes("apply Namespace/staging"));
+  assert.ok(activated.body.steps.includes("create Namespace/fl-k8s-0002"));
   assert.equal(activated.body.exercise.id, "k8s-0002");
 
   const reopened = await call("/api/exercises/k8s-0002/activate", { method: "POST" });
   assert.equal(reopened.body.environment, "resumed");
-  assert.deepEqual(reopened.body.steps, ["apply Namespace/staging"]);
+  assert.deepEqual(reopened.body.steps, [], "resuming changes nothing");
 
   const reset = await call("/api/exercises/k8s-0001/reset?discardActive=true", {
     method: "POST",
   });
   assert.equal(reset.status, 200);
-  assert.equal(cluster.find("Pod", "web", "default"), undefined);
+  assert.equal(cluster.find("Pod", "web", "fl-k8s-0001"), undefined);
 });
 
 test("methods are enforced and unknown endpoints are JSON 404s", async () => {
@@ -183,14 +188,17 @@ test("cross-origin mutating requests are rejected; same-origin and no-origin pas
   assert.equal(same.status, 200);
 });
 
-test("legacy /api/check keeps its v0.1 response shape; /api/reset is gone", async () => {
-  await call("/api/exercises/k8s-0001/activate", { method: "POST" });
+test("the removed v0.1 endpoints /api/check and /api/reset are 404s", async () => {
+  await call("/api/exercises/k8s-0001/activate?discardActive=true", { method: "POST" });
   cluster.put(readyPod());
-  const check = await call("/api/check", { method: "POST" });
-  assert.deepEqual(Object.keys(check.body).sort(), ["checks", "passed", "success", "total"]);
-  assert.equal(check.body.success, true);
-  assert.deepEqual(Object.keys(check.body.checks[0]).sort(), ["id", "label", "pass"]);
-  assert.equal((await call("/api/reset", { method: "POST" })).status, 404);
+  for (const path of ["/api/check", "/api/reset"]) {
+    const removed = await call(path, { method: "POST" });
+    assert.equal(removed.status, 404, path);
+    assert.equal(removed.body.code, "NOT_FOUND");
+  }
+  // The canonical endpoint grades the same work.
+  const check = await call("/api/exercises/k8s-0001/check", { method: "POST" });
+  assert.equal(check.body.result.outcome, "passed");
 });
 
 test("a cluster outage is a 503 with a code, not a stack trace", async () => {
@@ -234,25 +242,23 @@ test("no response ever leaks solutions, grader config, manifests or internals", 
     {
       content: { description: "description.md", solution: "solution.md" },
       hints: ["A hint"],
-      lifecycle: { setup: { manifests: ["setup/ns.yaml"] } },
+      lifecycle: { namespaces: ["fl-demo-0001"], setup: { manifests: ["setup/config.yaml"] } },
       checks: [
         {
           id: "image",
           type: "k8s.container-image",
           label: "Container image is right",
           hidden: true,
-          params: { kind: "Pod", name: "demo", namespace: "default", image: EXPECTED },
+          params: { kind: "Pod", name: "demo", namespace: "fl-demo-0001", image: EXPECTED },
         },
       ],
     },
     {
       "solution.md": SOLUTION,
-      "setup/ns.yaml": `apiVersion: v1\nkind: Namespace\nmetadata:\n  name: ns\n  annotations:\n    note: ${MANIFEST}\n`,
+      "setup/config.yaml": `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: config\n  namespace: fl-demo-0001\n  annotations:\n    note: ${MANIFEST}\n`,
     },
   );
-  const leakCluster = createFakeCluster({
-    resources: [readyPod({ name: "demo", image: "busybox" })],
-  });
+  const leakCluster = createFakeCluster();
   const leaky = await startServer(0, { service: appFor(files, leakCluster).service });
   try {
     const root = `http://127.0.0.1:${leaky.port}`;

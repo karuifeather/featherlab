@@ -1,0 +1,66 @@
+schemaVersion: 1
+id: k8s-0003
+type: task
+title: Namespace Matters
+summary: A workload landed in the wrong namespace. Run it where it belongs without disturbing its neighbours.
+track: kubernetes
+level: 1
+order: 1
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [namespaces, deployments, services, labels, kubectl]
+prerequisites: [k8s-0018]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespaces: `fl-k8s-0003` (where `catalog` belongs) and `fl-k8s-0003-sandbox`"
+  - "A Deployment named `catalog` runs in `fl-k8s-0003` with image `nginx:1.27` and 2 available replicas"
+  - "The existing `catalog` Service in `fl-k8s-0003` routes to that Deployment's Pods"
+  - "No `catalog` Deployment is left in `fl-k8s-0003-sandbox`"
+  - "The `notes` Pod in `fl-k8s-0003-sandbox` is still running and Ready"
+
+hints:
+  - "`kubectl get deployments,pods,services --all-namespaces` (or `-A`) shows where things actually are. Compare that with where the Service expects them."
+  - "Names only have to be unique within a namespace, so the same name can exist in both. Look at the misplaced Deployment's labels: the Service in `fl-k8s-0003` selects Pods by label."
+  - "There is no `kubectl move`. Create a new Deployment in the right namespace (imperatively, or from an edited copy of `kubectl get deployment catalog -n fl-k8s-0003-sandbox -o yaml`), then delete only the misplaced Deployment."
+
+lifecycle:
+  namespaces: [fl-k8s-0003, fl-k8s-0003-sandbox]
+  setup:
+    manifests: [setup/catalog.yaml]
+
+checks:
+  - id: placed
+    type: k8s.resource-in-namespace
+    label: Deployment catalog exists in namespace fl-k8s-0003
+    params: { kind: Deployment, name: catalog, namespace: fl-k8s-0003 }
+  - id: image
+    type: k8s.container-image
+    label: catalog runs nginx:1.27
+    params: { kind: Deployment, name: catalog, namespace: fl-k8s-0003, image: "nginx:1.27" }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: catalog has 2 available replicas in fl-k8s-0003
+    weight: 2
+    params: { name: catalog, namespace: fl-k8s-0003, replicas: 2 }
+  - id: routed
+    type: k8s.service-selects
+    label: Service catalog routes to the catalog Pods
+    params:
+      name: catalog
+      namespace: fl-k8s-0003
+      workload: { kind: Deployment, name: catalog }
+  - id: removed
+    type: k8s.resource-absent
+    label: No catalog Deployment remains in fl-k8s-0003-sandbox
+    params: { kind: Deployment, name: catalog, namespace: fl-k8s-0003-sandbox }
+  - id: neighbour
+    type: k8s.pod-ready
+    label: Pod notes in fl-k8s-0003-sandbox is untouched and Ready
+    params: { name: notes, namespace: fl-k8s-0003-sandbox }

@@ -39,6 +39,9 @@ const EXERCISE_SPEC = {
     summary: { type: "string", required: true, minLength: 1, maxLength: 300 },
     track: { type: "string", required: true, pattern: TAG_PATTERN },
     level: { type: "integer", required: true, min: 0, max: 99 },
+    // Position within the level (1 = first). Curriculum order is not id order: a stable id
+    // keeps its meaning when an exercise moves, so new exercises can sit between old ones.
+    order: { type: "integer", min: 1, max: 999 },
     difficulty: { type: "string", required: true, enum: DIFFICULTIES },
     estimatedMinutes: { type: "integer", required: true, min: 1, max: 600 },
     tags: { type: "array", items: { type: "string", pattern: TAG_PATTERN, maxLength: 40 } },
@@ -131,6 +134,7 @@ export function defineExercise({ data, reader, tracks, validators, problems, sou
       }
       validators.validateCheck(c, { track: track.id, problems, path: `checks[${i}]` });
     });
+    track.validateCheckScope?.(data.checks, lifecycle, { problems });
   }
 
   const content = data.content ?? {};
@@ -150,6 +154,7 @@ export function defineExercise({ data, reader, tracks, validators, problems, sou
     summary: data.summary,
     track: data.track,
     level: data.level,
+    order: data.order,
     difficulty: data.difficulty,
     estimatedMinutes: data.estimatedMinutes,
     tags: [...(data.tags ?? [])],

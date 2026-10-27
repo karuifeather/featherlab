@@ -15,7 +15,7 @@ async function grade(cluster, type, params) {
   return evaluateCheck({ id: "t", type, label: "t", params }, { validators, context: { query } });
 }
 
-const pod = { kind: "Pod", name: "web", namespace: "default" };
+const pod = { kind: "Pod", name: "web", namespace: "fl-k8s-0001" };
 
 const cases = [
   ["resource-exists passes", [readyPod()], "k8s.resource-exists", pod, true],
@@ -55,24 +55,30 @@ const cases = [
     "container-image reads Deployment templates",
     [deployment()],
     "k8s.container-image",
-    { kind: "Deployment", name: "api", namespace: "staging", image: "nginx:1.27" },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", image: "nginx:1.27" },
     true,
   ],
   [
     "pod-phase passes",
     [readyPod()],
     "k8s.pod-phase",
-    { name: "web", namespace: "default", phase: "Running" },
+    { name: "web", namespace: "fl-k8s-0001", phase: "Running" },
     true,
   ],
   [
     "pod-phase fails",
     [readyPod()],
     "k8s.pod-phase",
-    { name: "web", namespace: "default", phase: "Pending" },
+    { name: "web", namespace: "fl-k8s-0001", phase: "Pending" },
     false,
   ],
-  ["pod-ready passes", [readyPod()], "k8s.pod-ready", { name: "web", namespace: "default" }, true],
+  [
+    "pod-ready passes",
+    [readyPod()],
+    "k8s.pod-ready",
+    { name: "web", namespace: "fl-k8s-0001" },
+    true,
+  ],
   [
     "pod-ready fails when not ready",
     [
@@ -82,56 +88,56 @@ const cases = [
       },
     ],
     "k8s.pod-ready",
-    { name: "web", namespace: "default" },
+    { name: "web", namespace: "fl-k8s-0001" },
     false,
   ],
   [
     "replicas-desired passes",
     [deployment()],
     "k8s.replicas-desired",
-    { kind: "Deployment", name: "api", namespace: "staging", replicas: 2 },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", replicas: 2 },
     true,
   ],
   [
     "replicas-desired fails",
     [deployment({ replicas: 3 })],
     "k8s.replicas-desired",
-    { kind: "Deployment", name: "api", namespace: "staging", replicas: 2 },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", replicas: 2 },
     false,
   ],
   [
     "replicas-available fails when pods are not up",
     [deployment({ available: 1 })],
     "k8s.replicas-available",
-    { kind: "Deployment", name: "api", namespace: "staging", replicas: 2 },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", replicas: 2 },
     false,
   ],
   [
     "replicas-ready passes",
     [deployment()],
     "k8s.replicas-ready",
-    { kind: "Deployment", name: "api", namespace: "staging", replicas: 2 },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", replicas: 2 },
     true,
   ],
   [
     "labels passes",
     [deployment()],
     "k8s.labels",
-    { kind: "Deployment", name: "api", namespace: "staging", labels: { tier: "backend" } },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", labels: { tier: "backend" } },
     true,
   ],
   [
     "labels fails on wrong value",
     [deployment({ labels: { tier: "frontend" } })],
     "k8s.labels",
-    { kind: "Deployment", name: "api", namespace: "staging", labels: { tier: "backend" } },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", labels: { tier: "backend" } },
     false,
   ],
   [
     "annotations fails when missing",
     [deployment()],
     "k8s.annotations",
-    { kind: "Deployment", name: "api", namespace: "staging", annotations: { owner: "me" } },
+    { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", annotations: { owner: "me" } },
     false,
   ],
 ];
@@ -194,7 +200,7 @@ test("all-of requires every child and propagates infrastructure errors", async (
   const params = {
     checks: [
       { type: "k8s.resource-exists", params: pod },
-      { type: "k8s.pod-ready", params: { name: "web", namespace: "default" } },
+      { type: "k8s.pod-ready", params: { name: "web", namespace: "fl-k8s-0001" } },
     ],
   };
   const cluster = createFakeCluster({ resources: [readyPod()] });

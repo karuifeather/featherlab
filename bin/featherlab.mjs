@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { createApp, validateContent } from "../src/app.mjs";
 import { startServer } from "../src/server.mjs";
@@ -71,12 +71,23 @@ function processStartTime(pid) {
  * mentions the name — e.g. `cat /home/user/featherlab-notes.txt`. Checking the full
  * entry-point path prevents that false positive.
  */
+const isEntryPoint = (arg) => arg.endsWith("bin/featherlab.mjs");
+
+function resolvedPath(arg) {
+  try {
+    return realpathSync(arg);
+  } catch {
+    return arg;
+  }
+}
+
 function isFeatherLabProcess(pid, expectedStartTime) {
   try {
     let entryPointMatches;
     if (process.platform === "linux") {
       const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter(Boolean);
-      entryPointMatches = args.some((a) => a.endsWith("bin/featherlab.mjs"));
+      // A global npm install runs through a symlink (e.g. /usr/local/bin/featherlab).
+      entryPointMatches = args.some((a) => isEntryPoint(a) || isEntryPoint(resolvedPath(a)));
     } else {
       const { stdout } = spawnSync("ps", ["-p", String(pid), "-o", "args="], { encoding: "utf8" });
       entryPointMatches = stdout.includes("bin/featherlab.mjs");
@@ -104,7 +115,11 @@ async function runStart() {
     throw new Error("FEATHERLAB_PORT must be a non-privileged TCP port.");
 
   const runtime = createRuntime({}, { log: cliLogger });
-  const { service, persistence } = createApp({ stateDir: runtime.config.stateDir });
+  const { service, persistence } = createApp({
+    stateDir: runtime.config.stateDir,
+    workstation: runtime.config.workstation,
+    cluster: runtime.config.cluster,
+  });
   const coordinator = new LifecycleCoordinator({ runtime, log: cliLogger });
   // PID file path is known upfront; the file is only written after successful startup.
   const pidFile = path.join(runtime.config.stateDir, "featherlab.pid");
@@ -284,7 +299,10 @@ try {
           discardActive: cmdArgs.includes("--yes") || cmdArgs.includes("-y"),
           stateDir,
           isAlive: isFeatherLabProcess,
-          createLocalApp: () => createApp({ stateDir }),
+          createLocalApp: () => {
+            const { cluster, workstation } = resolveEnvironment();
+            return createApp({ stateDir, workstation, cluster });
+          },
         });
         console.log(`Exercise ${id} reset (${steps.length} step${steps.length === 1 ? "" : "s"}).`);
       } catch (error) {

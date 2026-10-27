@@ -6,42 +6,12 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cliWithFakeDocker } from "../helpers/fake-docker.mjs";
 
 const bin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../bin/featherlab.mjs");
 
-/**
- * The CLI is exercised with a fake `docker` first on PATH, so these tests can never reach
- * a real workstation or cluster. The fake records its arguments and exits with a
- * configurable code and stderr.
- */
-function cliWithFakeDocker(args, { exitCode = 0, stderr = "", env = {} } = {}) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "featherlab-fake-docker-"));
-  const log = path.join(dir, "calls.log");
-  writeFileSync(
-    path.join(dir, "docker"),
-    `#!/bin/sh\necho "$@" >> "${log}"\n${stderr ? `echo "${stderr}" >&2\n` : ""}exit ${exitCode}\n`,
-  );
-  chmodSync(path.join(dir, "docker"), 0o755);
-  const result = spawnSync(process.execPath, [bin, ...args], {
-    encoding: "utf8",
-    // FEATHERLAB_NO_UPDATE_CHECK suppresses background network calls so tests stay fast and offline-safe.
-    env: {
-      ...process.env,
-      FEATHERLAB_NO_UPDATE_CHECK: "1",
-      FEATHERLAB_STATE_DIR: path.join(dir, "state"),
-      ...env,
-      PATH: dir,
-    },
-  });
-  let calls = [];
-  try {
-    calls = readFileSync(log, "utf8").trim().split("\n");
-  } catch {
-    // The CLI never reached docker.
-  }
-  return { ...result, calls };
-}
-
+// The CLI is exercised with a fake `docker` first on PATH and a temporary state directory,
+// so these tests can never reach a real workstation, cluster or ~/.featherlab.
 test("`exercises` lists the packaged exercises without any environment", () => {
   const out = cliWithFakeDocker(["exercises"]);
   assert.equal(out.status, 0);
@@ -50,22 +20,31 @@ test("`exercises` lists the packaged exercises without any environment", () => {
   assert.deepEqual(out.calls, []);
 });
 
-test("`reset` defaults to k8s-0001 and only deletes that exercise's Pod", () => {
+/** Namespaces a CLI run looked at or changed. */
+const namespacesIn = (calls) => [
+  ...new Set(calls.flatMap((c) => [...c.matchAll(/\bfl-[a-z0-9-]+/g)].map((m) => m[0]))),
+];
+
+test("`reset` defaults to k8s-0001 and only addresses that exercise's namespace", () => {
   const out = cliWithFakeDocker(["reset"]);
   assert.equal(out.status, 0, out.stderr);
   assert.match(out.stdout, /Exercise k8s-0001 reset/);
-  const deletes = out.calls.filter((c) => c.includes(" delete "));
-  assert.equal(deletes.length, 1);
-  assert.match(deletes[0], /^exec featherlab-workstation kubectl delete pods web -n default /);
-  assert.ok(out.calls.every((c) => c.startsWith("exec featherlab-workstation kubectl ")));
+  assert.deepEqual(namespacesIn(out.calls), ["fl-k8s-0001"]);
+  assert.ok(
+    out.calls.some((c) => / kubectl config current-context /.test(c)),
+    "context verified",
+  );
+  assert.ok(
+    out.calls.every((c) => !/ -n default\b| delete pods /.test(c)),
+    "never touches default",
+  );
+  assert.ok(out.calls.every((c) => /^exec (-i )?featherlab-workstation kubectl /.test(c)));
 });
 
 test("`reset <id>` resets the named exercise and nothing else", () => {
   const out = cliWithFakeDocker(["reset", "k8s-0002"]);
   assert.equal(out.status, 0, out.stderr);
-  const deletes = out.calls.filter((c) => c.includes(" delete "));
-  assert.equal(deletes.length, 1);
-  assert.match(deletes[0], /deployments\.apps api -n staging /);
+  assert.deepEqual(namespacesIn(out.calls), ["fl-k8s-0002"]);
 });
 
 test("`reset` with an unknown id fails without touching docker", () => {

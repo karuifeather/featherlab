@@ -61,8 +61,11 @@ export function ExercisePanel({
     async ({ discardActive = false } = {}) => {
       setSetup({ state: "preparing", message: "" });
       try {
-        await api.activate(exerciseId, { discardActive });
-        if (mounted.current) setSetup({ state: "ready", message: "" });
+        const opened = await api.activate(exerciseId, { discardActive });
+        // `recreated`: the saved environment was missing (e.g. after an upgrade), so it was
+        // prepared again from scratch; say so instead of silently losing the old state.
+        if (mounted.current)
+          setSetup({ state: "ready", message: "", recreated: opened?.recreated === true });
       } catch (e) {
         if (!mounted.current) return;
         if (e.code === "ENVIRONMENT_IN_USE")
@@ -205,6 +208,13 @@ export function ExercisePanel({
                 : undefined
             }
           />
+        )}
+
+        {setup.state === "ready" && setup.recreated && (
+          <p className="muted" data-testid="environment-recreated">
+            This exercise&apos;s practice environment was missing (for example after a FeatherLab
+            upgrade), so it was prepared again from scratch.
+          </p>
         )}
 
         {setup.state === "failed" && (

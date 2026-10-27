@@ -1,0 +1,71 @@
+schemaVersion: 1
+id: k8s-0017
+type: task
+title: Find the Simple Mistake
+summary: Something is off with the greeter app. Compare what is running with what should be, and fix it.
+track: kubernetes
+level: 0
+order: 9
+difficulty: beginner
+estimatedMinutes: 12
+tags: [troubleshooting, deployments, labels, namespaces, inspection]
+prerequisites: [k8s-0013, k8s-0016]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespaces: `fl-k8s-0017` (where greeter belongs) and `fl-k8s-0017-sandbox`"
+  - "Deployment `greeter` in `fl-k8s-0017` runs 2 available replicas of `nginx:1.27`"
+  - "The `greeter` Deployment is labelled `app=greeter`"
+  - "A Pod named `greeter-check` running `nginx:1.27` is `Ready` in `fl-k8s-0017`"
+  - "No `greeter-check` Pod is left in `fl-k8s-0017-sandbox`"
+
+hints:
+  - "Don't change anything yet. List what exists: `kubectl get deployments,pods -n fl-k8s-0017 --show-labels`, and the same for the sandbox. Write down each difference from the requirements."
+  - "There are three differences, each something you have fixed before: a replica count, a label value, and an object in the wrong namespace."
+  - "An object cannot be moved between namespaces: create it where it belongs, then delete the misplaced one. A label that already has a value needs `--overwrite`."
+
+lifecycle:
+  namespaces: [fl-k8s-0017, fl-k8s-0017-sandbox]
+  setup:
+    manifests: [setup/greeter.yaml]
+
+checks:
+  - id: replicas
+    type: k8s.replicas-desired
+    label: greeter asks for 2 replicas
+    params: { kind: Deployment, name: greeter, namespace: fl-k8s-0017, replicas: 2 }
+  - id: available
+    type: k8s.rollout-complete
+    label: greeter has 2 available replicas
+    weight: 2
+    params: { name: greeter, namespace: fl-k8s-0017, replicas: 2 }
+  - id: image
+    type: k8s.container-image
+    label: greeter runs nginx:1.27
+    params: { kind: Deployment, name: greeter, namespace: fl-k8s-0017, image: "nginx:1.27" }
+  - id: label
+    type: k8s.labels
+    label: The greeter Deployment is labelled app=greeter
+    params: { kind: Deployment, name: greeter, namespace: fl-k8s-0017, labels: { app: greeter } }
+  - id: check-placed
+    type: k8s.resource-in-namespace
+    label: Pod greeter-check exists in fl-k8s-0017
+    params: { kind: Pod, name: greeter-check, namespace: fl-k8s-0017 }
+  - id: check-ready
+    type: k8s.pod-ready
+    label: Pod greeter-check in fl-k8s-0017 is Ready
+    params: { name: greeter-check, namespace: fl-k8s-0017 }
+  - id: check-image
+    type: k8s.container-image
+    label: Pod greeter-check runs nginx:1.27
+    params: { kind: Pod, name: greeter-check, namespace: fl-k8s-0017, image: "nginx:1.27" }
+  - id: sandbox-clean
+    type: k8s.resource-absent
+    label: No greeter-check Pod is left in fl-k8s-0017-sandbox
+    params: { kind: Pod, name: greeter-check, namespace: fl-k8s-0017-sandbox }

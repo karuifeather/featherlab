@@ -103,6 +103,7 @@ export class ExerciseService {
       exercise: presentExercise(exercise),
       ...presentOperation(exercise, outcome),
       environment: outcome.environment,
+      ...(outcome.recreated ? { recreated: true } : {}),
     };
   }
 

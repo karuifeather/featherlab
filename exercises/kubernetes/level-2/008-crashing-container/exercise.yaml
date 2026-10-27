@@ -1,0 +1,62 @@
+schemaVersion: 1
+id: k8s-0008
+type: task
+title: The Crashing Container
+summary: A gateway restarts over and over. Use its logs to find the configuration error and stabilise it.
+track: kubernetes
+level: 2
+order: 4
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [troubleshooting, logs, configmaps, deployments, container-states]
+prerequisites: [k8s-0004]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0008`"
+  - "Deployment `gateway` finishes rolling out with 2 available replicas"
+  - "nginx keeps reading its configuration from the `gateway-config` ConfigMap"
+  - "The `web` container keeps its HTTP readiness probe on `/healthz`, which only that configuration serves"
+
+hints:
+  - "`kubectl get pods -n fl-k8s-0008` shows the restart count climbing. `kubectl describe pod` tells you the container's last state and exit code, but not why the program exited."
+  - "A container's own output usually says why it stopped. `kubectl logs <pod> -n fl-k8s-0008 --previous` shows the output of the attempt that just crashed."
+  - "The broken file comes from a ConfigMap. After correcting it, Pods that are crash-looping may take a while to see the new content; `kubectl rollout restart deployment/gateway -n fl-k8s-0008` starts fresh ones."
+
+lifecycle:
+  namespaces: [fl-k8s-0008]
+  setup:
+    manifests: [setup/gateway.yaml]
+
+checks:
+  - id: config
+    type: k8s.configmap-mounted
+    label: Container web still mounts the gateway-config ConfigMap
+    params:
+      kind: Deployment
+      name: gateway
+      namespace: fl-k8s-0008
+      container: web
+      configMap: gateway-config
+  - id: probe
+    type: k8s.container-probe
+    label: Container web keeps its readiness probe on /healthz
+    params:
+      kind: Deployment
+      name: gateway
+      namespace: fl-k8s-0008
+      container: web
+      probe: readiness
+      handler: httpGet
+      path: /healthz
+  - id: rollout
+    type: k8s.rollout-complete
+    label: gateway rolled out with 2 ready replicas
+    weight: 3
+    params: { name: gateway, namespace: fl-k8s-0008, replicas: 2 }

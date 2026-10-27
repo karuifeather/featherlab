@@ -1,6 +1,6 @@
 {
   "name": "featherlab",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "Local-first hands-on Kubernetes training",
   "type": "module",
   "bin": {
@@ -29,7 +29,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run validate-content && npm test && npm run build",
-    "test:kind": "FEATHERLAB_KIND_TESTS=1 node --test \"test/integration/**/*.test.mjs\"",
+    "test:kind": "FEATHERLAB_KIND_TESTS=1 node --test --test-concurrency=1 \"test/integration/**/*.test.mjs\"",
     "test:e2e": "playwright test --config test/e2e/playwright.config.mjs",
     "validate-content": "node bin/featherlab.mjs validate-content"
   },

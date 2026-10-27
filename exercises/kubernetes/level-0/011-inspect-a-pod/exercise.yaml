@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0011
+type: task
+title: Inspect a Pod
+summary: Use get, describe and logs to find the right Pod, then label it without disturbing either Pod.
+track: kubernetes
+level: 0
+order: 2
+difficulty: beginner
+estimatedMinutes: 8
+tags: [pods, inspection, logs, labels, kubectl]
+prerequisites: [k8s-0001]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0011` (already contains two Pods: `alpha` and `bravo`)"
+  - "The Pod whose log contains `status: needs-review` carries the label `review=needed`"
+  - "The other Pod does not carry a `review` label"
+  - "Both Pods are still `Running` and `Ready`"
+
+hints:
+  - "Start with `kubectl get pods -n fl-k8s-0011`, then `kubectl describe pod alpha -n fl-k8s-0011`. Describe shows everything Kubernetes knows about one Pod, including its labels and recent events."
+  - "What a container prints is not in `describe`. `kubectl logs <pod> -n fl-k8s-0011` shows it. Check both Pods."
+  - "`kubectl label pod <name> review=needed -n fl-k8s-0011` adds a label to a running Pod. `kubectl get pods -n fl-k8s-0011 --show-labels` confirms it."
+
+lifecycle:
+  namespaces: [fl-k8s-0011]
+  setup:
+    manifests: [setup/pods.yaml]
+
+checks:
+  - id: labelled
+    type: k8s.labels
+    label: The Pod that needs review is labelled review=needed
+    weight: 2
+    params: { kind: Pod, name: bravo, namespace: fl-k8s-0011, labels: { review: needed } }
+  - id: other-unlabelled
+    type: k8s.label-absent
+    label: The other Pod has no review label
+    params: { kind: Pod, name: alpha, namespace: fl-k8s-0011, label: review }
+  - id: alpha-ready
+    type: k8s.pod-ready
+    label: Pod alpha is Ready
+    params: { name: alpha, namespace: fl-k8s-0011 }
+  - id: bravo-ready
+    type: k8s.pod-ready
+    label: Pod bravo is Ready
+    params: { name: bravo, namespace: fl-k8s-0011 }

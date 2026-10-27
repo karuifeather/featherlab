@@ -26,19 +26,34 @@ const BASE = {
   estimatedMinutes: 3,
   environment: { profile: "kind-default" },
   requirements: ["Do the thing"],
-  checks: [
-    {
-      id: "exists",
-      type: "k8s.resource-exists",
-      label: "Pod demo exists",
-      params: { kind: "Pod", name: "demo", namespace: "default" },
-    },
-  ],
 };
 
-/** YAML (JSON is valid YAML) for a definition built from BASE plus overrides. */
+/** The namespace a fixture exercise owns, following the `fl-<id>` convention. */
+export const nsOf = (id) => `fl-${id}`;
+
+/**
+ * YAML (JSON is valid YAML) for a definition built from BASE plus overrides. Unless
+ * overridden, the exercise owns `fl-<id>` and checks for a Pod `demo` there.
+ */
 export function definition(overrides = {}) {
-  return JSON.stringify({ ...BASE, ...overrides }, null, 2);
+  const id = overrides.id ?? BASE.id;
+  return JSON.stringify(
+    {
+      ...BASE,
+      lifecycle: { namespaces: [nsOf(id)] },
+      checks: [
+        {
+          id: "exists",
+          type: "k8s.resource-exists",
+          label: "Pod demo exists",
+          params: { kind: "Pod", name: "demo", namespace: nsOf(id) },
+        },
+      ],
+      ...overrides,
+    },
+    null,
+    2,
+  );
 }
 
 export function exerciseFiles(slug, overrides = {}, extra = {}) {

@@ -30,7 +30,7 @@ const CONTENT_FILES = {
         id: "exists",
         type: "k8s.resource-exists",
         label: "Pod demo2 exists",
-        params: { kind: "Pod", name: "demo2", namespace: "default" },
+        params: { kind: "Pod", name: "demo2", namespace: "fl-demo-0002" },
       },
     ],
   }),
@@ -70,7 +70,7 @@ test("full progression lifecycle: grade → unlock → restart → resume", asyn
 
     // Open and solve demo-0001, then grade it
     await svc1.activate("demo-0001");
-    cluster.put(readyPod({ name: "demo", namespace: "default" }));
+    cluster.put(readyPod({ name: "demo", namespace: "fl-demo-0001" }));
     const result1 = await svc1.check("demo-0001");
     assert.equal(result1.outcome, "passed");
     assert.ok(result1.progress !== undefined);
@@ -85,7 +85,7 @@ test("full progression lifecycle: grade → unlock → restart → resume", asyn
     // ── Phase 3: select and grade demo-0002 ──────────────────────────────────
     svc1.select("demo-0002");
     await svc1.activate("demo-0002", { discardActive: true }); // leaving the solved demo-0001
-    cluster.put(readyPod({ name: "demo2", namespace: "default" }));
+    cluster.put(readyPod({ name: "demo2", namespace: "fl-demo-0002" }));
     const result2 = await svc1.check("demo-0002");
     assert.equal(result2.outcome, "passed");
     assert.equal(result2.progress.completed, true);
@@ -95,8 +95,8 @@ test("full progression lifecycle: grade → unlock → restart → resume", asyn
     // ── Phase 4: restart with same stateDir ──────────────────────────────────
     const cluster2 = createFakeCluster({
       resources: [
-        readyPod({ name: "demo", namespace: "default" }),
-        readyPod({ name: "demo2", namespace: "default" }),
+        readyPod({ name: "demo", namespace: "fl-demo-0001" }),
+        readyPod({ name: "demo2", namespace: "fl-demo-0002" }),
       ],
     });
     const app2 = createApp({ runner: cluster2, contentRoot, stateDir, logger: quiet });
@@ -244,7 +244,7 @@ test("track progress summary counts reflect actual states", async () => {
       logger: quiet,
     });
     await service.activate("demo-0001");
-    cluster.put(readyPod({ name: "demo", namespace: "default" }));
+    cluster.put(readyPod({ name: "demo", namespace: "fl-demo-0001" }));
     await service.check("demo-0001"); // passes → completed
     const trackProgress = service.getTrackProgress("kubernetes");
     const states = trackProgress.map((e) => e.state);

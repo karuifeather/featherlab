@@ -33,8 +33,12 @@ export const KINDS = Object.freeze({
   Namespace: { resource: "namespaces", namespaced: false },
 });
 
-/** Namespaces owned by the cluster itself; lifecycle operations must never touch them. */
+/**
+ * Namespaces owned by the cluster or the learner; lifecycle operations must never manage
+ * them. (Exercise namespaces must also be named `fl-<id>`, which excludes these anyway.)
+ */
 export const PROTECTED_NAMESPACES = Object.freeze([
+  "default",
   "kube-system",
   "kube-public",
   "kube-node-lease",

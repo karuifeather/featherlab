@@ -1,0 +1,20 @@
+# The release bumped the tag to one that was never published (a typo for 1.27).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: fl-k8s-0004
+  labels: { app: storefront }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: storefront }
+  template:
+    metadata:
+      labels: { app: storefront }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: web
+          image: nginx:1.27.99
+          ports: [{ name: http, containerPort: 80 }]

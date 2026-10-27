@@ -1,0 +1,106 @@
+schemaVersion: 1
+id: k8s-0010
+type: task
+title: Workload Recovery Mastery
+summary: Launch day for the inventory service. Repair, scale, build and retire workloads across two namespaces.
+track: kubernetes
+level: 2
+order: 6
+difficulty: advanced
+estimatedMinutes: 30
+tags: [mastery, troubleshooting, deployments, probes, resources, namespaces, services]
+prerequisites: [k8s-0003, k8s-0006, k8s-0007, k8s-0009]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespaces: `fl-k8s-0010` (the new release) and `fl-k8s-0010-legacy` (the old one)"
+  - "In `fl-k8s-0010`, Deployment `inventory-api` runs `nginx:1.27` in its `api` container, with 3 available replicas"
+  - "`inventory-api` keeps an HTTP (`httpGet`) readiness probe, and the `inventory-api` Service routes to its Pods"
+  - "In `fl-k8s-0010`, a new Deployment `inventory-worker` runs 1 available replica of `nginx:1.27` in a container named `worker`"
+  - "The `worker` container requests `50m` CPU and `32Mi` memory and is limited to `64Mi` memory"
+  - "The old `inventory-api` Deployment in `fl-k8s-0010-legacy` is scaled to 0 replicas but not deleted"
+
+hints:
+  - "Work through the list one item at a time and check each with `kubectl get` before moving on. `inventory-api` has more than one problem: after you fix the first, look again."
+  - "For `inventory-api`, the earlier labs apply: Pod STATUS and Events for images, `describe` for probes, and compare named ports carefully. For `inventory-worker`, `kubectl create deployment ... --dry-run=client -o yaml` gives you a manifest to edit, for example to rename the container."
+  - "Be explicit about namespaces: both namespaces contain a Deployment called `inventory-api`. `kubectl scale` changes the replica count without deleting anything."
+
+lifecycle:
+  namespaces: [fl-k8s-0010, fl-k8s-0010-legacy]
+  setup:
+    manifests: [setup/inventory-api.yaml, setup/legacy.yaml]
+
+checks:
+  - id: api-image
+    type: k8s.container-image
+    label: inventory-api's api container runs nginx:1.27
+    params:
+      kind: Deployment
+      name: inventory-api
+      namespace: fl-k8s-0010
+      container: api
+      image: "nginx:1.27"
+  - id: api-probe
+    type: k8s.container-probe
+    label: inventory-api keeps an httpGet readiness probe
+    params:
+      kind: Deployment
+      name: inventory-api
+      namespace: fl-k8s-0010
+      container: api
+      probe: readiness
+      handler: httpGet
+  - id: api-rollout
+    type: k8s.rollout-complete
+    label: inventory-api rolled out with 3 ready replicas
+    weight: 2
+    params: { name: inventory-api, namespace: fl-k8s-0010, replicas: 3 }
+  - id: api-routed
+    type: k8s.service-selects
+    label: Service inventory-api routes to the inventory-api Pods
+    params:
+      name: inventory-api
+      namespace: fl-k8s-0010
+      workload: { kind: Deployment, name: inventory-api }
+  - id: worker-placed
+    type: k8s.resource-in-namespace
+    label: Deployment inventory-worker exists in fl-k8s-0010
+    params: { kind: Deployment, name: inventory-worker, namespace: fl-k8s-0010 }
+  - id: worker-image
+    type: k8s.container-image
+    label: inventory-worker's worker container runs nginx:1.27
+    params:
+      kind: Deployment
+      name: inventory-worker
+      namespace: fl-k8s-0010
+      container: worker
+      image: "nginx:1.27"
+  - id: worker-resources
+    type: k8s.container-resources
+    label: The worker container has the required requests and limit
+    weight: 2
+    params:
+      kind: Deployment
+      name: inventory-worker
+      namespace: fl-k8s-0010
+      container: worker
+      requests: { cpu: 50m, memory: 32Mi }
+      limits: { memory: 64Mi }
+  - id: worker-rollout
+    type: k8s.rollout-complete
+    label: inventory-worker rolled out with 1 available replica
+    params: { name: inventory-worker, namespace: fl-k8s-0010, replicas: 1 }
+  - id: legacy-kept
+    type: k8s.resource-exists
+    label: The legacy inventory-api Deployment still exists
+    params: { kind: Deployment, name: inventory-api, namespace: fl-k8s-0010-legacy }
+  - id: legacy-scaled
+    type: k8s.replicas-desired
+    label: The legacy inventory-api Deployment is scaled to 0
+    params: { kind: Deployment, name: inventory-api, namespace: fl-k8s-0010-legacy, replicas: 0 }

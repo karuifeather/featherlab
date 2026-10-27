@@ -1,0 +1,86 @@
+schemaVersion: 1
+id: k8s-0018
+type: task
+title: Foundations Challenge
+summary: A short operations checklist across two namespaces, using everything from Level 0.
+track: kubernetes
+level: 0
+order: 10
+difficulty: intermediate
+estimatedMinutes: 20
+tags: [mastery, pods, deployments, namespaces, labels, inspection]
+prerequisites: [k8s-0017]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespaces: `fl-k8s-0018` (the shop) and `fl-k8s-0018-tools`"
+  - "Deployment `shop` in `fl-k8s-0018` runs 3 available replicas of `nginx:1.27` and is labelled `env=prod`"
+  - "Of the Pods `batch-1` and `batch-2` in `fl-k8s-0018`, the one whose log names the payments team is labelled `team=payments`; the other has no `team` label"
+  - "A Pod `status` in `fl-k8s-0018-tools` has a container named `probe` running `nginx:1.27`, carries `app=status`, and is `Ready`"
+
+hints:
+  - "Treat each requirement as its own small task, and check it is done before moving on. Start by looking at both namespaces."
+  - "Each part has appeared before: scaling and relabelling a Deployment, finding a Pod by its log, and creating a Pod whose container needs a specific name."
+  - "A container name other than the Pod's name means writing (or generating with `--dry-run=client -o yaml`) a manifest. Changing an existing label value needs `--overwrite`."
+
+lifecycle:
+  namespaces: [fl-k8s-0018, fl-k8s-0018-tools]
+  setup:
+    manifests: [setup/shop.yaml]
+
+checks:
+  - id: shop-replicas
+    type: k8s.replicas-desired
+    label: shop asks for 3 replicas
+    params: { kind: Deployment, name: shop, namespace: fl-k8s-0018, replicas: 3 }
+  - id: shop-available
+    type: k8s.rollout-complete
+    label: shop has 3 available replicas
+    weight: 2
+    params: { name: shop, namespace: fl-k8s-0018, replicas: 3 }
+  - id: shop-label
+    type: k8s.labels
+    label: shop is labelled env=prod
+    params: { kind: Deployment, name: shop, namespace: fl-k8s-0018, labels: { env: prod } }
+  - id: shop-image
+    type: k8s.container-image
+    label: shop runs nginx:1.27
+    params: { kind: Deployment, name: shop, namespace: fl-k8s-0018, image: "nginx:1.27" }
+  - id: batch-labelled
+    type: k8s.labels
+    label: The payments batch Pod is labelled team=payments
+    weight: 2
+    params: { kind: Pod, name: batch-2, namespace: fl-k8s-0018, labels: { team: payments } }
+  - id: batch-other-unlabelled
+    type: k8s.label-absent
+    label: The other batch Pod has no team label
+    params: { kind: Pod, name: batch-1, namespace: fl-k8s-0018, label: team }
+  - id: status-placed
+    type: k8s.resource-in-namespace
+    label: Pod status exists in fl-k8s-0018-tools
+    params: { kind: Pod, name: status, namespace: fl-k8s-0018-tools }
+  - id: status-container
+    type: k8s.container-image
+    label: Container probe runs nginx:1.27
+    params:
+      {
+        kind: Pod,
+        name: status,
+        namespace: fl-k8s-0018-tools,
+        container: probe,
+        image: "nginx:1.27",
+      }
+  - id: status-label
+    type: k8s.labels
+    label: Pod status carries app=status
+    params: { kind: Pod, name: status, namespace: fl-k8s-0018-tools, labels: { app: status } }
+  - id: status-ready
+    type: k8s.pod-ready
+    label: Pod status is Ready
+    params: { name: status, namespace: fl-k8s-0018-tools }
