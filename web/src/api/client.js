@@ -43,4 +43,5 @@ export const api = {
   getTrackProgress: (trackId) => request(`/api/progress/track/${encodeURIComponent(trackId)}`),
   getResume: () => request("/api/resume"),
   getVersion: () => request("/api/version"),
+  getStatus: () => request("/api/status"),
 };

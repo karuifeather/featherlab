@@ -144,7 +144,8 @@ export function ExerciseSidebar({
       </nav>
 
       <div className="sidebar-bottom">
-        <span className="status-led green" /> kind · isolated cluster
+        {/* Static description of the environment, not a live health check: no status LED. */}
+        <span>kind · isolated cluster</span>
         {progressError && (
           <span className="sidebar-progress-error" role="alert" aria-live="polite">
             Progress unavailable

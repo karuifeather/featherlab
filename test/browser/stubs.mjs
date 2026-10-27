@@ -276,20 +276,38 @@ export async function stubApi(
     checkSequence = [partial, passed],
     progressData = noProgress,
     resume = noResume,
+    // When set, the first terminal session ends with this close code (e.g. 1000 = the shell
+    // exited) shortly after connecting; later sessions stay open. Used for reconnect tests.
+    firstSessionCloseCode = null,
   } = {},
 ) {
+  let sessions = 0;
+  // Every JSON message the browser sends on the terminal socket, tagged with its session.
+  const terminalMessages = [];
   await page.routeWebSocket("**/ws/terminal", (ws) => {
+    const session = ++sessions;
     if (!connected) {
       setTimeout(() => ws.close(), 150);
       return;
     }
-    ws.onMessage(() => {});
+    ws.onMessage((message) => {
+      try {
+        terminalMessages.push({ session, ...JSON.parse(String(message)) });
+      } catch {
+        /* not JSON — ignore */
+      }
+    });
     setTimeout(() => {
       ws.send("Welcome to the FeatherLab practice workstation (isolated kind cluster)\r\n");
+      ws.send(`session-${session}\r\n`);
       ws.send("learner@workstation:~$ kubectl get pods\r\n");
       ws.send("NAME   READY   STATUS    RESTARTS   AGE\r\n");
       ws.send("web    1/1     Running   0          12s\r\n");
+      ws.send("learner@workstation:~$ ls /\r\n");
+      ws.send("bin   dev  home  lib64  mnt  proc  run   srv  tmp  var\r\n");
       ws.send("learner@workstation:~$ ");
+      if (session === 1 && firstSessionCloseCode)
+        setTimeout(() => ws.close({ code: firstSessionCloseCode, reason: "stub" }), 200);
     }, 100);
   });
   let n = 0;
@@ -310,6 +328,7 @@ export async function stubApi(
     const i = Number(new URL(r.request().url()).pathname.split("/").pop());
     return json(r, { hint: { exerciseId: "k8s-0001", index: i, total: 2, text: hints[i - 1] } });
   });
+  return { terminalMessages };
 }
 
 // Force xterm's DOM renderer so terminal text lands in the DOM (readable by locators and
@@ -325,6 +344,6 @@ export async function forceDomTerminal(page) {
 
 export async function enterWorkspace(page, base) {
   await page.goto(base);
-  await page.getByRole("button", { name: /Kubernetes/ }).click();
+  await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
   await page.getByRole("heading", { level: 1, name: "Your first Pod" }).waitFor();
 }

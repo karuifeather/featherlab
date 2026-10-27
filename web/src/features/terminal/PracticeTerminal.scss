@@ -1,3 +1,7 @@
+// One panel: a toolbar, a hairline divider, then the terminal canvas. The panel itself draws
+// no border — the workspace split handle is its only edge — so there is no frame-in-a-frame.
+// Toolbar colours use the theme-independent --terminal-* tokens because the shell stays
+// dark in both themes; app text tokens would lose contrast on it in light mode.
 .terminal-shell {
   display: flex;
   flex: 1;
@@ -8,17 +12,16 @@
 }
 
 .terminal-bar {
-  height: 38px;
+  height: 34px;
   flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
-  // Lighter framing: the chrome blends into the terminal with only a hairline seam.
-  background: color-mix(in srgb, var(--terminal-chrome) 70%, var(--terminal-bg));
-  border-bottom: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
-  color: var(--text-secondary);
+  padding: 0 6px 0 12px;
+  background: var(--terminal-chrome);
+  border-bottom: 1px solid var(--terminal-border);
+  color: var(--terminal-muted);
   font-size: 12px;
 }
 
@@ -26,30 +29,8 @@
 .terminal-bar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
-}
-
-.terminal-dots {
-  display: inline-flex;
-  gap: 5px;
-  opacity: 0.8;
-
-  i {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--border-strong);
-  }
-  i:nth-child(1) {
-    background: #cf6a58;
-  }
-  i:nth-child(2) {
-    background: #d6aa54;
-  }
-  i:nth-child(3) {
-    background: #58b47e;
-  }
 }
 
 .terminal-title {
@@ -63,12 +44,26 @@
 }
 
 .terminal-status-text {
-  color: var(--text-muted);
+  color: var(--terminal-muted);
 }
 
-// The connecting LED pulses; connected is steady green; disconnected is red.
+// The LED reflects the real socket state: connecting pulses, connected is steady green,
+// disconnected is red. The status text beside it carries the same meaning without colour.
+.status-led {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 50%;
+  width: 7px;
+  height: 7px;
+  background: var(--color-warning);
+  margin-right: 2px;
+
+  &.green {
+    background: var(--color-success);
+  }
+}
 .status-led.status-connecting {
-  background: var(--color-amber);
+  background: var(--color-warning);
   animation: led-pulse 1.1s var(--ease-in-out) infinite;
 }
 .status-led.status-disconnected {
@@ -79,35 +74,49 @@
 @keyframes led-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-amber) 55%, transparent);
+    opacity: 1;
   }
   50% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-amber) 0%, transparent);
+    opacity: 0.35;
   }
 }
 
 .terminal-hint {
-  color: var(--text-muted);
+  color: var(--terminal-muted);
   white-space: nowrap;
+  padding: 0 6px;
 }
 
-.terminal {
+// The host element has no padding: FitAddon sizes from this element's computed box, and
+// under the global `border-box` any padding here would be counted as usable space, making
+// the last row/column overflow and get clipped. The breathing room lives on `.xterm`
+// instead, which FitAddon subtracts explicitly. (Not named `.terminal`: xterm puts that
+// class on its own root element, so host rules would leak onto it.)
+.terminal-host {
   flex: 1;
   min-height: 0;
-  padding: 12px 12px 10px;
+  min-width: 0;
   overflow: hidden;
   background: var(--terminal-bg);
 
   .xterm {
     height: 100%;
+    padding: 6px 0 4px 10px;
+  }
+
+  // xterm.css paints the viewport pure #000 while the theme background only covers the cell
+  // grid, so the padding and the fractional-cell remainder showed as a black inner frame.
+  .xterm .xterm-viewport {
+    background-color: var(--terminal-bg);
   }
 }
 
+// Toolbar controls: flat, borderless until hovered, with the global focus ring.
 .terminal-reconnect,
 .terminal-focus-toggle {
-  border: 1px solid var(--border-strong);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: transparent;
   color: var(--terminal-fg);
   font-size: 12px;
   transition:
@@ -115,27 +124,35 @@
     border-color var(--dur-fast) var(--ease-out);
 
   &:hover {
-    background: var(--surface-3);
-    border-color: var(--primary);
+    background: var(--terminal-control-hover);
   }
 }
 
+// The global ring is dark in the light theme, which would vanish on this dark toolbar.
+.terminal-bar :focus-visible {
+  outline-color: var(--terminal-fg);
+}
+
 .terminal-reconnect {
-  padding: 4px 11px;
+  padding: 3px 10px;
   font-weight: 600;
-  color: var(--primary-bright);
+  border-color: var(--terminal-border);
 }
 
 .terminal-focus-toggle {
   display: grid;
   place-items: center;
-  width: 28px;
+  width: 26px;
   height: 26px;
-  font-size: 14px;
+  color: var(--terminal-muted);
+
+  &:hover {
+    color: var(--terminal-fg);
+  }
 }
 
 @media (max-width: 760px) {
-  .terminal {
+  .terminal-host {
     min-height: 200px;
   }
   .terminal-hint {

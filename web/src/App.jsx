@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Launcher } from "./components/Launcher.jsx";
+import { Launcher } from "./features/launcher/Launcher.jsx";
 import { Workspace } from "./features/workspace/Workspace.jsx";
 
 /** Theme override stored on <html data-theme>; unset means "follow the OS". */
@@ -49,28 +49,40 @@ export function App() {
 
   return (
     <main className="app">
-      <header className="topbar">
-        <div className="topbar-left">
-          <button className="logo" onClick={() => setTrackState(null)}>
-            <span className="brand-mark" aria-hidden="true">
-              ✦
-            </span>{" "}
-            featherlab
-          </button>
-        </div>
-        <div className="topbar-right">
-          <span className="local">
-            <span className="status-led green" /> Runs locally
-          </span>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={toggle}
-            aria-label={`Switch to ${resolved === "dark" ? "light" : "dark"} theme`}
-            title={`Switch to ${resolved === "dark" ? "light" : "dark"} theme`}
-          >
-            {resolved === "dark" ? "☾" : "☀"}
-          </button>
+      {/* The launcher header shares the launcher's centred container so their edges line up;
+          the workspace header spans the full width like the workspace below it. */}
+      <header className={`topbar ${trackState ? "topbar--workspace" : "topbar--launcher"}`}>
+        <div className={`topbar-inner ${trackState ? "" : "page-container"}`}>
+          <div className="topbar-left">
+            <button
+              type="button"
+              className="logo"
+              onClick={() => setTrackState(null)}
+              title="Back to workspaces"
+            >
+              <span className="brand-mark" aria-hidden="true">
+                ✦
+              </span>
+              featherlab
+            </button>
+            {trackState && (
+              <span className="topbar-crumb" aria-label="Current workspace">
+                <span aria-hidden="true">/</span> {trackState.id}
+              </span>
+            )}
+          </div>
+          <div className="topbar-right">
+            <span className="local">Local</span>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={toggle}
+              aria-label={`Switch to ${resolved === "dark" ? "light" : "dark"} theme`}
+              title={`Switch to ${resolved === "dark" ? "light" : "dark"} theme`}
+            >
+              {resolved === "dark" ? "☾" : "☀"}
+            </button>
+          </div>
         </div>
       </header>
       {trackState ? (

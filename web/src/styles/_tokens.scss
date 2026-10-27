@@ -1,93 +1,103 @@
 // FeatherLab design tokens.
 //
-// Built on the brand palette (primary teal #4a7c7c, sage/terracotta secondary).
-// Colour tokens flip between light and dark; radii, motion and the terminal palette
-// are theme-independent. Dark is the default identity; light is applied when the OS
-// prefers it, and either can be forced with `data-theme` on <html>.
+// Neutral foundation, brand accents. Surfaces and type are black/white/gray; the original
+// FeatherLab palette — primary teal #4a7c7c, secondary terracotta #cc6666 (dark) / sage
+// #669999 (light) — is applied as small accents only: primary actions, selection rails,
+// focus rings, progress fills, links and the logo. Never as a surface wash or panel border.
+// State colours (success, warning, error) stay separate from the brand so they keep meaning.
+// Colour tokens flip between light and dark; radii, motion, layout and the terminal palette
+// are theme-independent. Dark is the default identity; light is applied when the OS prefers
+// it, and either can be forced with `data-theme` on <html>.
+//
+// Contrast notes (WCAG 2.x, measured against the surfaces each token sits on):
+// - --primary fill with --primary-foreground: 4.7:1 (hover 5.7:1 dark, 6.1:1 light).
+// - --accent is the brand as *text* (links, active labels): #4a7c7c is only 4.1:1 on the
+//   dark page, so dark uses the original bright teal #83c0bb (>= 6.9:1 on every dark
+//   surface); light uses #3b6a6a (>= 5.0:1).
+// - --secondary is for graphics only (small dots and marks): light sage is
+//   3.2:1 on white — fine for non-text, not for text. Dark terracotta sits near the error
+//   hue, so it is never used next to pass/fail state.
+// - text-secondary and text-muted stay >= 4.5:1 on every surface.
 
 @mixin dark-tokens {
   color-scheme: dark;
 
-  --bg-page: #0b100f;
-  --surface-1: #0f1615;
-  --surface-2: #141d1b;
-  --surface-3: #1b2522;
+  --bg-page: #0d0e10;
+  --surface-1: #18191c; // panels, sidebar, toolbars
+  --surface-2: #1f2024; // hover, inset controls
+  --surface-3: #25262b; // elevated / pressed
+  --surface-selected: #2a2b30; // selected list row
 
-  --border-subtle: #1a2422;
-  --border-default: #26332f;
-  --border-strong: #34443f;
+  --border-subtle: #25262a;
+  --border-default: #303136;
+  --border-strong: #42434a;
 
-  --text-primary: #e5eeeb;
-  --text-secondary: #a7b6b1;
-  --text-muted: #798883;
+  --text-primary: #f3f4f6;
+  --text-secondary: #a1a1aa;
+  --text-muted: #94949d;
 
-  --primary: #4a7c7c;
-  --primary-hover: #59a09f;
-  --primary-bright: #83c0bb; // accent text / links / mesh highlights on dark
-  --primary-foreground: #f0f9ff;
-  --secondary: #cc6666; // terracotta in dark
-  --accent-line: #3f7a74; // infrastructure mesh connectors
+  // Brand.
+  --primary: #4a7c7c; // primary action fill
+  --primary-hover: #3f6e6e;
+  --primary-foreground: #ffffff;
+  --accent: #83c0bb; // brand as text/indicator: links, selection rail, progress fill
+  --secondary: #cc6666; // terracotta: small graphic details only
 
   --focus-ring: #6fb0ac;
 
-  --color-green: #46d6a1; // terminal connected
-  --color-amber: #e8b574; // terminal connecting / warning
-  --color-error: #ff9a8f;
-  --color-passed: #4fd6a1;
-  --color-failed: #e89a74;
-  --color-warning: #e8b574;
+  // Semantic state colours — used sparingly, never as surface washes.
+  --color-success: #5fbf8a;
+  --color-warning: #d6a95c;
+  --color-error: #f28b82;
+  --color-failed: #e0a072; // a wrong answer: distinct from an error
+  --on-semantic: #0d0e10; // text drawn on a solid semantic fill
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 10px 40px -8px rgba(0, 0, 0, 0.55);
-  --tint-primary: rgba(74, 124, 124, 0.14); // subtle brand wash on surfaces
-  --tint-primary-strong: rgba(74, 124, 124, 0.26);
+  --shadow-2: 0 10px 40px -8px rgba(0, 0, 0, 0.6);
 }
 
 @mixin light-tokens {
   color-scheme: light;
 
-  --bg-page: #eef3f1;
+  --bg-page: #f8f9fa;
   --surface-1: #ffffff;
-  --surface-2: #f6faf8;
-  --surface-3: #e7efec;
+  --surface-2: #f2f3f5;
+  --surface-3: #edeef0;
+  --surface-selected: #e8e9ec;
 
-  --border-subtle: #e6edeb;
-  --border-default: #d4e0dc;
-  --border-strong: #bcccc7;
+  --border-subtle: #e9eaed;
+  --border-default: #dfe1e5;
+  --border-strong: #c6c9cf;
 
-  --text-primary: #10201e;
-  --text-secondary: #3d524e;
-  --text-muted: #5f736e;
+  --text-primary: #18191c;
+  --text-secondary: #55555e;
+  --text-muted: #626269;
 
   --primary: #4a7c7c;
   --primary-hover: #3b6a6a;
-  --primary-bright: #3b6a6a;
-  --primary-foreground: #f0f9ff;
-  --secondary: #669999; // sage in light
-  --accent-line: #8fb6b1;
+  --primary-foreground: #ffffff;
+  --accent: #3b6a6a;
+  --secondary: #669999; // sage: small graphic details only
 
   --focus-ring: #4a7c7c;
 
-  --color-green: #1f9d6b;
-  --color-amber: #a9741c;
-  --color-error: #c23b2e;
-  --color-passed: #1f9d6b;
-  --color-failed: #bd5a2c;
-  --color-warning: #a9741c;
+  --color-success: #1d7a48;
+  --color-warning: #8a5a00;
+  --color-error: #b9342a;
+  --color-failed: #a8501f;
+  --on-semantic: #ffffff;
 
-  --shadow-1: 0 1px 2px rgba(18, 32, 30, 0.08);
-  --shadow-2: 0 12px 40px -10px rgba(18, 32, 30, 0.18);
-  --tint-primary: rgba(74, 124, 124, 0.1);
-  --tint-primary-strong: rgba(74, 124, 124, 0.18);
+  --shadow-1: 0 1px 2px rgba(24, 25, 28, 0.06);
+  --shadow-2: 0 12px 40px -10px rgba(24, 25, 28, 0.16);
 }
 
 :root {
   @include dark-tokens;
 
   // Theme-independent tokens.
-  --radius-sm: 7px;
-  --radius-md: 11px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
   --radius-pill: 999px;
 
   --dur-fast: 120ms;
@@ -97,11 +107,23 @@
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
 
-  // The terminal reads as a real shell in both themes, so its palette stays dark.
-  --terminal-bg: #0b1211;
-  --terminal-fg: #d6e4e0;
-  --terminal-cursor: #83c0bb;
-  --terminal-chrome: #121c1a;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  // Centered page container shared by the launcher header and launcher content so their
+  // edges line up. The workspace deliberately does not use it: it needs the full width.
+  --page-max: 920px;
+  --page-gutter: clamp(16px, 4vw, 32px);
+
+  // The terminal reads as a real shell in both themes, so its chrome stays dark and neutral.
+  // The ANSI palette lives with the terminal (features/terminal/terminalTheme.js).
+  --terminal-bg: #111214;
+  --terminal-fg: #e4e4e7;
+  --terminal-cursor: #e4e4e7;
+  --terminal-selection: rgba(161, 161, 170, 0.32);
+  --terminal-chrome: #18191c;
+  --terminal-border: #2c2d32;
+  --terminal-muted: #8b8b94;
+  --terminal-control-hover: #25262b;
 }
 
 // OS preference picks light unless dark is explicitly forced.

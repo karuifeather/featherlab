@@ -7,13 +7,13 @@
   animation: results-in var(--dur-base) var(--ease-out) both;
 
   // Outcome-driven accents, distinct from an ordinary incorrect answer.
+  // Restrained accents: a coloured left edge plus the heading colour/text; the card
+  // body stays neutral so the outcome never tints the whole panel.
   &[data-success="true"] {
-    border-color: color-mix(in srgb, var(--color-passed) 55%, var(--border-default));
-    background: color-mix(in srgb, var(--color-passed) 7%, var(--surface-1));
+    border-left: 3px solid var(--color-success);
   }
   &[data-outcome="incomplete"] {
-    border-color: color-mix(in srgb, var(--color-warning) 50%, var(--border-default));
-    background: color-mix(in srgb, var(--color-warning) 7%, var(--surface-1));
+    border-left: 3px solid var(--color-warning);
   }
 }
 
@@ -31,7 +31,7 @@
 }
 
 .results[data-success="true"] .results-head h3 {
-  color: var(--color-passed);
+  color: var(--color-success);
 }
 .results[data-outcome="incomplete"] .results-head h3 {
   color: var(--color-warning);
@@ -59,7 +59,7 @@
   }
 
   &.is-full span {
-    background: var(--color-passed);
+    background: var(--color-success);
   }
 }
 
@@ -94,8 +94,8 @@
 }
 
 .status-passed .check-icon {
-  color: var(--primary-foreground);
-  background: var(--color-passed);
+  color: var(--on-semantic);
+  background: var(--color-success);
 }
 .status-failed .check-icon {
   color: var(--color-failed);

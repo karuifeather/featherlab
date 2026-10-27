@@ -121,9 +121,7 @@ export function ExercisePanel({
 
         <div className="problem-header">
           <h1>{exercise.title}</h1>
-          <span className={`difficulty diff-${String(exercise.difficulty).toLowerCase()}`}>
-            {exercise.difficulty}
-          </span>
+          <span className="difficulty">{exercise.difficulty}</span>
         </div>
 
         {exercise.summary && <p className="problem-summary">{exercise.summary}</p>}

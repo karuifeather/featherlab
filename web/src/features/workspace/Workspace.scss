@@ -36,11 +36,13 @@
 
 // Split region: problem | handle | terminal. The first column width is driven by --pw,
 // written straight to the DOM by useSplitPane during drag (no React re-render, no transition).
+// The handle column is the single 1px divider between the panes (neither pane draws its own
+// border), so there is exactly one seam; its pointer target is widened by ::after.
 .split {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: var(--pw, 42%) 10px minmax(0, 1fr);
+  grid-template-columns: var(--pw, 42%) 1px minmax(0, 1fr);
 
   // Terminal-focus: collapse to a single full-width track. A single explicit column
   // (not `0 0 1fr`) is required so the still-present terminal auto-places into the wide
@@ -61,7 +63,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-right: 1px solid var(--border-default);
 }
 
 .split-terminal {
@@ -70,27 +71,29 @@
   display: flex;
 }
 
-// Resize handle: a thin column with a wider invisible hit area and a visible grip.
+// Resize handle: a 1px divider with a wider invisible hit area. The grip only appears on
+// hover/focus so the resting seam stays a hairline.
 .split-handle {
   position: relative;
+  z-index: 2; // the widened ::after target must sit above both panes
   cursor: col-resize;
-  background: var(--border-subtle);
+  background: var(--border-default);
   transition: background var(--dur-fast) var(--ease-out);
   touch-action: none;
 
   &::after {
     content: "";
     position: absolute;
-    inset: 0 -5px; // widen the pointer target without widening the column
+    inset: 0 -4px; // widen the pointer target without widening the column
   }
 
-  &:hover,
-  &:focus-visible {
-    background: color-mix(in srgb, var(--primary) 55%, var(--border-strong));
+  &:hover {
+    background: var(--border-strong);
   }
 
   &:focus-visible {
     outline: none;
+    background: var(--focus-ring);
   }
 }
 
@@ -99,16 +102,21 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 2px;
-  height: 34px;
+  width: 4px;
+  height: 32px;
   border-radius: var(--radius-pill);
-  background: var(--border-strong);
-  transition: background var(--dur-fast) var(--ease-out);
+  background: var(--text-muted);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
 
 .split-handle:hover .split-handle-grip,
 .split-handle:focus-visible .split-handle-grip {
-  background: var(--primary-foreground);
+  opacity: 1;
+}
+
+.split-handle:focus-visible .split-handle-grip {
+  background: var(--focus-ring);
 }
 
 // Disable text selection and smooth the cursor everywhere while dragging.
@@ -136,9 +144,10 @@ body.is-resizing {
   font-weight: 600;
 
   &.active {
-    background: var(--surface-3);
+    background: var(--surface-selected);
     color: var(--text-primary);
     border-color: var(--border-default);
+    box-shadow: inset 0 -2px 0 var(--accent);
   }
 
   &.lessons-tab {

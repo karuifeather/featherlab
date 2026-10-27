@@ -9,19 +9,35 @@
   background: var(--bg-page);
 }
 
+// Centred page column shared by the launcher header and launcher content. Workspace views
+// never use it: the terminal and split panes need the full viewport width.
+.page-container {
+  width: 100%;
+  max-width: calc(var(--page-max) + 2 * var(--page-gutter));
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
 .topbar {
-  height: 52px;
+  height: 48px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-default);
+  background: var(--surface-1);
+  position: relative;
+  z-index: 5;
+}
+
+.topbar-inner {
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 0 18px;
-  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
-  backdrop-filter: blur(8px);
-  position: relative;
-  z-index: 5;
+}
+
+// Workspace variant: full width with a small fixed gutter, aligned with the sidebar edge.
+.topbar--workspace .topbar-inner {
+  padding-inline: 12px;
 }
 
 .topbar-left,
@@ -41,8 +57,10 @@
   color: var(--text-primary);
   font-weight: 700;
   letter-spacing: -0.3px;
-  font-size: 15px;
+  font-size: 14px;
   padding: 6px 8px;
+  // Optical alignment: the button's hover padding hangs outside the column so the mark
+  // itself sits exactly on the container edge, like the content below it.
   margin-left: -8px;
   border-radius: var(--radius-sm);
   transition: background var(--dur-fast) var(--ease-out);
@@ -55,13 +73,23 @@
 .brand-mark {
   display: inline-grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: linear-gradient(145deg, var(--primary), color-mix(in srgb, var(--primary) 55%, #000));
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
   color: var(--primary-foreground);
+  font-size: 12px;
+}
+
+.topbar-crumb {
   font-size: 13px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-bright) 40%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
+
+  span {
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
 }
 
 .local {
@@ -76,11 +104,11 @@
 .icon-button {
   display: inline-grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text-secondary);
   font-size: 15px;
   transition:
@@ -92,21 +120,6 @@
     background: var(--surface-3);
     color: var(--text-primary);
     border-color: var(--border-strong);
-  }
-}
-
-// Shared between App topbar and PracticeTerminal.
-.status-led {
-  display: inline-block;
-  border-radius: 100%;
-  width: 7px;
-  height: 7px;
-  background: var(--color-amber);
-  margin-right: 7px;
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-amber) 60%, transparent);
-
-  &.green {
-    background: var(--color-green);
   }
 }
 

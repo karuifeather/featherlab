@@ -11,6 +11,8 @@ test.describe.configure({ mode: "serial" });
 
 let page;
 let terminalText;
+// Every size the browser reports on the terminal socket (xterm's own cols × rows).
+const sentSizes = [];
 
 test.beforeAll(async ({ browser }) => {
   page = await browser.newPage();
@@ -22,6 +24,16 @@ test.beforeAll(async ({ browser }) => {
     };
   });
   terminalText = () => page.locator(".xterm-rows");
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      try {
+        const msg = JSON.parse(String(payload));
+        if (msg.type === "resize") sentSizes.push(msg);
+      } catch {
+        /* binary or non-JSON frame */
+      }
+    }),
+  );
 });
 test.afterAll(async () => page?.close());
 
@@ -40,8 +52,8 @@ const resetButton = () => page.getByRole("button", { name: "Reset task" });
 
 test("launcher offers the Kubernetes track, which lists both exercises", async () => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Build the skills/ })).toBeVisible();
-  await page.getByRole("button", { name: /Kubernetes/ }).click();
+  await expect(page.getByRole("heading", { name: "Kubernetes" })).toBeVisible();
+  await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
   await expect(lessons()).toHaveCount(2);
   await expect(lessons().nth(0)).toContainText("Your first Pod");
   await expect(lessons().nth(1)).toContainText("Run a Deployment");
@@ -69,6 +81,90 @@ test("a real terminal connects and runs kubectl against the test cluster", async
   await runInTerminal("kubectl get nodes");
   await expect(terminalText()).toContainText("control-plane", { timeout: 60_000 });
   await expect(terminalText()).toContainText("Ready");
+});
+
+// Regression: the exec stream was Docker-multiplexed, so each chunk's 8-byte frame header
+// leaked its length byte into the terminal (e.g. "V" before the prompt, "P" before `bin`).
+test("real shell output reaches xterm without stray frame bytes", async () => {
+  await runInTerminal("clear; ls /");
+  const rows = page.locator(".xterm-rows > div");
+  await expect(page.locator(".xterm-rows")).toContainText("proc");
+  const texts = (await rows.allInnerTexts()).map((t) => t.replace(/\u00a0/g, " ").trim());
+  const listing = texts.find((t) => /\bproc\b/.test(t) && /\bbin\b/.test(t));
+  expect(listing, texts.join("\n")).toBeDefined();
+  expect(listing.startsWith("bin")).toBe(true);
+  for (const prompt of texts.filter((t) => t.includes("learner@")))
+    expect(prompt.startsWith("learner@"), prompt).toBe(true);
+});
+
+const gridRows = () => page.locator(".xterm-rows > div").count();
+const rowTexts = async () =>
+  (await page.locator(".xterm-rows > div").allInnerTexts()).map((t) =>
+    t.replace(/\u00a0/g, " ").trimEnd(),
+  );
+
+/** The PTY size the shell reports must equal xterm's grid: its rows on screen and the
+ * cols × rows it reported. */
+async function expectPtyMatchesGrid() {
+  await runInTerminal("clear; echo PTY=$(stty size)/$(tput lines)/$(tput cols)");
+  await expect
+    .poll(async () => {
+      const line = (await rowTexts()).find((t) => t.startsWith("PTY="));
+      const [rows, cols, tputLines, tputCols] =
+        line
+          ?.match(/^PTY=(\d+) (\d+)\/(\d+)\/(\d+)$/)
+          ?.slice(1)
+          .map(Number) ?? [];
+      const grid = await gridRows();
+      const sent = sentSizes.at(-1);
+      const xterm = `${sent?.cols}x${grid}`;
+      const pty = `${cols}x${rows}`;
+      const tput = `${tputCols}x${tputLines}`;
+      // Shown on failure: what the shell sees vs. what xterm shows and reported.
+      return {
+        pty,
+        tput,
+        xterm,
+        sentRows: sent?.rows,
+        ok: pty === xterm && tput === xterm && sent?.rows === grid,
+      };
+    })
+    .toMatchObject({ ok: true });
+}
+
+/** Vim's status line sits on the second-to-last row: it fills the whole grid. Returns the
+ * status line's width, which tracks the PTY's columns (the ruler is right-aligned). */
+async function expectVimFillsGrid() {
+  await expect
+    .poll(async () => {
+      const texts = await rowTexts();
+      return texts.findIndex((t) => t.startsWith("[No Name]")) === texts.length - 2;
+    })
+    .toBe(true);
+  return (await rowTexts()).at(-2).length;
+}
+
+// Regression: the browser's first size reached the server before the exec existed and was
+// dropped, so the PTY stayed 0x0 and vim drew only 24 rows, leaving the panel bottom empty.
+test("the PTY matches the terminal grid and vim fills it through maximize and restore", async () => {
+  await expectPtyMatchesGrid();
+  await runInTerminal("vim -u NONE -c 'set laststatus=2 ruler'");
+  const width = await expectVimFillsGrid();
+  const restoredRows = await gridRows();
+
+  // Maximizing widens the grid: vim must redraw at the new column count, then shrink back.
+  await page.getByRole("button", { name: "Maximize terminal" }).click();
+  await expect.poll(expectVimFillsGrid).toBeGreaterThan(width + 20);
+  await page.getByRole("button", { name: "Restore layout" }).click();
+  await expect.poll(expectVimFillsGrid).toBe(width);
+  expect(await gridRows()).toBe(restoredRows);
+
+  // The toolbar buttons took keyboard focus; give it back to the terminal before quitting.
+  await page.locator(".xterm-screen").click();
+  await page.keyboard.press("Escape");
+  await page.keyboard.type(":q!");
+  await page.keyboard.press("Enter");
+  await expectPtyMatchesGrid();
 });
 
 test("checking before solving shows failing checks", async () => {
@@ -128,6 +224,8 @@ test("a dropped terminal can be reconnected", async () => {
   // A fresh shell: the variable from the first session is gone.
   await runInTerminal('echo "[$FL_MARK]"');
   await expect(terminalText()).toContainText("[]");
+  // The new shell starts at the panel's real size, not a default.
+  await expectPtyMatchesGrid();
 });
 
 test("API failures are shown as readable errors and the page stays usable", async () => {

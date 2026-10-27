@@ -145,26 +145,32 @@
     color: var(--text-primary);
   }
 
-  // Brand rail on the active lesson.
+  // Active lesson: neutral raised row plus a brand rail, so selection never relies on colour
+  // alone. The rail is absolutely positioned and takes no layout space (see collapsed rules).
   &.selected {
-    background: var(--tint-primary);
+    background: var(--surface-selected);
     color: var(--text-primary);
+
+    .lesson-ord {
+      color: var(--accent);
+    }
 
     &::before {
       content: "";
       position: absolute;
       left: 0;
-      top: 6px;
-      bottom: 6px;
-      width: 3px;
+      top: 7px;
+      bottom: 7px;
+      width: 2px;
       border-radius: var(--radius-pill);
-      background: var(--primary);
+      background: var(--accent);
     }
   }
 
-  // Completed: subtle success tint on the ordinal; rest stays selectable.
+  // Completed: a restrained success checkmark; the rest of the row stays neutral. Declared
+  // after the selection rule so a selected, completed lesson still shows success, not brand.
   &.completed .lesson-ord {
-    color: var(--color-passed);
+    color: var(--color-success);
   }
 
   // Locked: muted, no pointer, no hover highlight.
@@ -226,15 +232,8 @@
     background: var(--border-strong);
 
     &.on {
-      background: var(--color-passed);
+      background: var(--text-secondary);
     }
-  }
-
-  &.rank-2 .dot.on {
-    background: var(--color-amber);
-  }
-  &.rank-3 .dot.on {
-    background: var(--secondary);
   }
 }
 
@@ -252,40 +251,55 @@
 
 .sidebar-progress-error {
   font-size: 10.5px;
-  color: var(--color-error, #e57373);
+  color: var(--color-error);
   margin-left: auto;
 }
 
-// Collapsed rail: show only carets/ordinals, hide text.
-.sidebar-collapsed {
-  .sidebar-title,
-  .sidebar-progress,
-  .lesson-title,
-  .lesson-prereq-note,
-  .difficulty-dots,
-  .level-count,
-  .level-label,
-  .sidebar-bottom {
-    display: none;
-  }
+// Collapsed rail: only carets and ordinals remain, each centred in a full-width row.
+//
+// Whole flex children are removed (not just their text): `.lesson-main` is `flex: 1`, so
+// hiding only its contents left an empty box that absorbed all free space and pinned the
+// ordinal to the left edge. With it gone, the ordinal is the row's only in-flow child and
+// `justify-content: center` centres it; the selection rail is absolutely positioned and
+// never shifts it. Scoped to wide layouts: below 900px the sidebar is a drawer that always
+// shows full content (and has no collapse toggle to undo an icons-only state).
+@media (min-width: 901px) {
+  .sidebar-collapsed {
+    .sidebar {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
 
-  .sidebar-head {
-    justify-content: center;
-  }
+    .sidebar-head-text,
+    .lesson-main,
+    .difficulty-dots,
+    .level-count,
+    .level-label,
+    .sidebar-bottom {
+      display: none;
+    }
 
-  .sidebar-head-text {
-    display: none;
-  }
+    .sidebar-head {
+      justify-content: center;
+      padding-left: 0;
+      padding-right: 0;
+    }
 
-  .level-header,
-  .lesson {
-    justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
-  }
+    .level-header,
+    .lesson {
+      justify-content: center;
+      gap: 0;
+      padding-left: 0;
+      padding-right: 0;
+    }
 
-  .level-items {
-    padding-left: 0;
+    .level-items {
+      padding-left: 0;
+    }
+
+    .lesson-ord {
+      min-width: 0;
+    }
   }
 }
 

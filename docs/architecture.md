@@ -48,7 +48,7 @@ src/
   infrastructure/environment.mjs  names of the cluster/workstation/state dir; injected, so tests use their own
   lib/runtime.mjs          host provisioning (kind cluster, workstation container) for one environment config
   (dependency rules are enforced by test/unit/architecture.test.mjs)
-web/src/                   React UI (api client, components, features/{exercises,terminal,workspace})
+web/src/                   React UI (api client, components, features/{exercises,launcher,terminal,workspace})
   api/client.js              API client: listExercises, getExercise, activate, check, reset,
                                select, getTrackProgress, getResume, getVersion
   features/exercises/
@@ -113,6 +113,26 @@ pass/fail.
 - **The host.** The Docker socket is never mounted into the workstation, the browser has no
   host shell, the server binds to `127.0.0.1`, and mutating requests and the terminal socket
   enforce the origin check.
+
+## Browser terminal sizing
+
+Invariant: the PTY's rows × cols always equal the xterm.js grid the learner sees. If they
+disagree, full-screen programs draw for the wrong size (vim stopping partway down the panel).
+
+```text
+.terminal-host box ──ResizeObserver / window resize / fonts.ready──▶ FitAddon.fit() (≤1 per frame)
+xterm grid ──terminal.onResize (only on change) + once on socket open──▶ {"type":"resize",cols,rows}
+server (src/api/terminal.mjs) ──hold latest size until the exec exists──▶ exec start ConsoleSize
+                              ──then exec.resize() on every change (deduped)──▶ PTY → SIGWINCH
+```
+
+- The browser reports its size the instant the socket opens, before the server has created the
+  `docker exec`. The server therefore attaches its message handler synchronously and holds the
+  latest size (and any early keystrokes) until the shell exists, then applies it — a dropped
+  first resize once left the PTY at 0×0, and vim fell back to 24 rows.
+- A resize that races the process start is retried on the shell's first output, not on a timer.
+- Neither side sends or applies the same size twice, so layout churn never loops.
+- Hidden hosts (inactive mobile tab) are never fitted: a 0-wide box would collapse the grid.
 
 ## Lifecycle
 
@@ -214,10 +234,14 @@ When the user clicks a sidebar exercise, `Workspace.pick(id)` checks the `progre
 - Otherwise, `chosenId` is updated immediately (optimistic), then `POST /select` is called in
   the background to persist the resume state. Failure is non-fatal (resume just won't update).
 
-The Launcher calls `GET /api/resume` and `GET /api/progress/track/kubernetes` on mount.
-If a valid resume exists, the Kubernetes card shows "Continue Learning" with the exercise title
-and completed count. Clicking it passes `initialExerciseId` through App → Workspace, which
-populates `chosenId` on mount — no redundant `/select` call is made on initial render.
+The Launcher (`web/src/features/launcher/`) calls `GET /api/resume`, `GET /api/status` and
+`GET /api/progress/track/:id` for each track in `tracks.js` on mount. Each track row shows the
+real completed count and "Start Learning" (first-time learner: no explicit selection and nothing
+completed) or "Continue Learning" with the resume exercise title. Clicking it passes
+`initialExerciseId` through App → Workspace, which populates `chosenId` on mount — no redundant
+`/select` call is made on initial render. Below it, the curriculum lists the track's exercises
+with their backend state; picking one there is an explicit selection, so it calls `/select`
+just like the sidebar, and locked entries never open.
 
 ### Sidebar progression display
 
@@ -266,7 +290,7 @@ via `useTrackProgress.refresh()`. This is the minimal correct fetch because newl
 exercises may appear across the track, not just immediately adjacent to the just-completed one.
 
 The Launcher refetches nothing on its own — progress is fetched once on mount. Re-entering the
-workspace (returning from launcher → Kubernetes card) picks up fresh progress via the Workspace
+workspace (returning to the launcher, then Start/Continue Learning) picks up fresh progress via the Workspace
 mount.
 
 ## M4.2 API Contracts
