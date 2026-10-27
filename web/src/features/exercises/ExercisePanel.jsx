@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./ExercisePanel.scss";
 import { api } from "../../api/client.js";
 import { Inline, Markdown } from "../../components/Markdown.jsx";
 import { CheckResults } from "./CheckResults.jsx";
+import { CompletionFeedback } from "./CompletionFeedback.jsx";
 import { Hints } from "./Hints.jsx";
 import { useAction } from "./useAction.js";
 
@@ -11,11 +12,22 @@ import { useAction } from "./useAction.js";
  * `key={exerciseId}` so switching exercises starts from clean state. It never touches the
  * terminal, which lives alongside it in the workspace.
  */
-export function ExercisePanel({ exerciseId, ordinal }) {
+export function ExercisePanel({
+  exerciseId,
+  ordinal,
+  exerciseProgress,
+  nextExercise,
+  onProgressUpdate,
+  onSelectNext,
+}) {
   const [exercise, setExercise] = useState(null);
   const [setup, setSetup] = useState({ state: "preparing", message: "" });
   const [loadError, setLoadError] = useState("");
   const [result, setResult] = useState(null);
+  // Track whether this exercise was already completed before this grading session.
+  // Captured once on mount (from exerciseProgress); stable for the lifetime of this key.
+  const alreadyCompletedRef = useRef(exerciseProgress?.completed ?? false);
+  const [firstCompletion, setFirstCompletion] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,7 +56,19 @@ export function ExercisePanel({ exerciseId, ordinal }) {
   const check = useAction(async () => {
     const data = await api.check(exerciseId);
     setResult(data.result);
+    // Detect first-time completion: the result carries a progress field with completed=true
+    // and this exercise was not already completed at session start.
+    if (data.result.success && data.result.progress?.completed && !alreadyCompletedRef.current) {
+      setFirstCompletion(true);
+      alreadyCompletedRef.current = true;
+      // Ask Workspace to refresh the track progress so new unlocks appear.
+      onProgressUpdate?.();
+    } else if (data.result.success && data.result.progress) {
+      // Repeat success: refresh progress for updated stats, no first-completion banner.
+      onProgressUpdate?.();
+    }
   });
+
   const reset = useAction(async () => {
     await api.reset(exerciseId);
     setResult(null);
@@ -118,6 +142,14 @@ export function ExercisePanel({ exerciseId, ordinal }) {
         <Hints exerciseId={exercise.id} total={exercise.hintCount} />
 
         {result && <CheckResults result={result} />}
+
+        {result?.success && (
+          <CompletionFeedback
+            firstCompletion={firstCompletion}
+            nextExercise={nextExercise}
+            onNext={onSelectNext}
+          />
+        )}
 
         {(check.error || reset.error) && (
           <div className="error" data-testid="error-message">

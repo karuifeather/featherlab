@@ -25,7 +25,7 @@ export const exercises = [
     difficulty: "intermediate",
     estimatedMinutes: 10,
     tags: ["deployments"],
-    prerequisites: [],
+    prerequisites: ["k8s-0001"],
   },
   {
     id: "k8s-0101",
@@ -40,6 +40,123 @@ export const exercises = [
     prerequisites: [],
   },
 ];
+
+// Track progress stub: all exercises available, none completed.
+export const noProgress = {
+  exercises: exercises.map((e) => ({
+    exerciseId: e.id,
+    title: e.title,
+    level: e.level,
+    prerequisites: e.prerequisites,
+    state: "available",
+    unmetPrerequisites: [],
+    completed: false,
+    attemptCount: 0,
+    bestScoreEarned: null,
+    bestScorePossible: null,
+    firstCompletedAt: null,
+    lastAttemptedAt: null,
+  })),
+  summary: { total: 3, completed: 0, available: 3, locked: 0 },
+};
+
+// Track progress stub: first exercise completed, second still locked.
+export const withProgress = {
+  exercises: [
+    {
+      exerciseId: "k8s-0001",
+      title: "Your first Pod",
+      level: 0,
+      prerequisites: [],
+      state: "completed",
+      unmetPrerequisites: [],
+      completed: true,
+      attemptCount: 1,
+      bestScoreEarned: 4,
+      bestScorePossible: 4,
+      firstCompletedAt: "2024-01-01T00:00:00.000Z",
+      lastAttemptedAt: "2024-01-01T00:00:00.000Z",
+    },
+    {
+      exerciseId: "k8s-0002",
+      title: "Run a Deployment",
+      level: 0,
+      prerequisites: ["k8s-0001"],
+      state: "available",
+      unmetPrerequisites: [],
+      completed: false,
+      attemptCount: 0,
+      bestScoreEarned: null,
+      bestScorePossible: null,
+      firstCompletedAt: null,
+      lastAttemptedAt: null,
+    },
+    {
+      exerciseId: "k8s-0101",
+      title: "Expose a Service",
+      level: 1,
+      prerequisites: [],
+      state: "available",
+      unmetPrerequisites: [],
+      completed: false,
+      attemptCount: 0,
+      bestScoreEarned: null,
+      bestScorePossible: null,
+      firstCompletedAt: null,
+      lastAttemptedAt: null,
+    },
+  ],
+  summary: { total: 3, completed: 1, available: 2, locked: 0 },
+};
+
+// Track progress: k8s-0001 complete, k8s-0002 locked (prereq k8s-0001, but using a different stub).
+export const withLockedExercise = {
+  exercises: [
+    {
+      exerciseId: "k8s-0001",
+      title: "Your first Pod",
+      level: 0,
+      prerequisites: [],
+      state: "available",
+      unmetPrerequisites: [],
+      completed: false,
+      attemptCount: 0,
+      bestScoreEarned: null,
+      bestScorePossible: null,
+      firstCompletedAt: null,
+      lastAttemptedAt: null,
+    },
+    {
+      exerciseId: "k8s-0002",
+      title: "Run a Deployment",
+      level: 0,
+      prerequisites: ["k8s-0001"],
+      state: "locked",
+      unmetPrerequisites: ["k8s-0001"],
+      completed: false,
+      attemptCount: 0,
+      bestScoreEarned: null,
+      bestScorePossible: null,
+      firstCompletedAt: null,
+      lastAttemptedAt: null,
+    },
+    {
+      exerciseId: "k8s-0101",
+      title: "Expose a Service",
+      level: 1,
+      prerequisites: [],
+      state: "available",
+      unmetPrerequisites: [],
+      completed: false,
+      attemptCount: 0,
+      bestScoreEarned: null,
+      bestScorePossible: null,
+      firstCompletedAt: null,
+      lastAttemptedAt: null,
+    },
+  ],
+  summary: { total: 3, completed: 0, available: 2, locked: 1 },
+};
 
 // Long, multi-line fenced block: used to prove code is never clipped by layout.
 const longCode = [
@@ -119,7 +236,7 @@ export const partial = {
 export const passed = {
   result: {
     exerciseId: "k8s-0001",
-    outcome: "graded",
+    outcome: "passed",
     success: true,
     score: { percent: 100 },
     counts: { passed: 4, total: 4 },
@@ -129,13 +246,29 @@ export const passed = {
       passed: true,
       feedback: "Passed.",
     })),
+    progress: {
+      completed: true,
+      attemptCount: 1,
+      bestScoreEarned: 4,
+      bestScorePossible: 4,
+      firstCompletedAt: "2024-01-01T00:00:00.000Z",
+      lastAttemptedAt: "2024-01-01T00:00:00.000Z",
+    },
   },
 };
 
 const json = (route, body) =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 
-export async function stubApi(page, { connected = true, checkSequence = [partial, passed] } = {}) {
+export async function stubApi(
+  page,
+  {
+    connected = true,
+    checkSequence = [partial, passed],
+    progressData = noProgress,
+    resume = null,
+  } = {},
+) {
   await page.routeWebSocket("**/ws/terminal", (ws) => {
     if (!connected) {
       setTimeout(() => ws.close(), 150);
@@ -152,6 +285,12 @@ export async function stubApi(page, { connected = true, checkSequence = [partial
   });
   let n = 0;
   await page.route(/\/api\/exercises(\?.*)?$/, (r) => json(r, { exercises }));
+  // Progress and resume routes must be matched before the generic exercise route.
+  await page.route(/\/api\/progress\/track\/[^/]+/, (r) => json(r, progressData));
+  await page.route("**/api/resume", (r) => json(r, { resume }));
+  await page.route("**/api/exercises/*/select", (r) =>
+    json(r, { trackId: "kubernetes", exerciseId: "k8s-0001" }),
+  );
   await page.route(/\/api\/exercises\/[^/?]+(\?.*)?$/, (r) => json(r, { exercise: detail }));
   await page.route("**/api/exercises/*/check", (r) =>
     json(r, checkSequence[Math.min(n++, checkSequence.length - 1)]),

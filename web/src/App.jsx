@@ -39,14 +39,19 @@ function useTheme() {
 }
 
 export function App() {
-  const [track, setTrack] = useState(null);
+  const [trackState, setTrackState] = useState(null);
   const { resolved, toggle } = useTheme();
+
+  // Launcher calls onEnter(trackId, initialExerciseId | null)
+  const handleEnter = (trackId, initialExerciseId) => {
+    setTrackState({ id: trackId, initialExerciseId: initialExerciseId ?? null });
+  };
 
   return (
     <main className="app">
       <header className="topbar">
         <div className="topbar-left">
-          <button className="logo" onClick={() => setTrack(null)}>
+          <button className="logo" onClick={() => setTrackState(null)}>
             <span className="brand-mark" aria-hidden="true">
               ✦
             </span>{" "}
@@ -68,7 +73,11 @@ export function App() {
           </button>
         </div>
       </header>
-      {track ? <Workspace track={track} /> : <Launcher onEnter={setTrack} />}
+      {trackState ? (
+        <Workspace track={trackState.id} initialExerciseId={trackState.initialExerciseId} />
+      ) : (
+        <Launcher onEnter={handleEnter} />
+      )}
     </main>
   );
 }

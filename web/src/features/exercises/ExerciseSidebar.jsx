@@ -18,6 +18,12 @@ function DifficultyDots({ difficulty }) {
   );
 }
 
+/** Readable prerequisite list, falling back to raw IDs when titles are unavailable. */
+function prereqLabel(unmetIds, progressMap) {
+  if (!unmetIds || unmetIds.length === 0) return null;
+  return unmetIds.map((id) => progressMap.get(id)?.title ?? id).join(", ");
+}
+
 export function ExerciseSidebar({
   track,
   exercises,
@@ -25,6 +31,9 @@ export function ExerciseSidebar({
   onSelect,
   collapsed = false,
   onToggleCollapse,
+  progressMap = new Map(),
+  progressLoading = false,
+  summary = null,
 }) {
   const levels = [...Map.groupBy(exercises, (e) => e.level)];
   const [collapsedLevels, setCollapsedLevels] = useState(() => new Set());
@@ -39,7 +48,17 @@ export function ExerciseSidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <span className="sidebar-title">{track.toUpperCase()}</span>
+        <div className="sidebar-head-text">
+          <span className="sidebar-title">{track.toUpperCase()}</span>
+          {!progressLoading && summary && summary.total > 0 && (
+            <span
+              className="sidebar-progress"
+              aria-label={`${summary.completed} of ${summary.total} exercises completed`}
+            >
+              {summary.completed} / {summary.total}
+            </span>
+          )}
+        </div>
         {onToggleCollapse && (
           <button
             type="button"
@@ -75,18 +94,44 @@ export function ExerciseSidebar({
                 <div className="level-items">
                   {items.map((exercise, i) => {
                     const active = exercise.id === selectedId;
+                    // Default to "available" while progress is loading so exercises
+                    // never flash as locked before data arrives.
+                    const info = progressMap.get(exercise.id);
+                    const state = progressLoading ? "available" : (info?.state ?? "available");
+                    const isLocked = state === "locked";
+                    const isCompleted = state === "completed";
+                    const unmetTitles = isLocked
+                      ? prereqLabel(info?.unmetPrerequisites, progressMap)
+                      : null;
+                    const ariaLabel = isLocked
+                      ? `${exercise.title} — locked${unmetTitles ? `, requires: ${unmetTitles}` : ""}`
+                      : exercise.title;
+
                     return (
                       <button
                         key={exercise.id}
-                        className={`lesson ${active ? "selected" : ""}`}
+                        className={`lesson ${active ? "selected" : ""} ${isCompleted ? "completed" : ""} ${isLocked ? "locked" : ""}`}
                         data-testid="lesson"
                         aria-current={active ? "true" : undefined}
-                        title={exercise.title}
-                        onClick={() => onSelect(exercise.id)}
+                        aria-disabled={isLocked ? "true" : undefined}
+                        aria-label={ariaLabel}
+                        title={
+                          isLocked && unmetTitles ? `Requires: ${unmetTitles}` : exercise.title
+                        }
+                        onClick={isLocked ? undefined : () => onSelect(exercise.id)}
                       >
-                        <span className="lesson-ord">{String(i + 1).padStart(2, "0")}</span>
-                        <span className="lesson-title">{exercise.title}</span>
-                        <DifficultyDots difficulty={exercise.difficulty} />
+                        <span className="lesson-ord" aria-hidden="true">
+                          {isCompleted ? "✓" : isLocked ? "⊘" : String(i + 1).padStart(2, "0")}
+                        </span>
+                        <div className="lesson-main">
+                          <span className="lesson-title">{exercise.title}</span>
+                          {isLocked && unmetTitles && (
+                            <span className="lesson-prereq-note" aria-hidden="true">
+                              Requires: {unmetTitles}
+                            </span>
+                          )}
+                        </div>
+                        {!isLocked && <DifficultyDots difficulty={exercise.difficulty} />}
                       </button>
                     );
                   })}

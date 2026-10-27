@@ -49,6 +49,17 @@ src/
   lib/runtime.mjs          host provisioning (kind cluster, workstation container) for one environment config
   (dependency rules are enforced by test/unit/architecture.test.mjs)
 web/src/                   React UI (api client, components, features/{exercises,terminal,workspace})
+  api/client.js              API client: listExercises, getExercise, activate, check, reset,
+                               select, getTrackProgress, getResume, getVersion
+  features/exercises/
+    useTrackProgress.js      Fetches /api/progress/track/:id; returns progressMap, summary,
+                               loading, error, refresh()
+    ExerciseSidebar.jsx      Progress-aware sidebar: completed/available/locked states,
+                               track summary, prerequisite explanations
+    ExercisePanel.jsx        Grading + CompletionFeedback; calls onProgressUpdate on success
+    CompletionFeedback.jsx   First-completion banner and Next Exercise navigation
+  features/workspace/
+    Workspace.jsx            Owns progress state via useTrackProgress; calls /select on pick;
 ```
 
 ## Key decisions
@@ -182,6 +193,80 @@ On Node.js 22.x, the `--experimental-sqlite` flag is required at runtime. On Nod
 - Updating the npm package never deletes or overwrites an existing database.
 - A corrupted or unreadable database is never silently replaced with an empty one.
 - Test databases always use temporary directories; `~/.featherlab` is never touched by tests.
+
+## Frontend Progression (M4.3)
+
+### State ownership
+
+`Workspace` is the authority for track progress state. It uses `useTrackProgress(trackId)` to
+fetch `/api/progress/track/:id` on mount and after each successful grading pass. The hook
+returns a `progressMap` (Map<exerciseId, progressInfo>), a `summary`, and a `refresh` callback.
+
+`useTrackProgress` uses a single `setState` object updated only in async callbacks (not
+synchronously in effects) to avoid cascading renders.
+
+### Exercise selection and resume
+
+When the user clicks a sidebar exercise, `Workspace.pick(id)` checks the `progressMap`:
+
+- If `state === "locked"`, the click is silently ignored (locking is enforced backend-side too).
+- Otherwise, `chosenId` is updated immediately (optimistic), then `POST /select` is called in
+  the background to persist the resume state. Failure is non-fatal (resume just won't update).
+
+The Launcher calls `GET /api/resume` and `GET /api/progress/track/kubernetes` on mount.
+If a valid resume exists, the Kubernetes card shows "Continue Learning" with the exercise title
+and completed count. Clicking it passes `initialExerciseId` through App → Workspace, which
+populates `chosenId` on mount — no redundant `/select` call is made on initial render.
+
+### Sidebar progression display
+
+`ExerciseSidebar` receives `progressMap` and `summary` from Workspace. While progress is
+loading, all exercises are treated as "available" (no flash-to-locked). Once loaded:
+
+- `completed`: checkmark (✓) in the ordinal column, subtle tint.
+- `available`: standard ordinal, normal hover behavior.
+- `locked`: lock glyph (⊘), muted opacity, no hover highlight, `aria-disabled="true"`,
+  prerequisite titles shown inline below the exercise title (readable on mobile, hidden in
+  collapsed sidebar mode via CSS).
+
+Locked exercises have a no-op `onClick` and retain tab focus so keyboard users can discover
+their prerequisite requirements via `aria-label`.
+
+### Completion and next-exercise navigation
+
+After each grading pass, `ExercisePanel` inspects `result.progress`:
+
+- `result.progress.completed && !alreadyCompletedRef.current` → first completion: sets
+  `firstCompletion = true`, calls `onProgressUpdate()`.
+- Repeat success: calls `onProgressUpdate()` without re-triggering the first-completion banner.
+
+`onProgressUpdate` triggers `useTrackProgress.refresh()` which refetches track state so newly
+unlocked exercises appear in the sidebar without a page reload.
+
+`CompletionFeedback` renders below `CheckResults` on any successful grading pass:
+
+- "Exercise completed" badge (only on first completion).
+- "Next: <title> →" button pointing to the first non-locked exercise after the current one
+  (computed by `findNextAvailable` in Workspace, passed as `nextExercise` prop).
+
+### Error and recovery states
+
+- Progress API failure: `progressMap` stays empty; all exercises treated as "available". An
+  error state is returned but the workspace remains functional.
+- `/select` failure: swallowed silently; exercise workspace still opens, resume just won't
+  update.
+- Backend unavailable during check: `result.progress` is absent; progress state is unchanged,
+  no completion feedback shown.
+
+### Progress refresh strategy
+
+After a successful persisted grading (`result.progress` present): full track-progress refetch
+via `useTrackProgress.refresh()`. This is the minimal correct fetch because newly unlocked
+exercises may appear across the track, not just immediately adjacent to the just-completed one.
+
+The Launcher refetches nothing on its own — progress is fetched once on mount. Re-entering the
+workspace (returning from launcher → Kubernetes card) picks up fresh progress via the Workspace
+mount.
 
 ## M4.2 API Contracts
 

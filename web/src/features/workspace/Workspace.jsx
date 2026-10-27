@@ -1,14 +1,37 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import "./Workspace.scss";
+import { api } from "../../api/client.js";
 import { ExercisePanel } from "../exercises/ExercisePanel.jsx";
 import { ExerciseSidebar } from "../exercises/ExerciseSidebar.jsx";
 import { useExerciseList } from "../exercises/useExerciseList.js";
+import { useTrackProgress } from "../exercises/useTrackProgress.js";
 import { PracticeTerminal } from "../terminal/PracticeTerminal.jsx";
 import { useSplitPane } from "./useSplitPane.js";
 
-export function Workspace({ track }) {
+/**
+ * Find the next selectable (available, not the current) exercise after `selectedId`.
+ * Returns null when the selected exercise is the last or no available exercise follows.
+ */
+function findNextAvailable(exercises, selectedId, progressMap) {
+  const idx = exercises.findIndex((e) => e.id === selectedId);
+  if (idx === -1) return null;
+  for (let i = idx + 1; i < exercises.length; i++) {
+    const state = progressMap.get(exercises[i].id)?.state;
+    // "available" or "completed" can both be visited
+    if (state !== "locked") return exercises[i];
+  }
+  return null;
+}
+
+export function Workspace({ track, initialExerciseId }) {
   const { exercises, error } = useExerciseList(track);
-  const [chosenId, setChosenId] = useState(null);
+  const {
+    progressMap,
+    summary,
+    loading: progressLoading,
+    refresh: refreshProgress,
+  } = useTrackProgress(track);
+  const [chosenId, setChosenId] = useState(initialExerciseId ?? null);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState("problem");
@@ -16,6 +39,14 @@ export function Workspace({ track }) {
   const { containerRef, gridStyle, separatorProps } = useSplitPane({
     storageKey: `fl-split-${track}`,
   });
+
+  // Prevent a stale select response from overwriting a newer selection.
+  const latestSelectId = useRef(null);
+
+  // Must come before early returns so hooks are always called in the same order.
+  const handleProgressUpdate = useCallback(() => {
+    refreshProgress();
+  }, [refreshProgress]);
 
   if (!exercises) return <div className="workspace-loading muted">Loading exercises…</div>;
   if (error)
@@ -30,10 +61,23 @@ export function Workspace({ track }) {
     ? exercises.filter((e) => e.level === selected.level).indexOf(selected) + 1
     : 0;
 
+  const selectedProgress = selected ? progressMap.get(selected.id) : undefined;
+  const nextExercise = selected ? findNextAvailable(exercises, selected.id, progressMap) : null;
+
   const pick = (id) => {
+    // Guard: never open a locked exercise
+    if (progressMap.get(id)?.state === "locked") return;
+
     setChosenId(id);
     setDrawerOpen(false);
     setMobileTab("problem");
+
+    // Persist resume state in the background. Race-condition safe: we only care that
+    // the *last* selection wins; stale responses carry no state we need.
+    latestSelectId.current = id;
+    api.select(id).catch(() => {
+      // Persistence failure is non-fatal; resume just won't be updated.
+    });
   };
 
   const workspaceClass = [
@@ -53,6 +97,9 @@ export function Workspace({ track }) {
         onSelect={pick}
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed((c) => !c)}
+        progressMap={progressMap}
+        progressLoading={progressLoading}
+        summary={summary}
       />
       {drawerOpen && (
         <button
@@ -101,7 +148,15 @@ export function Workspace({ track }) {
         >
           <div className="split-problem">
             {selected ? (
-              <ExercisePanel key={selected.id} exerciseId={selected.id} ordinal={ordinal} />
+              <ExercisePanel
+                key={selected.id}
+                exerciseId={selected.id}
+                ordinal={ordinal}
+                exerciseProgress={selectedProgress}
+                nextExercise={nextExercise}
+                onProgressUpdate={handleProgressUpdate}
+                onSelectNext={pick}
+              />
             ) : (
               <div className="workspace-panel-placeholder muted">
                 No exercises available for this track yet.

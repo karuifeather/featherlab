@@ -30,8 +30,43 @@ const TRACKS = [
   },
 ];
 
+/**
+ * Fetch resume state and track summary for available tracks.
+ * Returns null while loading, or { resume, summary, exerciseTitle } once settled.
+ */
+function useResumeState() {
+  const [state, setState] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      api.getResume().catch(() => ({ resume: null })),
+      api.getTrackProgress("kubernetes").catch(() => null),
+    ]).then(([resumeData, progressData]) => {
+      if (cancelled) return;
+      const resume = resumeData?.resume ?? null;
+      let exerciseTitle = null;
+      if (resume && progressData) {
+        const match = progressData.exercises.find((e) => e.exerciseId === resume.exerciseId);
+        exerciseTitle = match?.title ?? null;
+      }
+      setState({
+        resume,
+        summary: progressData?.summary ?? null,
+        exerciseTitle,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return state;
+}
+
 export function Launcher({ onEnter }) {
   const [updateInfo, setUpdateInfo] = useState(null);
+  const resumeState = useResumeState();
 
   useEffect(() => {
     api
@@ -41,6 +76,10 @@ export function Launcher({ onEnter }) {
       })
       .catch(() => {});
   }, []);
+
+  const handleEnter = (trackId, initialExerciseId) => {
+    onEnter(trackId, initialExerciseId ?? null);
+  };
 
   return (
     <div className="launcher">
@@ -74,19 +113,22 @@ export function Launcher({ onEnter }) {
                 key={track.id}
                 type="button"
                 className="track"
-                onClick={() => onEnter(track.id)}
+                onClick={() => {
+                  const resumeId =
+                    resumeState?.resume?.trackId === track.id
+                      ? resumeState.resume.exerciseId
+                      : null;
+                  handleEnter(track.id, resumeId);
+                }}
               >
-                <TrackBody track={track} />
-                <span className="track-cta">
-                  Enter workspace{" "}
-                  <span className="track-arrow" aria-hidden="true">
-                    →
-                  </span>
-                </span>
+                <TrackBody
+                  track={track}
+                  resumeState={track.id === "kubernetes" ? resumeState : null}
+                />
               </button>
             ) : (
               <div key={track.id} className="track disabled" aria-disabled="true">
-                <TrackBody track={track} />
+                <TrackBody track={track} resumeState={null} />
                 <span className="track-soon">Planned for later</span>
               </div>
             ),
@@ -101,7 +143,13 @@ export function Launcher({ onEnter }) {
   );
 }
 
-function TrackBody({ track }) {
+function TrackBody({ track, resumeState }) {
+  const hasResume =
+    resumeState !== null && resumeState !== undefined && resumeState?.resume !== null;
+  const summary = resumeState?.summary;
+  const completedCount = summary?.completed ?? 0;
+  const totalCount = summary?.total ?? 0;
+
   return (
     <>
       <div className="track-top">
@@ -123,6 +171,37 @@ function TrackBody({ track }) {
           </span>
         ))}
       </div>
+
+      {hasResume ? (
+        <div className="track-resume">
+          {totalCount > 0 && (
+            <span className="track-progress-count">
+              {completedCount} of {totalCount} completed
+            </span>
+          )}
+          <span className="track-cta track-cta--resume">
+            Continue Learning{" "}
+            <span className="track-arrow" aria-hidden="true">
+              →
+            </span>
+          </span>
+          {resumeState.exerciseTitle && (
+            <span
+              className="track-resume-title"
+              aria-label={`Resume: ${resumeState.exerciseTitle}`}
+            >
+              {resumeState.exerciseTitle}
+            </span>
+          )}
+        </div>
+      ) : (
+        <span className="track-cta">
+          Enter workspace{" "}
+          <span className="track-arrow" aria-hidden="true">
+            →
+          </span>
+        </span>
+      )}
     </>
   );
 }

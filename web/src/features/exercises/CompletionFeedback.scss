@@ -1,0 +1,72 @@
+.completion-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-passed) 40%, var(--border-default));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-passed) 6%, var(--surface-1));
+  animation: feedback-in var(--dur-base) var(--ease-out) both;
+}
+
+.completion-badge {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-passed);
+}
+
+.next-exercise-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--tint-primary);
+  color: var(--primary-bright);
+  font-size: 13px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+  align-self: flex-start;
+
+  &:hover {
+    background: var(--tint-primary-strong);
+    border-color: color-mix(in srgb, var(--primary) 70%, transparent);
+  }
+}
+
+.next-exercise-arrow {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.next-exercise-btn:hover .next-exercise-arrow {
+  transform: translateX(3px);
+}
+
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Respect reduced motion
+@media (prefers-reduced-motion: reduce) {
+  .completion-feedback {
+    animation: none;
+  }
+
+  .next-exercise-btn:hover .next-exercise-arrow {
+    transform: none;
+  }
+}

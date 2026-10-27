@@ -39,5 +39,8 @@ export const api = {
   activate: (id) => request(`${exercisePath(id)}/activate`, { method: "POST" }),
   check: (id) => request(`${exercisePath(id)}/check`, { method: "POST" }),
   reset: (id) => request(`${exercisePath(id)}/reset`, { method: "POST" }),
+  select: (id) => request(`${exercisePath(id)}/select`, { method: "POST" }),
+  getTrackProgress: (trackId) => request(`/api/progress/track/${encodeURIComponent(trackId)}`),
+  getResume: () => request("/api/resume"),
   getVersion: () => request("/api/version"),
 };
