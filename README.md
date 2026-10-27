@@ -41,6 +41,7 @@ This `npm pack` approach exercises the same tarball structure users will install
 ```bash
 featherlab             # start workstation and browser UI (alias: featherlab start)
 featherlab stop        # gracefully stop a running featherlab, or stop resources directly
+featherlab update      # upgrade to the latest version from npm
 featherlab doctor      # check Docker daemon and kind
 featherlab status      # show runtime status
 featherlab exercises   # list available exercises
@@ -61,6 +62,10 @@ Environment overrides:
 **Graceful shutdown:** `featherlab stop` reads `~/.featherlab/featherlab.pid`. If the file exists and the recorded process is still the FeatherLab CLI (verified by entry-point path and process start time, not just the PID), it sends SIGTERM and waits up to 15 seconds for a clean exit. If no running instance is found, it stops the workstation container and kind node containers directly. The cluster and its workloads are always preserved; only the containers are stopped.
 
 Ctrl+C while `featherlab` is running triggers the same graceful shutdown. A second Ctrl+C forces an immediate exit.
+
+**Upgrading:** `featherlab update` performs a fresh version check against the npm registry (bypassing the local cache), then runs `npm install -g featherlab@<latest>`. It refuses to run while a `featherlab` process is live — stop the server first. If the npm install fails due to permissions, it prints the manual command (`sudo npm install -g …`) rather than escalating automatically. After a successful upgrade, if the running workstation container was built with an older image, the command notes the mismatch and reminds you that the existing workstation has not been modified; the updated image will be used the next time a new workstation is created.
+
+Other commands (`status`, `reset`, `exercises`, …) never make network requests. They read a version cache warmed by `featherlab start` and display a one-line update notice when the cache indicates a newer version is available.
 
 To completely remove the local lab: `featherlab stop`, then `docker rm featherlab-workstation`, `kind delete cluster --name featherlab`, and optionally delete `~/.featherlab`. **Never run these cleanup commands for clusters you wish to keep.**
 
