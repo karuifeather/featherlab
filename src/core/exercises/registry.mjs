@@ -4,6 +4,36 @@ import { defineExercise } from "./definition.mjs";
 
 const collator = new Intl.Collator("en", { numeric: true });
 
+function detectCycles(exercises, byId, problems) {
+  const WHITE = 0,
+    GRAY = 1,
+    BLACK = 2;
+  const color = new Map(exercises.map((e) => [e.id, WHITE]));
+
+  function visit(id, path) {
+    if (color.get(id) === BLACK) return;
+    if (color.get(id) === GRAY) {
+      const start = path.indexOf(id);
+      const cycle = [...path.slice(start), id].join(" → ");
+      problems.push({
+        file: byId.get(id)?.source ?? "unknown",
+        path: "prerequisites",
+        message: `circular dependency detected: ${cycle}`,
+      });
+      return;
+    }
+    color.set(id, GRAY);
+    for (const prereq of byId.get(id)?.prerequisites ?? []) {
+      if (byId.has(prereq)) visit(prereq, [...path, id]);
+    }
+    color.set(id, BLACK);
+  }
+
+  for (const exercise of exercises) {
+    if (color.get(exercise.id) === WHITE) visit(exercise.id, []);
+  }
+}
+
 function byOrder(a, b) {
   return collator.compare(a.track, b.track) || a.level - b.level || collator.compare(a.id, b.id);
 }
@@ -62,14 +92,48 @@ export class ExerciseRegistry {
     }
 
     const ids = new Set(exercises.map((e) => e.id));
-    for (const exercise of exercises)
-      for (const [i, prerequisite] of exercise.prerequisites.entries())
-        if (prerequisite === exercise.id || !ids.has(prerequisite))
+    const exerciseById = new Map(exercises.map((e) => [e.id, e]));
+
+    for (const exercise of exercises) {
+      const seen = new Set();
+      for (const [i, prereq] of exercise.prerequisites.entries()) {
+        if (prereq === exercise.id) {
           problems.push({
             file: exercise.source,
             path: `prerequisites[${i}]`,
-            message: `unknown prerequisite "${prerequisite}"`,
+            message: `exercise "${exercise.id}" cannot list itself as a prerequisite`,
           });
+          continue;
+        }
+        if (seen.has(prereq)) {
+          problems.push({
+            file: exercise.source,
+            path: `prerequisites[${i}]`,
+            message: `duplicate prerequisite "${prereq}"`,
+          });
+          continue;
+        }
+        seen.add(prereq);
+        if (!ids.has(prereq)) {
+          problems.push({
+            file: exercise.source,
+            path: `prerequisites[${i}]`,
+            message: `unknown prerequisite "${prereq}"`,
+          });
+        } else {
+          const other = exerciseById.get(prereq);
+          if (other && other.track !== exercise.track) {
+            problems.push({
+              file: exercise.source,
+              path: `prerequisites[${i}]`,
+              message: `cross-track prerequisite "${prereq}" (track "${other.track}" ≠ "${exercise.track}") is not supported`,
+            });
+          }
+        }
+      }
+    }
+
+    detectCycles(exercises, exerciseById, problems);
 
     if (problems.length > 0) throw new ContentError(problems);
     return new ExerciseRegistry(exercises);

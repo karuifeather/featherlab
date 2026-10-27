@@ -32,6 +32,7 @@ export function hostAllowed(req, port) {
 
 const STATUS_BY_CODE = {
   FORBIDDEN_HOST: 403,
+  EXERCISE_LOCKED: 403,
   NOT_FOUND: 404,
   INVALID_INPUT: 400,
   OPERATION_IN_PROGRESS: 409,
@@ -41,7 +42,7 @@ const STATUS_BY_CODE = {
 };
 
 // Only these detail keys are safe to show a learner; stderr and the like stay in the logs.
-const PUBLIC_DETAIL_KEYS = ["operation", "step", "completed", "reason"];
+const PUBLIC_DETAIL_KEYS = ["operation", "step", "completed", "reason", "unmetPrerequisites"];
 
 /**
  * Map any thrown value to `{status, body}`. `error` stays a string for compatibility with

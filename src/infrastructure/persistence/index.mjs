@@ -41,6 +41,9 @@ export function createPersistence({ stateDir }) {
     attempts: new AttemptsRepository(db),
     progress: new ProgressRepository(db),
     resume: new ResumeRepository(db),
+    transaction(fn) {
+      return db.transaction(fn);
+    },
     close() {
       db.close();
     },

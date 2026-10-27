@@ -1,5 +1,8 @@
 import { ContentError } from "./core/errors.mjs";
 import { ExerciseService } from "./application/exercise-service.mjs";
+import { AttemptsService } from "./application/learning/attempts-service.mjs";
+import { ProgressionService } from "./application/learning/progression-service.mjs";
+import { ResumeService } from "./application/learning/resume-service.mjs";
 import { ExerciseRegistry } from "./core/exercises/registry.mjs";
 import { LifecycleManager } from "./core/lifecycle/manager.mjs";
 import { TrackRegistry } from "./core/tracks.mjs";
@@ -38,8 +41,24 @@ export function createApp({
   const registry = ExerciseRegistry.build(source.discover(), { tracks, validators });
   const lifecycle = new LifecycleManager({ tracks, validators, logger, timeouts });
   const persistence = stateDir ? createPersistence({ stateDir }) : null;
+
+  let progression = null;
+  let attemptsService = null;
+  let resumeService = null;
+  if (persistence) {
+    progression = new ProgressionService({ registry, progress: persistence.progress });
+    attemptsService = new AttemptsService({ persistence });
+    resumeService = new ResumeService({ resume: persistence.resume, registry, progression });
+  }
+
   return {
-    service: new ExerciseService({ registry, lifecycle }),
+    service: new ExerciseService({
+      registry,
+      lifecycle,
+      progression,
+      attemptsService,
+      resumeService,
+    }),
     registry,
     tracks,
     validators,

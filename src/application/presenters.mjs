@@ -75,3 +75,31 @@ export function presentResult(result) {
 export function presentOperation(exercise, outcome) {
   return { exerciseId: exercise.id, steps: [...outcome.steps] };
 }
+
+/** Compact progress summary embedded in a grading response. */
+export function presentProgress(progress) {
+  return {
+    completed: progress.completed,
+    attemptCount: progress.attemptCount,
+    bestScoreEarned: progress.bestScoreEarned,
+    bestScorePossible: progress.bestScorePossible,
+    firstCompletedAt: progress.firstCompletedAt,
+    lastAttemptedAt: progress.lastAttemptedAt,
+  };
+}
+
+/** Full exercise progress record for the dedicated /progress endpoint. */
+export function presentExerciseProgress(details) {
+  return {
+    exerciseId: details.exerciseId,
+    trackId: details.trackId,
+    state: details.state,
+    unmetPrerequisites: [...details.unmetPrerequisites],
+    completed: details.completed,
+    attemptCount: details.attemptCount,
+    bestScoreEarned: details.bestScoreEarned,
+    bestScorePossible: details.bestScorePossible,
+    firstCompletedAt: details.firstCompletedAt,
+    lastAttemptedAt: details.lastAttemptedAt,
+  };
+}

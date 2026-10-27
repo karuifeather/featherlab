@@ -8,7 +8,7 @@ import {
   DEFAULT_WORKSTATION,
   resolveEnvironment,
 } from "../infrastructure/environment.mjs";
-import { stopClusterNodes } from "../infrastructure/docker/kind-nodes.mjs";
+import { getClusterNodes, stopClusterNodes } from "../infrastructure/docker/kind-nodes.mjs";
 
 // Kept for existing importers; new code should take an EnvironmentConfig instead.
 export const CLUSTER = DEFAULT_CLUSTER;
@@ -103,6 +103,26 @@ export function createRuntime(overrides = {}, { exec = run, log = console } = {}
         ],
         { timeout: 360000, stdio: "inherit" },
       );
+    } else {
+      // `featherlab stop` stops the kind node containers. On restart, bring them back up
+      // before writing the kubeconfig or waiting for the API server.
+      const nodes = getClusterNodes(config.cluster, { exec });
+      for (const node of nodes) {
+        try {
+          const running = exec("docker", [
+            "inspect",
+            "--format",
+            "{{.State.Running}}",
+            node,
+          ]).trim();
+          if (running !== "true") {
+            log.log(`Starting cluster node: ${node}`);
+            exec("docker", ["start", node]);
+          }
+        } catch {
+          // Non-fatal — waitForClusterReady will surface the failure if the node cannot start.
+        }
+      }
     }
     const kubeconfig = exec("kind", ["get", "kubeconfig", "--name", config.cluster, "--internal"]);
     const kubeconfigPath = path.join(config.stateDir, "workstation-kubeconfig");

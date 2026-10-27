@@ -1,9 +1,11 @@
-import { InputError, NotFoundError } from "../core/errors.mjs";
+import { InputError, LockedError, NotFoundError } from "../core/errors.mjs";
 import { ID_PATTERN } from "../core/exercises/definition.mjs";
 import {
   presentExercise,
+  presentExerciseProgress,
   presentHint,
   presentOperation,
+  presentProgress,
   presentResult,
   presentSummary,
 } from "./presenters.mjs";
@@ -12,20 +14,47 @@ import {
  * Application service: the use cases the API (and CLI) invoke. It validates input,
  * resolves exercises, delegates to the lifecycle manager, and returns presentation-safe
  * data. It contains no HTTP and no Kubernetes knowledge.
+ *
+ * When M4 persistence is wired in (progression, attemptsService, resumeService), the
+ * service enforces prerequisite locks on activate/check, records grading results, and
+ * manages resume state. When persistence is absent (isolated tests), the service behaves
+ * exactly as it did before M4.
  */
 export class ExerciseService {
   #registry;
   #lifecycle;
+  #progression; // ProgressionService | null
+  #attemptsService; // AttemptsService | null
+  #resumeService; // ResumeService | null
 
-  constructor({ registry, lifecycle }) {
+  constructor({
+    registry,
+    lifecycle,
+    progression = null,
+    attemptsService = null,
+    resumeService = null,
+  }) {
     this.#registry = registry;
     this.#lifecycle = lifecycle;
+    this.#progression = progression;
+    this.#attemptsService = attemptsService;
+    this.#resumeService = resumeService;
   }
 
   #find(id) {
     if (typeof id !== "string" || id.length > 63 || !ID_PATTERN.test(id))
       throw new NotFoundError("Exercise not found.", { id: String(id).slice(0, 63) });
     return this.#registry.require(id);
+  }
+
+  #assertNotLocked(exercise) {
+    if (!this.#progression) return;
+    const availability = this.#progression.getAvailability(exercise.id);
+    if (availability?.state === "locked")
+      throw new LockedError(
+        `Exercise "${exercise.id}" is locked. Complete its prerequisites first.`,
+        { exerciseId: exercise.id, unmetPrerequisites: availability.unmetPrerequisites },
+      );
   }
 
   list(filter = {}) {
@@ -61,13 +90,20 @@ export class ExerciseService {
 
   async activate(id) {
     const exercise = this.#find(id);
+    this.#assertNotLocked(exercise);
     const outcome = await this.#lifecycle.activate(exercise);
     return { exercise: presentExercise(exercise), ...presentOperation(exercise, outcome) };
   }
 
   async check(id) {
     const exercise = this.#find(id);
-    return presentResult(await this.#lifecycle.check(exercise));
+    this.#assertNotLocked(exercise);
+    const start = Date.now();
+    const result = await this.#lifecycle.check(exercise);
+    const durationMs = Date.now() - start;
+    const progress = this.#attemptsService?.record({ exercise, gradingResult: result, durationMs });
+    const presented = presentResult(result);
+    return progress ? { ...presented, progress: presentProgress(progress) } : presented;
   }
 
   async reset(id) {
@@ -78,6 +114,75 @@ export class ExerciseService {
   async cleanup(id) {
     const exercise = this.#find(id);
     return presentOperation(exercise, await this.#lifecycle.cleanup(exercise));
+  }
+
+  /**
+   * Record the learner's exercise selection for resume.
+   * Validates the exercise exists and is not locked.
+   *
+   * @returns {{ trackId: string, exerciseId: string }}
+   */
+  select(id) {
+    if (this.#resumeService) return this.#resumeService.select(id);
+    const exercise = this.#find(id);
+    this.#assertNotLocked(exercise);
+    return { trackId: exercise.track, exerciseId: id };
+  }
+
+  /**
+   * Return detailed progress for one exercise (availability state + stored record).
+   * Returns a synthetic "available" record when persistence is not configured.
+   */
+  getExerciseProgress(id) {
+    const exercise = this.#find(id);
+    if (!this.#progression) {
+      return {
+        exerciseId: exercise.id,
+        trackId: exercise.track,
+        state: "available",
+        unmetPrerequisites: [],
+        completed: false,
+        attemptCount: 0,
+        bestScoreEarned: null,
+        bestScorePossible: null,
+        firstCompletedAt: null,
+        lastAttemptedAt: null,
+      };
+    }
+    return presentExerciseProgress(this.#progression.getExerciseDetails(exercise.id));
+  }
+
+  /**
+   * Return all exercises for a track with their progression states and progress records.
+   */
+  getTrackProgress(trackId) {
+    const exercises = this.#registry.list({ track: trackId });
+    if (!this.#progression) {
+      return exercises.map((e) => ({
+        exerciseId: e.id,
+        title: e.title,
+        level: e.level,
+        prerequisites: [...e.prerequisites],
+        state: "available",
+        unmetPrerequisites: [],
+        completed: false,
+        attemptCount: 0,
+        bestScoreEarned: null,
+        bestScorePossible: null,
+        firstCompletedAt: null,
+        lastAttemptedAt: null,
+      }));
+    }
+    return this.#progression.getTrackProgress(trackId);
+  }
+
+  /**
+   * Return the current resume state, with fallback when the stored exercise is invalid.
+   * Returns null when no exercises exist.
+   */
+  getResume() {
+    if (!this.#resumeService) return null;
+    return this.#resumeService.getResume();
   }
 
   get exerciseCount() {

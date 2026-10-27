@@ -68,6 +68,29 @@ export function buildRoutes() {
         body: await service.reset(exerciseId),
       }),
     ),
+    route("POST", new RegExp(`^/api/exercises/${id}/select$`), ([, exerciseId], { service }) => ({
+      body: service.select(exerciseId),
+    })),
+    route("GET", new RegExp(`^/api/exercises/${id}/progress$`), ([, exerciseId], { service }) => ({
+      body: { progress: service.getExerciseProgress(exerciseId) },
+    })),
+    route("GET", /^\/api\/progress\/track\/([a-z0-9-]{1,63})$/, ([, trackId], { service }) => {
+      const exercises = service.getTrackProgress(trackId);
+      const summary = exercises.reduce(
+        (acc, e) => {
+          acc.total++;
+          if (e.state === "completed") acc.completed++;
+          else if (e.state === "locked") acc.locked++;
+          else acc.available++;
+          return acc;
+        },
+        { total: 0, completed: 0, available: 0, locked: 0 },
+      );
+      return { body: { exercises, summary } };
+    }),
+    route("GET", /^\/api\/resume$/, (_, { service }) => ({
+      body: { resume: service.getResume() },
+    })),
     ...legacyRoutes(route),
   ];
 }

@@ -37,6 +37,11 @@ src/
   application/             use cases; the only place that builds public DTOs
     exercise-service.mjs
     presenters.mjs
+    learning/              M4.2 progression logic; no SQL, no Kubernetes
+      completion-service.mjs  pure function: compute next progress aggregate
+      attempts-service.mjs    record attempt + update progress atomically
+      progression-service.mjs derive lock/available/completed state from registry + DB
+      resume-service.mjs      manage last selected track/exercise with fallback
   api/                     HTTP transport: routes, errors, static files, terminal socket
   app.mjs                  composition root: the only file that wires concrete parts together
   server.mjs               HTTP bootstrap
@@ -107,6 +112,58 @@ reset    = prepare -> delete learner work -> re-apply setup
 cleanup  = prepare -> delete learner work -> delete managed setup objects
 ```
 
+## Learning Progression (M4.2)
+
+Grading results are translated into durable learning records by four focused services wired
+through `createApp()`. None of them know about Docker, Kubernetes, or HTTP.
+
+**How grading becomes an attempt:**
+`ExerciseService.check()` calls the lifecycle engine and records the result via
+`AttemptsService.record()`. If the outcome is `"incomplete"` (infrastructure failure), nothing
+is written. Otherwise, the attempt row and the progress aggregate are written in a single
+`BEGIN IMMEDIATE / COMMIT` transaction — both persist or neither does.
+
+**Completion semantics:**
+An exercise is complete when its grading outcome is `"passed"` (all checks pass, no errors).
+Completion is monotonic: once `completed = true`, it never reverts regardless of subsequent
+outcomes. `firstCompletedAt` is set once and never overwritten. Best score is tracked as the
+highest `scoreEarned` seen across all attempts; its paired `bestScorePossible` always comes
+from that same attempt.
+
+**Prerequisite format (exercise.yaml):**
+
+```yaml
+prerequisites:
+  - some-exercise-id
+  - another-exercise-id
+```
+
+An exercise with no `prerequisites` key is always available. The registry validates:
+
+- Unknown IDs (no matching exercise).
+- Self-dependencies (`id` listed in its own prerequisites).
+- Duplicate IDs within the same prerequisites list.
+- Cross-track references (not supported; each track manages its own progression).
+- Dependency cycles (DFS traversal across all exercises; first cycle wins).
+
+Invalid prerequisite graphs fail content validation at startup — no exercise is silently hidden.
+
+**Unlock evaluation:**
+`ProgressionService.getAvailability(exerciseId)` queries the progress repository once per
+prerequisite and derives the availability state in memory. No extra writes occur on unlock.
+States: `"locked"` (unmet prereqs), `"available"` (prereqs met or no prereqs), `"completed"`
+(successful grading on record). Completed exercises can be reattempted freely.
+
+**Lock enforcement:**
+`ExerciseService.activate()` and `ExerciseService.check()` call `#assertNotLocked()` before
+touching the lifecycle engine. A locked exercise returns `LockedError` (`EXERCISE_LOCKED`, 403)
+with `details.unmetPrerequisites` listing the blocking IDs.
+
+**Resume state:**
+`ExerciseService.select(id)` stores the learner's current exercise via `ResumeService.select()`.
+On `getResume()`: if the stored exercise is gone from the registry or is now locked, the service
+returns a deterministic fallback — the first available exercise in stable registry order.
+
 ## Persistence (M4+)
 
 Learning progress is stored in `~/.featherlab/progress.sqlite` (or `$FEATHERLAB_STATE_DIR/progress.sqlite`).
@@ -125,6 +182,101 @@ On Node.js 22.x, the `--experimental-sqlite` flag is required at runtime. On Nod
 - Updating the npm package never deletes or overwrites an existing database.
 - A corrupted or unreadable database is never silently replaced with an empty one.
 - Test databases always use temporary directories; `~/.featherlab` is never touched by tests.
+
+## M4.2 API Contracts
+
+### Extended grading response — `POST /api/exercises/:id/check`
+
+When persistence is configured, the result object gains a `progress` field:
+
+```json
+{
+  "result": {
+    "exerciseId": "k8s-0001",
+    "outcome": "passed",
+    "success": true,
+    "score": { "earned": 4, "possible": 4, "percent": 100 },
+    "counts": { "total": 4, "passed": 4, "failed": 0, "errored": 0 },
+    "checks": [...],
+    "progress": {
+      "completed": true,
+      "attemptCount": 1,
+      "bestScoreEarned": 4,
+      "bestScorePossible": 4,
+      "firstCompletedAt": "2024-01-01T00:00:00.000Z",
+      "lastAttemptedAt": "2024-01-01T00:00:00.000Z"
+    }
+  }
+}
+```
+
+The `progress` field is absent when the outcome is `"incomplete"` (infra error, not recorded).
+
+### `POST /api/exercises/:id/activate` — 403 when locked
+
+### `POST /api/exercises/:id/select` — record exercise selection
+
+```json
+{ "trackId": "kubernetes", "exerciseId": "k8s-0001" }
+```
+
+Returns 403 if locked, 404 if not found.
+
+### `GET /api/exercises/:id/progress` — exercise progress
+
+```json
+{
+  "progress": {
+    "exerciseId": "k8s-0001",
+    "trackId": "kubernetes",
+    "state": "completed",
+    "unmetPrerequisites": [],
+    "completed": true,
+    "attemptCount": 2,
+    "bestScoreEarned": 4,
+    "bestScorePossible": 4,
+    "firstCompletedAt": "...",
+    "lastAttemptedAt": "..."
+  }
+}
+```
+
+### `GET /api/progress/track/:trackId` — track progress
+
+```json
+{
+  "exercises": [
+    { "exerciseId": "k8s-0001", "title": "...", "level": 0,
+      "prerequisites": [], "state": "completed", "unmetPrerequisites": [],
+      "completed": true, "attemptCount": 2, ... },
+    { "exerciseId": "k8s-0002", "state": "available", "unmetPrerequisites": [], ... }
+  ],
+  "summary": { "total": 2, "completed": 1, "available": 1, "locked": 0 }
+}
+```
+
+### `GET /api/resume` — resume state
+
+```json
+{
+  "resume": {
+    "trackId": "kubernetes",
+    "exerciseId": "k8s-0001",
+    "updatedAt": "2024-01-01T08:00:00.000Z",
+    "fallback": false
+  }
+}
+```
+
+`fallback: true` means the stored selection was invalid (removed or locked); the response
+contains the deterministic fallback exercise. `resume: null` when no exercises exist.
+
+### Historical data and curriculum changes
+
+Exercise IDs are the stable identity key. Removing an exercise from YAML does not delete its
+attempts. Renaming the display title does not lose progress. An unknown `exerciseId` in the
+progress table is silently ignored by progression queries; it does not crash the application.
+Completion records from a previous CLI version survive a package upgrade unchanged.
 
 ## Result shape
 

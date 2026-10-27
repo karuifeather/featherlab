@@ -65,3 +65,13 @@ export class LifecycleError extends FeatherLabError {
     super("LIFECYCLE_FAILED", message, { details: { operation, step, completed }, cause });
   }
 }
+
+/**
+ * The requested exercise is locked because one or more prerequisites have not been
+ * completed yet. `details.unmetPrerequisites` lists the blocking exercise ids.
+ */
+export class LockedError extends FeatherLabError {
+  constructor(message, details) {
+    super("EXERCISE_LOCKED", message, { details });
+  }
+}
