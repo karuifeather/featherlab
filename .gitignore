@@ -6,4 +6,5 @@ dist/
 notes/
 .claude/settings.local.json
 test-results/
+test-results-browser/
 playwright-report/
