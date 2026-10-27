@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import "./Launcher.scss";
 import { MeshBackground } from "./MeshBackground.jsx";
+import { api } from "../api/client.js";
 
 const TRACKS = [
   {
@@ -29,6 +31,17 @@ const TRACKS = [
 ];
 
 export function Launcher({ onEnter }) {
+  const [updateInfo, setUpdateInfo] = useState(null);
+
+  useEffect(() => {
+    api
+      .getVersion()
+      .then((info) => {
+        if (info?.isOutdated) setUpdateInfo(info);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="launcher">
       <MeshBackground />
@@ -36,6 +49,14 @@ export function Launcher({ onEnter }) {
         <div className="eyebrow">
           <span className="status-led green" /> Local practice lab · ready
         </div>
+        {updateInfo && (
+          <div className="update-nudge" role="status">
+            <span className="update-nudge-icon" aria-hidden="true">
+              ↑
+            </span>
+            featherlab {updateInfo.latest} is available — run <code>featherlab update</code>
+          </div>
+        )}
         <h1>
           Build the skills.
           <br />

@@ -12,6 +12,10 @@ export function buildRoutes() {
   const id = "([a-z0-9-]{1,63})";
   const route = (method, pattern, handler) => ({ method, pattern, handler });
   return [
+    route("GET", /^\/api\/version$/, async (_, { getVersionInfo }) => ({
+      body: await (getVersionInfo?.() ??
+        Promise.resolve({ current: "dev", latest: null, isOutdated: false })),
+    })),
     route("GET", /^\/api\/status$/, (_, { service, cluster }) => ({
       body: {
         ready: true,

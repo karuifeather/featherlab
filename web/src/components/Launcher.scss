@@ -33,6 +33,30 @@
   }
 }
 
+.update-nudge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--color-amber) 35%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-amber) 8%, transparent);
+
+  code {
+    font-family: inherit;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+}
+
+.update-nudge-icon {
+  color: var(--color-amber);
+  font-size: 13px;
+}
+
 .launcher-lead {
   font-size: clamp(15px, 1.4vw, 17px);
   max-width: 600px;

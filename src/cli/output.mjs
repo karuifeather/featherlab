@@ -76,3 +76,13 @@ export function printReady(port) {
 export function printBanner(version) {
   console.log(`featherlab ${dim(`v${version}`)}  starting...`);
 }
+
+/**
+ * Print a one-line update notice to stderr. Kept gentle — shown after normal output.
+ */
+export function printUpdateNotice(current, latest) {
+  process.stderr.write(
+    `\n  ${cyan("↑")}  featherlab ${bold(latest)} is available (you have ${dim(current)})` +
+      `  ·  run: ${bold("featherlab update")}\n\n`,
+  );
+}

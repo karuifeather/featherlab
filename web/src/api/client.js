@@ -39,4 +39,5 @@ export const api = {
   activate: (id) => request(`${exercisePath(id)}/activate`, { method: "POST" }),
   check: (id) => request(`${exercisePath(id)}/check`, { method: "POST" }),
   reset: (id) => request(`${exercisePath(id)}/reset`, { method: "POST" }),
+  getVersion: () => request("/api/version"),
 };

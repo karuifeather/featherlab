@@ -5,6 +5,7 @@ import { buildRoutes, matchRoute } from "./api/routes.mjs";
 import { DEFAULT_CLUSTER } from "./infrastructure/environment.mjs";
 import { staticFile } from "./api/static.mjs";
 import { attachTerminal } from "./api/terminal.mjs";
+import { checkForUpdate } from "./lib/update-check.mjs";
 
 /**
  * HTTP bootstrap: Host/Origin checks, routing, static files and the terminal socket.
@@ -12,8 +13,27 @@ import { attachTerminal } from "./api/terminal.mjs";
  */
 export async function startServer(
   port = 4317,
-  { service = createApp().service, workstation, cluster = DEFAULT_CLUSTER, docker } = {},
+  {
+    service = createApp().service,
+    workstation,
+    cluster = DEFAULT_CLUSTER,
+    docker,
+    version,
+    stateDir,
+  } = {},
 ) {
+  const getVersionInfo =
+    version && stateDir
+      ? async () => {
+          const info = await checkForUpdate(stateDir, version).catch(() => null);
+          return {
+            current: version,
+            latest: info?.latest ?? version,
+            isOutdated: info?.isOutdated ?? false,
+          };
+        }
+      : null;
+
   const listening = { port: Number(port) };
   const routes = buildRoutes();
   const server = http.createServer(async (req, res) => {
@@ -25,7 +45,12 @@ export async function startServer(
         if (req.method !== "GET" && !originAllowed(req, listening.port))
           return reply(res, 403, { error: "Forbidden origin", code: "FORBIDDEN_ORIGIN" });
         const { route, match } = matchRoute(routes, req.method, url.pathname);
-        const { status = 200, body } = await route.handler(match, { service, url, cluster });
+        const { status = 200, body } = await route.handler(match, {
+          service,
+          url,
+          cluster,
+          getVersionInfo,
+        });
         return reply(res, status, body);
       }
       if (req.method === "GET") return await staticFile(req, res);
