@@ -77,4 +77,35 @@ export function attachTerminal(
       }
     }
   });
+
+  return {
+    /**
+     * Gracefully close all active WebSocket terminal sessions, then shut down the WSS.
+     * Sends close frames and waits up to 2 seconds before force-terminating stragglers.
+     */
+    closeSessions() {
+      return new Promise((resolve) => {
+        const clients = [...wss.clients];
+        if (clients.length === 0) {
+          wss.close(resolve);
+          return;
+        }
+        let remaining = clients.length;
+        const timeout = setTimeout(() => {
+          for (const ws of wss.clients) ws.terminate();
+          wss.close(resolve);
+        }, 2000);
+        for (const ws of clients) {
+          ws.once("close", () => {
+            remaining--;
+            if (remaining === 0) {
+              clearTimeout(timeout);
+              wss.close(resolve);
+            }
+          });
+          ws.close(1001, "Server shutting down");
+        }
+      });
+    },
+  };
 }

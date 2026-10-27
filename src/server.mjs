@@ -35,7 +35,11 @@ export async function startServer(
       reply(res, status, body);
     }
   });
-  attachTerminal(server, { getPort: () => listening.port, workstation, docker });
+  const { closeSessions } = attachTerminal(server, {
+    getPort: () => listening.port,
+    workstation,
+    docker,
+  });
   await new Promise((resolve, reject) =>
     server.once("error", reject).listen(listening.port, "127.0.0.1", resolve),
   );
@@ -43,5 +47,6 @@ export async function startServer(
   return {
     port: listening.port,
     close: () => new Promise((resolve) => server.close(resolve)),
+    closeSessions,
   };
 }

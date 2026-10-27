@@ -7,4 +7,5 @@ coverage/
 *.tgz
 *.log
 test-results/
+test-results-browser/
 playwright-report/

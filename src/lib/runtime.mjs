@@ -8,6 +8,7 @@ import {
   DEFAULT_WORKSTATION,
   resolveEnvironment,
 } from "../infrastructure/environment.mjs";
+import { stopClusterNodes } from "../infrastructure/docker/kind-nodes.mjs";
 
 // Kept for existing importers; new code should take an EnvironmentConfig instead.
 export const CLUSTER = DEFAULT_CLUSTER;
@@ -78,6 +79,13 @@ export function createRuntime(overrides = {}, { exec = run, log = console } = {}
     mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
     if (!clusterExists()) {
       log.log("Creating isolated kind cluster (first launch may download images)...");
+      // execFileSync blocks the Node.js event loop, so a SIGINT that arrives during this call
+      // cannot be processed until the child exits. In practice this is safe: pressing Ctrl+C
+      // in a terminal delivers SIGINT to the entire foreground process group, so kind also
+      // receives it, exits, and unblocks execFileSync. The signal handler then runs, the
+      // coordinator transitions to "failed", and the process exits nonzero. A SIGTERM sent
+      // programmatically (e.g. featherlab stop) is delayed until the exec returns — document
+      // this as a known limitation for long-running provisions.
       exec(
         "kind",
         [
@@ -157,17 +165,28 @@ export function createRuntime(overrides = {}, { exec = run, log = console } = {}
     log.log("Workstation stopped. Kubernetes cluster and progress preserved.");
   }
 
+  /**
+   * Stop the kind node containers backing this environment's cluster.
+   * Does nothing if the cluster does not exist.
+   * Returns the result from stopClusterNodes().
+   */
+  async function stopNodes() {
+    if (!clusterExists()) return { stopped: [], skipped: [], errors: [] };
+    return stopClusterNodes(config.cluster, { exec, log });
+  }
+
   function status() {
     log.log(`Cluster: ${clusterExists() ? config.cluster : "not created"}`);
     log.log(`Workstation: ${containerState()}`);
     log.log(`Image: ${config.image}`);
   }
 
-  return { config, doctor, provision, stop, status, containerState, clusterExists };
+  return { config, doctor, provision, stop, stopNodes, status, containerState, clusterExists };
 }
 
 const defaults = createRuntime();
 export const doctor = defaults.doctor;
 export const provision = defaults.provision;
 export const stop = defaults.stop;
+export const stopNodes = defaults.stopNodes;
 export const status = defaults.status;

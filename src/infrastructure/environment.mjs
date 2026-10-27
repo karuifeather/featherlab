@@ -27,7 +27,7 @@ export function resolveEnvironment(overrides = {}) {
   return Object.freeze({
     cluster: DEFAULT_CLUSTER,
     workstation: DEFAULT_WORKSTATION,
-    stateDir: DEFAULT_STATE_DIR,
+    stateDir: process.env.FEATHERLAB_STATE_DIR ?? DEFAULT_STATE_DIR,
     image: DEFAULT_IMAGE,
     labels: {},
     ...overrides,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -115,4 +115,106 @@ test("`start` rejects an invalid featherlab_PORT before any Docker work", () => 
     assert.match(out.stderr, /featherlab_PORT must be a non-privileged TCP port/);
     assert.deepEqual(out.calls, [], "provisioning must not start");
   }
+});
+
+/**
+ * Fakes both `docker` and `kind` on PATH so commands that call both succeed.
+ */
+function cliWithFakeEnvironment(args, { dockerExitCode = 0, kindExitCode = 0, env = {} } = {}) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "featherlab-fake-env-"));
+  const log = path.join(dir, "calls.log");
+  writeFileSync(
+    path.join(dir, "docker"),
+    `#!/bin/sh\necho "$@" >> "${log}"\nexit ${dockerExitCode}\n`,
+  );
+  chmodSync(path.join(dir, "docker"), 0o755);
+  writeFileSync(path.join(dir, "kind"), `#!/bin/sh\necho "$@" >> "${log}"\nexit ${kindExitCode}\n`);
+  chmodSync(path.join(dir, "kind"), 0o755);
+  const result = spawnSync(process.execPath, [bin, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, ...env, PATH: dir },
+  });
+  let calls = [];
+  try {
+    calls = readFileSync(log, "utf8").trim().split("\n");
+  } catch {
+    // No calls were made.
+  }
+  return { ...result, calls };
+}
+
+test("`--version` exits 0 and prints the package version", () => {
+  const out = cliWithFakeDocker(["--version"]);
+  assert.equal(out.status, 0);
+  assert.match(out.stdout, /\d+\.\d+\.\d+/);
+  assert.deepEqual(out.calls, []);
+});
+
+test("`-V` is an alias for --version", () => {
+  const out = cliWithFakeDocker(["-V"]);
+  assert.equal(out.status, 0);
+  assert.match(out.stdout, /\d+\.\d+\.\d+/);
+  assert.deepEqual(out.calls, []);
+});
+
+test("`start` explicit command rejects an invalid featherlab_PORT", () => {
+  const out = cliWithFakeDocker(["start", "--no-open"], { env: { featherlab_PORT: "80" } });
+  assert.equal(out.status, 1);
+  assert.match(out.stderr, /featherlab_PORT must be a non-privileged TCP port/);
+  assert.deepEqual(out.calls, []);
+});
+
+test("`stop` exits 0 when infrastructure is already stopped", () => {
+  // Fake docker (inspect returns empty → workstation not running) and kind
+  // (get clusters returns empty → no nodes). Both succeed so stop exits cleanly.
+  const out = cliWithFakeEnvironment(["stop"]);
+  assert.equal(out.status, 0);
+});
+
+test("`stop` does not signal a process that merely contains 'featherlab' in its arguments", (t, done) => {
+  // Regression: the old isFeatherLabPid() used cmdline.includes("featherlab"), which would match
+  // ANY process whose argument list mentioned the name — e.g. `cat ~/featherlab-notes.txt`.
+  // The new isFeatherLabProcess() checks that an argv element ends with "bin/featherlab.mjs".
+  const stateDir = mkdtempSync(path.join(os.tmpdir(), "featherlab-pid-test-"));
+  // Spawn a long-running node process with "featherlab" as a positional argument — NOT the entry point.
+  // /proc/<pid>/cmdline: node\0-e\0setInterval...\0--\0featherlab\0
+  // Old check: includes("featherlab") → true (wrong). New check: endsWith("bin/featherlab.mjs") → false (correct).
+  const decoy = spawn(process.execPath, ["-e", "setInterval(()=>{},60000)", "--", "featherlab"], {
+    detached: true,
+    stdio: "ignore",
+  });
+  decoy.unref();
+  const decoyPid = decoy.pid;
+  writeFileSync(path.join(stateDir, "featherlab.pid"), String(decoyPid));
+
+  const out = cliWithFakeEnvironment(["stop"], { env: { FEATHERLAB_STATE_DIR: stateDir } });
+
+  // Signal 0 throws ESRCH if the process is gone; otherwise it's still running.
+  const decoyStillRunning = (() => {
+    try {
+      process.kill(decoyPid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  decoy.kill("SIGKILL"); // returns false if already gone — no throw
+
+  assert.equal(out.status, 0, out.stderr);
+  assert.ok(
+    decoyStillRunning,
+    "stop must not signal a process that is not the featherlab entry point",
+  );
+  done();
+});
+
+test("`stop` ignores a PID file whose start time does not match the running process", () => {
+  // Guards against PID reuse: a recycled PID will have a different start time.
+  // Write the test process's own PID with a clearly wrong start time ("0").
+  // Even if cmdline matched, the start-time mismatch would prevent signaling.
+  const stateDir = mkdtempSync(path.join(os.tmpdir(), "featherlab-stale-pid-"));
+  writeFileSync(path.join(stateDir, "featherlab.pid"), `${process.pid} 0`);
+  const out = cliWithFakeEnvironment(["stop"], { env: { FEATHERLAB_STATE_DIR: stateDir } });
+  // Must fall through to direct Docker/kind stop without error.
+  assert.equal(out.status, 0, out.stderr);
 });
