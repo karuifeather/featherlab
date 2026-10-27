@@ -33,6 +33,7 @@ export function ExerciseSidebar({
   onToggleCollapse,
   progressMap = new Map(),
   progressLoading = false,
+  progressError = null,
   summary = null,
 }) {
   const levels = [...Map.groupBy(exercises, (e) => e.level)];
@@ -144,6 +145,11 @@ export function ExerciseSidebar({
 
       <div className="sidebar-bottom">
         <span className="status-led green" /> kind · isolated cluster
+        {progressError && (
+          <span className="sidebar-progress-error" role="alert" aria-live="polite">
+            Progress unavailable
+          </span>
+        )}
       </div>
     </aside>
   );

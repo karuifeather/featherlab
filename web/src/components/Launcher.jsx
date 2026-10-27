@@ -144,8 +144,13 @@ export function Launcher({ onEnter }) {
 }
 
 function TrackBody({ track, resumeState }) {
+  // Show "Continue Learning" only when the learner has an explicit selection (fallback:false)
+  // OR has completed at least one exercise. A pure fallback with no completions is a new learner.
   const hasResume =
-    resumeState !== null && resumeState !== undefined && resumeState?.resume !== null;
+    resumeState !== null &&
+    resumeState !== undefined &&
+    resumeState.resume !== null &&
+    (!resumeState.resume.fallback || (resumeState.summary?.completed ?? 0) > 0);
   const summary = resumeState?.summary;
   const completedCount = summary?.completed ?? 0;
   const totalCount = summary?.total ?? 0;

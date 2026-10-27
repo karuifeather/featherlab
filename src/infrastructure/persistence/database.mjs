@@ -14,11 +14,13 @@ import path from "node:path";
  * Nothing above this layer depends on DatabaseSync directly.
  *
  * Node.js compatibility note:
- *   node:sqlite is stable in Node.js 24+. Node.js 22.x requires the
- *   --experimental-sqlite flag. See docs/architecture.md for details.
+ *   node:sqlite is stable without flags in Node.js 22.14+ and Node.js 24+.
+ *   The --experimental-sqlite flag predates 22.13.1 and is not required at
+ *   runtime given the package.json engines constraint of >=22.14.0.
  */
 export class DatabaseAdapter {
   #db;
+  #closed = false;
 
   /**
    * @param {string} dbPath - Absolute path to the SQLite file (or ':memory:' for tests).
@@ -109,9 +111,11 @@ export class DatabaseAdapter {
 
   /**
    * Close the database connection. Flushes WAL frames and releases the file lock.
-   * Safe to call multiple times (subsequent calls are no-ops at the OS level).
+   * Idempotent: subsequent calls are no-ops.
    */
   close() {
+    if (this.#closed) return;
+    this.#closed = true;
     this.#db.close();
   }
 }

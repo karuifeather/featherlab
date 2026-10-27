@@ -181,8 +181,9 @@ Learning progress is stored in `~/.featherlab/progress.sqlite` (or `$FEATHERLAB_
 The database is opened by `createPersistence({ stateDir })` in `app.mjs` and closed on graceful shutdown.
 It is never placed inside the Docker workstation or the npm package directory.
 
-**Technology:** `node:sqlite` (built-in since Node.js 22.5; stable in Node.js 24+).
-On Node.js 22.x, the `--experimental-sqlite` flag is required at runtime. On Node.js 24+ no flag is needed.
+**Technology:** `node:sqlite` (built-in since Node.js 22.5; stable without flags since 22.13.1 backport).
+The `--experimental-sqlite` flag predates Node.js 22.13.1 and is not required at runtime.
+The `engines` field requires `>=22.14.0`, so no flag is needed. Node.js 24+ is also supported.
 
 **Schema versioning:** `PRAGMA user_version` tracks the applied migration level. Each migration runs in its own `BEGIN IMMEDIATE / COMMIT` transaction, so a failed migration leaves the database at the last good version. A database written by a newer CLI (higher user_version) is refused rather than silently downgraded.
 

@@ -29,6 +29,14 @@ export function ExercisePanel({
   const alreadyCompletedRef = useRef(exerciseProgress?.completed ?? false);
   const [firstCompletion, setFirstCompletion] = useState(false);
 
+  // When track progress loads after the initial mount (parallel fetch), update the ref so a
+  // previously-completed exercise does not falsely trigger the first-completion banner.
+  useEffect(() => {
+    if (exerciseProgress?.completed) {
+      alreadyCompletedRef.current = true;
+    }
+  }, [exerciseProgress]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

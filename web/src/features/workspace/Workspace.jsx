@@ -29,6 +29,7 @@ export function Workspace({ track, initialExerciseId }) {
     progressMap,
     summary,
     loading: progressLoading,
+    error: progressError,
     refresh: refreshProgress,
   } = useTrackProgress(track);
   const [chosenId, setChosenId] = useState(initialExerciseId ?? null);
@@ -99,6 +100,7 @@ export function Workspace({ track, initialExerciseId }) {
         onToggleCollapse={() => setCollapsed((c) => !c)}
         progressMap={progressMap}
         progressLoading={progressLoading}
+        progressError={progressError}
         summary={summary}
       />
       {drawerOpen && (

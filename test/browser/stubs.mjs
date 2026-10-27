@@ -192,10 +192,10 @@ export const hints = [
 export const partial = {
   result: {
     exerciseId: "k8s-0001",
-    outcome: "graded",
+    outcome: "failed",
     success: false,
-    score: { percent: 50 },
-    counts: { passed: 2, total: 4 },
+    score: { earned: 2, possible: 4, percent: 50 },
+    counts: { total: 4, passed: 2, failed: 2, errored: 0 },
     checks: [
       {
         id: "exists",
@@ -260,13 +260,22 @@ export const passed = {
 const json = (route, body) =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 
+// Real-backend default: when persistence is configured, /api/resume always returns a resume
+// object (fallback: true means no explicit selection yet, i.e. a first-time learner).
+export const noResume = {
+  trackId: "kubernetes",
+  exerciseId: "k8s-0001",
+  updatedAt: null,
+  fallback: true,
+};
+
 export async function stubApi(
   page,
   {
     connected = true,
     checkSequence = [partial, passed],
     progressData = noProgress,
-    resume = null,
+    resume = noResume,
   } = {},
 ) {
   await page.routeWebSocket("**/ws/terminal", (ws) => {
