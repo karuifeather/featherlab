@@ -1,6 +1,6 @@
 {
   "name": "featherlab",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "Local-first hands-on Kubernetes training",
   "type": "module",
   "bin": {
