@@ -8,7 +8,12 @@ import {
   DEFAULT_WORKSTATION,
   resolveEnvironment,
 } from "../infrastructure/environment.mjs";
-import { getClusterNodes, stopClusterNodes } from "../infrastructure/docker/kind-nodes.mjs";
+import {
+  getClusterNodes,
+  getOwnedClusterNodes,
+  stopClusterNodes,
+} from "../infrastructure/docker/kind-nodes.mjs";
+import { stopContainers } from "../infrastructure/docker/stop-containers.mjs";
 
 // Kept for existing importers; new code should take an EnvironmentConfig instead.
 export const CLUSTER = DEFAULT_CLUSTER;
@@ -17,6 +22,10 @@ export const IMAGE = DEFAULT_IMAGE;
 export const STATE = DEFAULT_STATE_DIR;
 const NODE_IMAGE =
   "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5";
+// The workstation's PID 1 is `sleep infinity`, which ignores SIGTERM, so `docker stop` always
+// waits out the full grace period before SIGKILL. Nothing inside needs a graceful shutdown —
+// the container filesystem survives SIGKILL — so keep the wait short.
+const WORKSTATION_STOP_TIMEOUT_SEC = 1;
 
 export function run(binary, args, options = {}) {
   try {
@@ -33,10 +42,14 @@ export function run(binary, args, options = {}) {
 }
 
 /**
- * Docker/kind provisioning for one environment. `exec(binary, args, options)` is injectable
- * so tests can verify exactly which commands would run without running them.
+ * Docker/kind provisioning for one environment. `exec(binary, args, options)` and
+ * `stopper(names, options)` are injectable so tests can verify exactly which commands would
+ * run without running them.
  */
-export function createRuntime(overrides = {}, { exec = run, log = console } = {}) {
+export function createRuntime(
+  overrides = {},
+  { exec = run, stopper = stopContainers, log = console } = {},
+) {
   const config = resolveEnvironment(overrides);
 
   function doctor() {
@@ -180,9 +193,9 @@ export function createRuntime(overrides = {}, { exec = run, log = console } = {}
     ]);
   }
 
-  function stop() {
-    if (containerState() === "true") exec("docker", ["stop", config.workstation]);
-    log.log("Workstation stopped. Kubernetes cluster and progress preserved.");
+  async function stop() {
+    if (containerState() === "true")
+      await stopper([config.workstation], { timeoutSec: WORKSTATION_STOP_TIMEOUT_SEC });
   }
 
   /**
@@ -192,7 +205,25 @@ export function createRuntime(overrides = {}, { exec = run, log = console } = {}
    */
   async function stopNodes() {
     if (!clusterExists()) return { stopped: [], skipped: [], errors: [] };
-    return stopClusterNodes(config.cluster, { exec, log });
+    return stopClusterNodes(config.cluster, { exec, stop: stopper, log });
+  }
+
+  /**
+   * Fire-and-forget stop of the workstation and cluster nodes, for a forced exit.
+   * The docker processes run detached and finish after this process is gone.
+   * Never throws.
+   */
+  function stopInBackground() {
+    try {
+      stopper([config.workstation], {
+        timeoutSec: WORKSTATION_STOP_TIMEOUT_SEC,
+        background: true,
+      });
+      const { owned } = getOwnedClusterNodes(config.cluster, { exec });
+      stopper(owned, { background: true });
+    } catch {
+      // Best effort — the process is exiting.
+    }
   }
 
   function status() {
@@ -201,7 +232,17 @@ export function createRuntime(overrides = {}, { exec = run, log = console } = {}
     log.log(`Image: ${config.image}`);
   }
 
-  return { config, doctor, provision, stop, stopNodes, status, containerState, clusterExists };
+  return {
+    config,
+    doctor,
+    provision,
+    stop,
+    stopNodes,
+    stopInBackground,
+    status,
+    containerState,
+    clusterExists,
+  };
 }
 
 const defaults = createRuntime();

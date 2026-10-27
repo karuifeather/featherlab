@@ -111,17 +111,7 @@ async function runStart() {
   let shutdownInProgress = false;
   let startupComplete = false;
 
-  const onSignal = async () => {
-    if (shutdownInProgress) {
-      process.stderr.write("\nForcing exit...\n");
-      process.exit(130);
-    }
-    shutdownInProgress = true;
-    // Re-register so a second Ctrl+C during shutdown forces an immediate exit.
-    process.once("SIGINT", onSignal);
-    process.once("SIGTERM", onSignal);
-    const errorCount = (await coordinator.requestShutdown()) ?? 0;
-    // Close the database after all other shutdown is done.
+  const releaseLocalState = () => {
     // Closing flushes WAL frames and releases the file lock safely.
     try {
       persistence?.close();
@@ -133,11 +123,27 @@ async function runStart() {
     } catch {
       // Ignore — PID file may not exist if startup was interrupted.
     }
+  };
+
+  const onSignal = async () => {
+    if (shutdownInProgress) {
+      // Second Ctrl+C: give the terminal back now. Container stops run detached from this
+      // process, so they finish on their own — the user never needs to run `docker stop`.
+      coordinator.stopInBackground();
+      releaseLocalState();
+      process.stderr.write("\n");
+      printWarn("Exiting now. Containers will finish stopping in the background.");
+      process.exit(130);
+    }
+    shutdownInProgress = true;
+    printInfo("Shutting down (press Ctrl+C again to exit without waiting)...");
+    const errorCount = (await coordinator.requestShutdown()) ?? 0;
+    releaseLocalState();
     // Exit nonzero if startup was interrupted or cleanup had errors.
     process.exit(startupComplete && errorCount === 0 ? 0 : 1);
   };
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
 
   const { port: actualPort } = await coordinator.start({
     serverFactory: (p) =>
@@ -243,7 +249,7 @@ try {
 
       if (!signaled) {
         try {
-          rt.stop();
+          await rt.stop();
           printStep("Workstation stopped");
         } catch (e) {
           printStep("Workstation", { ok: false, detail: e.message });

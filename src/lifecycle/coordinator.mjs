@@ -27,25 +27,37 @@ export class LifecycleCoordinator {
   #runtime;
   #log;
   #onShutdownComplete;
+  #waitForCluster;
   #serverHandle = null;
   // The single in-flight shutdown promise. Concurrent requestShutdown() calls share it.
   #shutdownPromise = null;
+  // Set once the workstation/node `docker stop` processes have been launched.
+  #containerStopsStarted = false;
 
   /**
    * @param {{
    *   runtime: {
    *     provision(): void,
-   *     stop(): void,
+   *     stop(): Promise<void> | void,
+   *     stopNodes?(): Promise<{stopped: string[], errors: Array<{node: string, error: Error}>}>,
+   *     stopInBackground?(): void,
    *     config: { stateDir: string, cluster: string, workstation: string }
    *   },
    *   log?: { log: Function, warn: Function, error: Function },
-   *   onShutdownComplete?: () => void
+   *   onShutdownComplete?: () => void,
+   *   waitForCluster?: (kubeconfigPath: string, options: { log: object }) => Promise<unknown>
    * }} options
    */
-  constructor({ runtime, log = silent, onShutdownComplete } = {}) {
+  constructor({
+    runtime,
+    log = silent,
+    onShutdownComplete,
+    waitForCluster = waitForClusterReady,
+  } = {}) {
     this.#runtime = runtime;
     this.#log = log;
     this.#onShutdownComplete = onShutdownComplete;
+    this.#waitForCluster = waitForCluster;
   }
 
   get state() {
@@ -83,7 +95,7 @@ export class LifecycleCoordinator {
       // The host kubeconfig is written to stateDir during provision().
       const kubeconfigPath = path.join(this.#runtime.config.stateDir, "host-kubeconfig");
       this.#log.log("Waiting for Kubernetes API server...");
-      await waitForClusterReady(kubeconfigPath, { log: this.#log });
+      await this.#waitForCluster(kubeconfigPath, { log: this.#log });
 
       this.#log.log("Starting HTTP server...");
       serverHandle = await serverFactory(port);
@@ -123,7 +135,7 @@ export class LifecycleCoordinator {
    *   1. Transition to 'stopping'.
    *   2. Close active WebSocket sessions and HTTP server.
    *   3. runtime.stop() — stop workstation container.
-   *   4. stopClusterNodes() — stop kind node containers.
+   *   4. runtime.stopNodes() — stop kind node containers (concurrently with step 3).
    *   5. Transition to 'stopped'.
    *   6. Invoke onShutdownComplete() if provided.
    *
@@ -171,29 +183,36 @@ export class LifecycleCoordinator {
       }
     }
 
-    // Step 3: Stop workstation container.
-    this.#log.log("Stopping workstation...");
-    try {
-      this.#runtime.stop();
-      this.#log.log("Workstation stopped. Learner filesystem preserved.");
-    } catch (error) {
-      this.#log.error(
-        `Could not stop workstation: ${error.message}\n` +
-          `  To stop it manually: docker stop ${workstation ?? "featherlab-workstation"}`,
-      );
-      errorCount++;
-    }
+    // Steps 3 + 4: Stop the workstation and kind nodes in parallel, so shutdown takes as long
+    // as the slowest container rather than the sum. The docker processes run in their own
+    // process group, so further Ctrl+C presses cannot kill them mid-stop.
+    this.#log.log("Stopping workstation and cluster nodes...");
+    this.#containerStopsStarted = true;
+    const stopNodes = this.#runtime.stopNodes
+      ? () => this.#runtime.stopNodes()
+      : () => stopClusterNodes(cluster, { log: this.#log });
 
-    // Step 4: Stop kind cluster nodes.
-    this.#log.log("Stopping cluster nodes...");
-    try {
-      const result = await stopClusterNodes(cluster, { log: this.#log });
-      if (result.stopped.length > 0) {
-        this.#log.log(
-          `Cluster nodes stopped (${result.stopped.length}). Kubernetes resources preserved.`,
+    const stopWorkstation = (async () => {
+      try {
+        await this.#runtime.stop();
+        this.#log.log("Workstation stopped. Learner filesystem preserved.");
+      } catch (error) {
+        this.#log.error(
+          `Could not stop workstation: ${error.message}\n` +
+            `  To stop it manually: docker stop ${workstation ?? "featherlab-workstation"}`,
         );
+        errorCount++;
       }
-      if (result.errors.length > 0) {
+    })();
+
+    const stopCluster = (async () => {
+      try {
+        const result = await stopNodes();
+        if (result.stopped.length > 0) {
+          this.#log.log(
+            `Cluster nodes stopped (${result.stopped.length}). Kubernetes resources preserved.`,
+          );
+        }
         for (const { node, error } of result.errors) {
           this.#log.error(
             `Could not stop cluster node "${node}": ${error.message}\n` +
@@ -201,14 +220,16 @@ export class LifecycleCoordinator {
           );
           errorCount++;
         }
+      } catch (error) {
+        this.#log.error(
+          `Could not stop cluster nodes: ${error.message}\n` +
+            `  To stop them manually: docker ps --filter label=io.x-k8s.kind.cluster=${cluster}`,
+        );
+        errorCount++;
       }
-    } catch (error) {
-      this.#log.error(
-        `Could not stop cluster nodes: ${error.message}\n` +
-          `  To stop them manually: docker ps --filter label=io.x-k8s.kind.cluster=${cluster}`,
-      );
-      errorCount++;
-    }
+    })();
+
+    await Promise.all([stopWorkstation, stopCluster]);
 
     this.#state = "stopped";
     this.#log.log("FeatherLab stopped.");
@@ -220,5 +241,20 @@ export class LifecycleCoordinator {
     }
 
     return errorCount;
+  }
+
+  /**
+   * For a forced exit mid-shutdown: make sure the containers still get stopped after this
+   * process is gone. If the container stops are already running they are detached and will
+   * finish on their own; otherwise launch them detached now. Never throws.
+   */
+  stopInBackground() {
+    if (this.#containerStopsStarted || this.#state !== "stopping") return;
+    this.#containerStopsStarted = true;
+    try {
+      this.#runtime.stopInBackground?.();
+    } catch {
+      // Best effort — the process is exiting.
+    }
   }
 }

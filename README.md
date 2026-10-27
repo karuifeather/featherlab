@@ -61,7 +61,7 @@ Environment overrides:
 
 **Graceful shutdown:** `featherlab stop` reads `~/.featherlab/featherlab.pid`. If the file exists and the recorded process is still the FeatherLab CLI (verified by entry-point path and process start time, not just the PID), it sends SIGTERM and waits up to 15 seconds for a clean exit. If no running instance is found, it stops the workstation container and kind node containers directly. The cluster and its workloads are always preserved; only the containers are stopped.
 
-Ctrl+C while `featherlab` is running triggers the same graceful shutdown. A second Ctrl+C forces an immediate exit.
+Ctrl+C while `featherlab` is running triggers the same graceful shutdown. A second Ctrl+C returns the terminal immediately; the `docker stop` processes run in their own process group, so the containers still finish stopping in the background and no manual `docker stop` is needed.
 
 **Upgrading:** `featherlab update` performs a fresh version check against the npm registry (bypassing the local cache), then runs `npm install -g featherlab@<latest>`. It refuses to run while a `featherlab` process is live — stop the server first. If the npm install fails due to permissions, it prints the manual command (`sudo npm install -g …`) rather than escalating automatically. After a successful upgrade, if the running workstation container was built with an older image, the command notes the mismatch and reminds you that the existing workstation has not been modified; the updated image will be used the next time a new workstation is created.
 

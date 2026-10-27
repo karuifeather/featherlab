@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { EnvironmentError } from "../../core/errors.mjs";
+import { stopContainers } from "./stop-containers.mjs";
 
 /**
  * Default synchronous executor matching the contract of `run` in runtime.mjs.
@@ -63,28 +64,21 @@ export function getClusterNodes(clusterName, { exec = defaultExec } = {}) {
 }
 
 /**
- * Stops all Docker containers backing the named kind cluster.
- *
- * For each discovered node:
- *   1. Verify the container's `io.x-k8s.kind.cluster` label matches `clusterName`.
- *   2. If verified, `docker stop <container>`.
- *   3. If not verified, skip with a warning — do not touch unrelated containers.
- *
- * Never throws. Collects all errors so partial failures are reported.
+ * Returns the discovered nodes of the named kind cluster that pass the ownership guard:
+ * the container's `io.x-k8s.kind.cluster` label must match `clusterName`. Nodes that fail
+ * the guard are skipped with a warning — we never touch unrelated containers.
  *
  * @param {string} clusterName
  * @param {{exec?: Function, log?: object}} [options]
- * @returns {Promise<{stopped: string[], skipped: string[], errors: Array<{node: string, error: Error}>}>}
+ * @returns {{owned: string[], skipped: string[], errors: Array<{node: string, error: Error}>}}
  */
-export async function stopClusterNodes(clusterName, { exec = defaultExec, log = silent } = {}) {
-  const nodes = getClusterNodes(clusterName, { exec });
-  const stopped = [];
+export function getOwnedClusterNodes(clusterName, { exec = defaultExec, log = silent } = {}) {
+  const owned = [];
   const skipped = [];
   const errors = [];
 
-  for (const node of nodes) {
+  for (const node of getClusterNodes(clusterName, { exec })) {
     try {
-      // Ownership guard: verify this container actually belongs to the named cluster.
       const labelsJson = exec("docker", [
         "inspect",
         "--format",
@@ -99,15 +93,44 @@ export async function stopClusterNodes(clusterName, { exec = defaultExec, log = 
         skipped.push(node);
         continue;
       }
-
-      exec("docker", ["stop", node]);
-      stopped.push(node);
-      log.log?.(`Stopped kind node: ${node}`);
+      owned.push(node);
     } catch (error) {
-      log.error?.(`Failed to stop kind node "${node}": ${error.message}`);
       errors.push({ node, error });
     }
   }
+
+  return { owned, skipped, errors };
+}
+
+/**
+ * Stops all Docker containers backing the named kind cluster, in parallel.
+ *
+ * Nodes keep Docker's default 10s grace period: kind sets StopSignal=SIGRTMIN+3, so systemd
+ * inside the node shuts down etcd and containerd cleanly instead of being SIGKILLed.
+ *
+ * Never throws. Collects all errors so partial failures are reported; callers own error output.
+ *
+ * @param {string} clusterName
+ * @param {{exec?: Function, stop?: Function, log?: object}} [options]
+ * @returns {Promise<{stopped: string[], skipped: string[], errors: Array<{node: string, error: Error}>}>}
+ */
+export async function stopClusterNodes(
+  clusterName,
+  { exec = defaultExec, stop = stopContainers, log = silent } = {},
+) {
+  const { owned, skipped, errors } = getOwnedClusterNodes(clusterName, { exec, log });
+  const stopped = [];
+
+  const results = await Promise.allSettled(owned.map((node) => stop([node])));
+  results.forEach((result, i) => {
+    const node = owned[i];
+    if (result.status === "fulfilled") {
+      stopped.push(node);
+      log.log?.(`Stopped kind node: ${node}`);
+    } else {
+      errors.push({ node, error: result.reason });
+    }
+  });
 
   return { stopped, skipped, errors };
 }
