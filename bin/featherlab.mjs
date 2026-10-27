@@ -102,8 +102,8 @@ async function runStart() {
   if (!Number.isInteger(port) || port < 1024 || port > 65535)
     throw new Error("featherlab_PORT must be a non-privileged TCP port.");
 
-  const { service } = createApp();
   const runtime = createRuntime({}, { log: cliLogger });
+  const { service, persistence } = createApp({ stateDir: runtime.config.stateDir });
   const coordinator = new LifecycleCoordinator({ runtime, log: cliLogger });
   // PID file path is known upfront; the file is only written after successful startup.
   const pidFile = path.join(runtime.config.stateDir, "featherlab.pid");
@@ -121,6 +121,13 @@ async function runStart() {
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
     const errorCount = (await coordinator.requestShutdown()) ?? 0;
+    // Close the database after all other shutdown is done.
+    // Closing flushes WAL frames and releases the file lock safely.
+    try {
+      persistence?.close();
+    } catch {
+      // Non-fatal — database data is durable via WAL even without an explicit close.
+    }
     try {
       rmSync(pidFile, { force: true });
     } catch {

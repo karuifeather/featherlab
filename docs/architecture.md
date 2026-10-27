@@ -26,6 +26,14 @@ src/
   infrastructure/
     content/fs-loader.mjs    discovery, YAML parsing, path-confined reader
     docker/workstation-runner.mjs  CommandRunner over `docker exec`
+    persistence/             SQLite learning-progress store (M4+)
+      database.mjs             DatabaseAdapter: opens SQLite, WAL mode, transaction helper
+      migrate.mjs              runMigrations(): ordered, atomic schema migrations
+      migrations/001-initial.mjs  first schema version (exercise_attempts, exercise_progress, resume_state)
+      repositories/attempts.mjs   append-only grading attempt history
+      repositories/progress.mjs   per-exercise progress aggregate (upsert)
+      repositories/resume.mjs     single-row last-selected track/exercise
+      index.mjs                createPersistence({ stateDir }) → { attempts, progress, resume, close }
   application/             use cases; the only place that builds public DTOs
     exercise-service.mjs
     presenters.mjs
@@ -98,6 +106,25 @@ check    = query state -> run validators -> weighted score
 reset    = prepare -> delete learner work -> re-apply setup
 cleanup  = prepare -> delete learner work -> delete managed setup objects
 ```
+
+## Persistence (M4+)
+
+Learning progress is stored in `~/.featherlab/progress.sqlite` (or `$FEATHERLAB_STATE_DIR/progress.sqlite`).
+The database is opened by `createPersistence({ stateDir })` in `app.mjs` and closed on graceful shutdown.
+It is never placed inside the Docker workstation or the npm package directory.
+
+**Technology:** `node:sqlite` (built-in since Node.js 22.5; stable in Node.js 24+).
+On Node.js 22.x, the `--experimental-sqlite` flag is required at runtime. On Node.js 24+ no flag is needed.
+
+**Schema versioning:** `PRAGMA user_version` tracks the applied migration level. Each migration runs in its own `BEGIN IMMEDIATE / COMMIT` transaction, so a failed migration leaves the database at the last good version. A database written by a newer CLI (higher user_version) is refused rather than silently downgraded.
+
+**Data safety invariants:**
+
+- `featherlab stop` and Ctrl+C close the database cleanly (WAL frames flushed).
+- Resetting an exercise never touches the SQLite file.
+- Updating the npm package never deletes or overwrites an existing database.
+- A corrupted or unreadable database is never silently replaced with an empty one.
+- Test databases always use temporary directories; `~/.featherlab` is never touched by tests.
 
 ## Result shape
 

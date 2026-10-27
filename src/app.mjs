@@ -7,6 +7,7 @@ import { combinators } from "./core/validation/combinators.mjs";
 import { ValidatorRegistry } from "./core/validation/registry.mjs";
 import { createFsContentSource } from "./infrastructure/content/fs-loader.mjs";
 import { createWorkstationRunner } from "./infrastructure/docker/workstation-runner.mjs";
+import { createPersistence } from "./infrastructure/persistence/index.mjs";
 import { createKubernetesTrack } from "./tracks/kubernetes/index.mjs";
 
 /**
@@ -16,6 +17,9 @@ import { createKubernetesTrack } from "./tracks/kubernetes/index.mjs";
  *
  * Throws ContentError if any packaged exercise is invalid, so a broken exercise is
  * caught at startup rather than when a learner opens it.
+ *
+ * Pass `stateDir` to enable SQLite persistence. When omitted, `persistence` in the
+ * return value is null; the exercise engine operates without it (no M4 features).
  */
 export function createApp({
   workstation,
@@ -23,6 +27,7 @@ export function createApp({
   contentRoot,
   logger = console,
   timeouts,
+  stateDir,
 } = {}) {
   const tracks = new TrackRegistry([createKubernetesTrack({ runner })]);
   const validators = new ValidatorRegistry([
@@ -32,7 +37,14 @@ export function createApp({
   const source = createFsContentSource(contentRoot ? { root: contentRoot } : undefined);
   const registry = ExerciseRegistry.build(source.discover(), { tracks, validators });
   const lifecycle = new LifecycleManager({ tracks, validators, logger, timeouts });
-  return { service: new ExerciseService({ registry, lifecycle }), registry, tracks, validators };
+  const persistence = stateDir ? createPersistence({ stateDir }) : null;
+  return {
+    service: new ExerciseService({ registry, lifecycle }),
+    registry,
+    tracks,
+    validators,
+    persistence,
+  };
 }
 
 /**
