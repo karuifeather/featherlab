@@ -19,23 +19,26 @@ import {
  * service enforces prerequisite locks on activate/check, records grading results, and
  * manages resume state. When persistence is absent (isolated tests), the service behaves
  * exactly as it did before M4.
+ *
+ * Lifecycle operations go through the EnvironmentSession, which owns the rule that one
+ * exercise at a time holds the shared practice cluster (see environment-session.mjs).
  */
 export class ExerciseService {
   #registry;
-  #lifecycle;
+  #session;
   #progression; // ProgressionService | null
   #attemptsService; // AttemptsService | null
   #resumeService; // ResumeService | null
 
   constructor({
     registry,
-    lifecycle,
+    session,
     progression = null,
     attemptsService = null,
     resumeService = null,
   }) {
     this.#registry = registry;
-    this.#lifecycle = lifecycle;
+    this.#session = session;
     this.#progression = progression;
     this.#attemptsService = attemptsService;
     this.#resumeService = resumeService;
@@ -88,32 +91,40 @@ export class ExerciseService {
     return presentHint(exercise, n);
   }
 
-  async activate(id) {
+  /**
+   * Open an exercise in the shared practice environment. `discardActive` confirms that
+   * another exercise's cluster work may be reset; without it that case is refused.
+   */
+  async activate(id, { discardActive = false } = {}) {
     const exercise = this.#find(id);
     this.#assertNotLocked(exercise);
-    const outcome = await this.#lifecycle.activate(exercise);
-    return { exercise: presentExercise(exercise), ...presentOperation(exercise, outcome) };
+    const outcome = await this.#session.open(exercise, { discardActive });
+    return {
+      exercise: presentExercise(exercise),
+      ...presentOperation(exercise, outcome),
+      environment: outcome.environment,
+    };
   }
 
   async check(id) {
     const exercise = this.#find(id);
     this.#assertNotLocked(exercise);
     const start = Date.now();
-    const result = await this.#lifecycle.check(exercise);
+    const result = await this.#session.check(exercise);
     const durationMs = Date.now() - start;
     const progress = this.#attemptsService?.record({ exercise, gradingResult: result, durationMs });
     const presented = presentResult(result);
     return progress ? { ...presented, progress: presentProgress(progress) } : presented;
   }
 
-  async reset(id) {
+  async reset(id, { discardActive = false } = {}) {
     const exercise = this.#find(id);
-    return presentOperation(exercise, await this.#lifecycle.reset(exercise));
+    return presentOperation(exercise, await this.#session.reset(exercise, { discardActive }));
   }
 
   async cleanup(id) {
     const exercise = this.#find(id);
-    return presentOperation(exercise, await this.#lifecycle.cleanup(exercise));
+    return presentOperation(exercise, await this.#session.cleanup(exercise));
   }
 
   /**

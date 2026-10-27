@@ -25,7 +25,13 @@ function cliWithFakeDocker(args, { exitCode = 0, stderr = "", env = {} } = {}) {
   const result = spawnSync(process.execPath, [bin, ...args], {
     encoding: "utf8",
     // FEATHERLAB_NO_UPDATE_CHECK suppresses background network calls so tests stay fast and offline-safe.
-    env: { ...process.env, FEATHERLAB_NO_UPDATE_CHECK: "1", ...env, PATH: dir },
+    env: {
+      ...process.env,
+      FEATHERLAB_NO_UPDATE_CHECK: "1",
+      FEATHERLAB_STATE_DIR: path.join(dir, "state"),
+      ...env,
+      PATH: dir,
+    },
   });
   let calls = [];
   try {
@@ -103,7 +109,7 @@ test("`help` documents every command and the environment overrides", () => {
   ])
     assert.ok(out.stdout.includes(word), word);
   assert.match(out.stdout, /FEATHERLAB_IMAGE/);
-  assert.match(out.stdout, /featherlab_PORT/);
+  assert.match(out.stdout, /FEATHERLAB_PORT/);
   assert.match(out.stdout, /FEATHERLAB_STATE_DIR/);
 });
 
@@ -112,11 +118,11 @@ test("`doctor` exits non-zero when Docker is unavailable", () => {
   assert.equal(out.status, 1);
 });
 
-test("`start` rejects an invalid featherlab_PORT before any Docker work", () => {
+test("`start` rejects an invalid FEATHERLAB_PORT before any Docker work", () => {
   for (const port of ["80", "abc", "70000"]) {
-    const out = cliWithFakeDocker(["start", "--no-open"], { env: { featherlab_PORT: port } });
+    const out = cliWithFakeDocker(["start", "--no-open"], { env: { FEATHERLAB_PORT: port } });
     assert.equal(out.status, 1, port);
-    assert.match(out.stderr, /featherlab_PORT must be a non-privileged TCP port/);
+    assert.match(out.stderr, /FEATHERLAB_PORT must be a non-privileged TCP port/);
     assert.deepEqual(out.calls, [], "provisioning must not start");
   }
 });
@@ -136,7 +142,13 @@ function cliWithFakeEnvironment(args, { dockerExitCode = 0, kindExitCode = 0, en
   chmodSync(path.join(dir, "kind"), 0o755);
   const result = spawnSync(process.execPath, [bin, ...args], {
     encoding: "utf8",
-    env: { ...process.env, FEATHERLAB_NO_UPDATE_CHECK: "1", ...env, PATH: dir },
+    env: {
+      ...process.env,
+      FEATHERLAB_NO_UPDATE_CHECK: "1",
+      FEATHERLAB_STATE_DIR: path.join(dir, "state"),
+      ...env,
+      PATH: dir,
+    },
   });
   let calls = [];
   try {
@@ -161,10 +173,10 @@ test("`-V` is an alias for --version", () => {
   assert.deepEqual(out.calls, []);
 });
 
-test("`start` explicit command rejects an invalid featherlab_PORT", () => {
-  const out = cliWithFakeDocker(["start", "--no-open"], { env: { featherlab_PORT: "80" } });
+test("`start` explicit command rejects an invalid FEATHERLAB_PORT", () => {
+  const out = cliWithFakeDocker(["start", "--no-open"], { env: { FEATHERLAB_PORT: "80" } });
   assert.equal(out.status, 1);
-  assert.match(out.stderr, /featherlab_PORT must be a non-privileged TCP port/);
+  assert.match(out.stderr, /FEATHERLAB_PORT must be a non-privileged TCP port/);
   assert.deepEqual(out.calls, []);
 });
 

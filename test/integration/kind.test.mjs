@@ -45,8 +45,10 @@ after(async () => {
   env?.teardown();
 });
 
-const post = async (id, action) =>
-  (await fetch(`${base}/${id}/${action}`, { method: "POST" })).json();
+const post = async (id, action, query = "") =>
+  (await fetch(`${base}/${id}/${action}${query}`, { method: "POST" })).json();
+// Taking the environment from another exercise that holds it must be confirmed.
+const CONFIRM = "?discardActive=true";
 
 test("k8s-0001: reset -> fail -> solve in the workstation -> pass -> reset", options, async () => {
   await post("k8s-0001", "reset");
@@ -66,7 +68,8 @@ test(
   "k8s-0002: activate is idempotent, grading reflects real state, reset is scoped",
   options,
   async () => {
-    await post("k8s-0002", "reset");
+    assert.equal((await post("k8s-0002", "reset")).code, "ENVIRONMENT_IN_USE");
+    await post("k8s-0002", "reset", CONFIRM);
     await post("k8s-0002", "activate");
     await post("k8s-0002", "activate");
     assert.match(
@@ -89,7 +92,10 @@ test(
     await post("k8s-0002", "reset");
     assert.equal((await post("k8s-0002", "check")).result.success, false);
     assert.match(kubectl("get", "pod", "web", "-n", "default", "-o", "name"), /pod\/web/);
-    await post("k8s-0001", "reset");
+
+    // Switching back cleans up k8s-0002 (Deployment and its managed namespace).
+    await post("k8s-0001", "reset", CONFIRM);
+    assert.equal(kubectl("get", "deployments", "-n", "staging", "--no-headers").trim(), "");
   },
 );
 

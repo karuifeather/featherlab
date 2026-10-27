@@ -461,6 +461,9 @@ test("first successful check shows completion feedback and next exercise button"
     "Exercise completed",
   );
   await expect(page.locator('[data-testid="next-exercise-btn"]')).toBeVisible();
+  await expect(page.locator('[data-testid="next-exercise-note"]')).toContainText(
+    "fresh environment",
+  );
 });
 
 // Regression for code-block clipping: a flex-column scroll body shrank tall <pre> blocks.

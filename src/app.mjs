@@ -1,4 +1,5 @@
 import { ContentError } from "./core/errors.mjs";
+import { EnvironmentSession } from "./application/environment-session.mjs";
 import { ExerciseService } from "./application/exercise-service.mjs";
 import { AttemptsService } from "./application/learning/attempts-service.mjs";
 import { ProgressionService } from "./application/learning/progression-service.mjs";
@@ -41,6 +42,12 @@ export function createApp({
   const registry = ExerciseRegistry.build(source.discover(), { tracks, validators });
   const lifecycle = new LifecycleManager({ tracks, validators, logger, timeouts });
   const persistence = stateDir ? createPersistence({ stateDir }) : null;
+  const session = new EnvironmentSession({
+    lifecycle,
+    registry,
+    store: persistence?.environment,
+    logger,
+  });
 
   let progression = null;
   let attemptsService = null;
@@ -54,7 +61,7 @@ export function createApp({
   return {
     service: new ExerciseService({
       registry,
-      lifecycle,
+      session,
       progression,
       attemptsService,
       resumeService,

@@ -51,6 +51,11 @@ export function exerciseFiles(slug, overrides = {}, extra = {}) {
   };
 }
 
-export function appFor(files, runner) {
-  return createApp({ runner, contentRoot: makeContent(files), logger: { warn() {}, error() {} } });
+export function appFor(files, runner, options = {}) {
+  return createApp({
+    runner,
+    contentRoot: makeContent(files),
+    logger: { warn() {}, error() {} },
+    ...options,
+  });
 }

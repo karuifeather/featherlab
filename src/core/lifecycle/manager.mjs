@@ -2,6 +2,7 @@ import { ConflictError, FeatherLabError, LifecycleError } from "../errors.mjs";
 import { runChecks } from "../validation/engine.mjs";
 
 const DEFAULT_TIMEOUTS_MS = Object.freeze({
+  probe: 30_000,
   activate: 120_000,
   check: 60_000,
   reset: 120_000,
@@ -13,6 +14,7 @@ const silent = { warn() {}, error() {} };
 /**
  * Orchestrates the exercise lifecycle:
  *
+ *   probe    = prepare only: is the environment reachable? Read-only, never mutates.
  *   activate = prepare (environment reachable) -> setup (create required resources)
  *   check    = read state through the track's query adapter -> run validators -> score
  *   reset    = prepare -> remove the learner's work -> restore setup state
@@ -39,6 +41,14 @@ export class LifecycleManager {
     this.#validators = validators;
     this.#timeouts = { ...DEFAULT_TIMEOUTS_MS, ...timeouts };
     this.#logger = logger;
+  }
+
+  /** Read-only reachability check, so callers can fail before any mutation begins. */
+  async probe(exercise) {
+    return this.#run("probe", exercise, async ({ driver, signal }) => {
+      await driver.prepare({ exercise, signal });
+      return { exerciseId: exercise.id };
+    });
   }
 
   async activate(exercise) {

@@ -47,7 +47,7 @@ lifecycle: # track-specific; validated by the track
   setup:
     manifests: [setup/namespace.yaml] # applied (idempotently) on activate/reset
   reset:
-    delete: # learner-created objects removed on reset
+    delete: # learner-created objects removed on reset AND when another exercise is opened
       - { kind: Pod, name: web, namespace: default }
 
 checks: # required; declarative, graded against real state
@@ -59,7 +59,35 @@ checks: # required; declarative, graded against real state
     params: { kind: Pod, name: web, namespace: default }
 ```
 
-Unknown properties are errors. Multiple valid solutions: wrap alternatives in `any-of`:
+Unknown properties are errors.
+
+### Isolation contract
+
+All exercises share one practice cluster. When a learner opens a different exercise, FeatherLab
+deletes what the previous exercise _declares_ and resets the new one. Anything else the learner
+created stays behind. Write exercises so that leftovers cannot change the outcome of another
+exercise:
+
+1. **Use a dedicated namespace.** Create `<exercise-slug>` (or similar) in `setup.manifests`
+   and put every learner object in it. Cleanup deletes the labelled namespace and everything
+   inside it, including objects you did not anticipate. Prefer this over `default` (k8s-0001
+   predates this rule).
+2. **Declare everything the learner creates outside it.** Every object the learner is asked to
+   create in a shared namespace, and every cluster-scoped object, must be listed in
+   `reset.delete`. That list is how FeatherLab clears work on reset and on a switch.
+3. **Declare all setup resources.** Only objects applied from `setup.manifests` carry the
+   ownership labels that cleanup uses.
+4. **Do not depend on the absence of foreign objects.** Grade the objects you asked for. Avoid
+   checks that a stray NetworkPolicy, ResourceQuota, LimitRange, RoleBinding or Service from
+   another exercise could flip.
+5. **Verify it.** An exercise that already passes right after a reset fails to open (step
+   `baseline`) instead of handing out a pre-solved problem. Before publishing, solve the exercise,
+   open a different one, come back, and confirm that Check fails.
+
+Labs that change cluster-wide state (CNI, admission configuration, node changes, typical of
+CKA/CKS) cannot be isolated this way. They will need a disposable environment per lab.
+
+Multiple valid solutions: wrap alternatives in `any-of`:
 
 ```yaml
 - id: image

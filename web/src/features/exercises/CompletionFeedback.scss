@@ -41,6 +41,13 @@
   }
 }
 
+.next-exercise-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .next-exercise-arrow {
   transition: transform var(--dur-base) var(--ease-out);
 }

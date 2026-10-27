@@ -92,6 +92,47 @@ again; errors report which step failed and which completed. Each operation has a
 objects carry `app.kubernetes.io/managed-by=featherlab` and `featherlab.dev/exercise=<id>`;
 cleanup only deletes setup objects that still carry that label.
 
+**One exercise owns the cluster at a time.** Every exercise shares one practice cluster, so
+`application/environment-session.mjs` records which exercise owns it and whether that owner is
+`ready` or `preparing` (SQLite `active_environment`, so it survives `stop`/`start`). It enforces:
+
+- Opening a _different_ exercise runs `cleanup` on the previous owner, then `reset` on the new
+  one. That removes everything the previous exercise _declares_ (its `reset.delete` objects and
+  its labelled setup objects). Objects the learner created under other names are not removed,
+  and some of them can still affect later exercises: a NetworkPolicy, ResourceQuota, LimitRange
+  or RoleBinding in a shared namespace, or a Service whose selector matches another exercise's
+  Pods. See "Isolation contract" in `authoring.md`.
+- Taking the cluster from a `ready` owner discards the learner's work there, so it must be
+  confirmed (`?discardActive=true`, `featherlab reset --yes`). Without confirmation the request
+  is `409 ENVIRONMENT_IN_USE` (`details.activeExerciseId`) and nothing is touched. The UI shows a
+  confirmation card. "Next exercise" after a pass counts as confirmation; the note under the
+  button says the next exercise opens in a fresh environment.
+- Reopening the `ready` owner (page reload, restart) only re-applies setup; work is kept.
+- Baseline guard: right after a reset the exercise's checks run once. If they already pass,
+  activation fails at step `baseline` and the exercise stays `preparing`. This catches content
+  whose `reset.delete` misses an object the checks look for.
+- Only the `ready` owner can be graded (`409 EXERCISE_NOT_ACTIVE` otherwise), so returning to a
+  completed problem means solving it again. Completion itself is never revoked.
+- Operations are serialized across exercises; a repeat request for an exercise that already
+  has one pending gets 409 (an identical activate joins the pending one).
+- Transitions follow a recovery protocol, because SQLite and the cluster cannot share a
+  transaction:
+  1. **Probe.** A read-only reachability check (`LifecycleManager.probe`). If it fails, nothing
+     has changed: the record is untouched, and a `ready` owner keeps its work and stays gradable.
+  2. **Journal.** The record turns `preparing` immediately before the first mutating command.
+  3. **Mutate.** Cleanup of the previous owner, reset of the new exercise, the baseline check.
+  4. **Commit.** The new exercise turns `ready`.
+
+  A failure or crash after step 2 leaves a `preparing` record naming the exercise that may
+  still have resources in the cluster. That state is treated as possibly inconsistent, never
+  intact: it is not graded or resumed, reopening it resets it, and opening another exercise
+  cleans it up first, with no confirmation needed. A cluster that drops out between the probe
+  and the first mutation falls under the same conservative rule.
+
+- There is one mutation path. `featherlab reset` sends its request to the running server (port
+  from `featherlab.port` in the state dir) and only changes the cluster directly when no server
+  is running. A server that is alive but unreachable is never bypassed.
+
 **Public output is whitelisted.** `application/presenters.mjs` builds every response from
 named fields. Checks, params, manifests, solutions, source paths, profiles and validator
 diagnostics are never copied. Hints are served one at a time. Hidden checks report only
@@ -137,7 +178,10 @@ server (src/api/terminal.mjs) ──hold latest size until the exec exists──
 ## Lifecycle
 
 ```text
-activate = prepare (cluster reachable) -> setup (apply manifests)
+activate = ready owner: prepare -> setup (apply manifests); work is kept
+           otherwise:   [confirm if another owner is ready] -> probe (read-only)
+                        -> journal preparing -> cleanup(previous owner) -> reset
+                        -> baseline check must fail -> commit ready
 check    = query state -> run validators -> weighted score
 reset    = prepare -> delete learner work -> re-apply setup
 cleanup  = prepare -> delete learner work -> delete managed setup objects

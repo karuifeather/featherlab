@@ -45,7 +45,7 @@ featherlab update      # upgrade to the latest version from npm
 featherlab doctor      # check Docker daemon and kind
 featherlab status      # show runtime status
 featherlab exercises   # list available exercises
-featherlab reset [id]  # reset an exercise (default k8s-0001) to its initial state
+featherlab reset [id] [--yes]  # reset an exercise (default k8s-0001); --yes if another holds the cluster
 featherlab validate-content [dir]  # validate exercise definitions offline (no Docker needed)
 featherlab --version   # print version (alias: -V)
 featherlab --help
@@ -56,7 +56,7 @@ Environment overrides:
 | Variable               | Default                                                 | Notes                     |
 | ---------------------- | ------------------------------------------------------- | ------------------------- |
 | `FEATHERLAB_IMAGE`     | `ghcr.io/karuifeather/featherlab-workstation:<version>` | Workstation image         |
-| `featherlab_PORT`      | `4317`                                                  | HTTP port; must be ≥ 1024 |
+| `FEATHERLAB_PORT`      | `4317`                                                  | HTTP port; must be ≥ 1024 |
 | `FEATHERLAB_STATE_DIR` | `~/.featherlab`                                         | Kubeconfigs, PID file     |
 
 **Graceful shutdown:** `featherlab stop` reads `~/.featherlab/featherlab.pid`. If the file exists and the recorded process is still the FeatherLab CLI (verified by entry-point path and process start time, not just the PID), it sends SIGTERM and waits up to 15 seconds for a clean exit. If no running instance is found, it stops the workstation container and kind node containers directly. The cluster and its workloads are always preserved; only the containers are stopped.
@@ -129,8 +129,8 @@ inspects the resulting Kubernetes state through reusable validators. See
 `GET /api/exercises/:id/hints/:n`, `POST /api/exercises/:id/{activate,check,reset}`,
 `GET /api/status` (v0.1 fields `ready`, `cluster`, `track`, `exercise` are unchanged; `exercises`
 is the added exercise count). Errors are `{error, code}`. Requests must use a loopback `Host`
-header (`127.0.0.1:<port>` or `localhost:<port>`). The v0.1 `POST /api/check` and `POST /api/reset`
-remain as deprecated aliases for `k8s-0001`.
+header (`127.0.0.1:<port>` or `localhost:<port>`). The v0.1 `POST /api/check` remains as a
+deprecated alias for checking `k8s-0001` (it follows the same rules: the exercise must be open).
 
 ### Tests
 

@@ -49,6 +49,7 @@ async function runInTerminal(command) {
 const lessons = () => page.locator('[data-testid="lesson"]');
 const checkButton = () => page.getByRole("button", { name: "Check solution" });
 const resetButton = () => page.getByRole("button", { name: "Reset task" });
+const environmentConfirm = () => page.locator('[data-testid="environment-confirm"]');
 
 test("launcher offers the Kubernetes track, which lists both exercises", async () => {
   await page.goto("/");
@@ -182,26 +183,46 @@ test("solving the exercise in the browser terminal passes grading", async () => 
   await expect(page.locator('[data-testid="check-results"] h3')).toHaveText("✓ Passed");
 });
 
-test("switching exercises keeps the same terminal session", async () => {
+test("switching exercises keeps the terminal session but clears the previous work", async () => {
   await lessons().nth(1).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Run a Deployment");
   await expect(page.locator('[data-testid="requirements"] li').first()).toContainText("staging");
+
+  // The cluster still holds exercise 1: nothing is reset until the learner confirms.
+  await expect(environmentConfirm()).toContainText("Your first Pod");
+  await expect(checkButton()).toBeDisabled();
+  await runInTerminal('kubectl get pod web -o name && echo "kept-$((20+1))"');
+  await expect(terminalText()).toContainText("kept-21");
+  await page.getByRole("button", { name: "Start this exercise" }).click();
+  await expect(environmentConfirm()).toHaveCount(0);
 
   await expect(terminalConnected()).toBeVisible();
   await runInTerminal('echo "$FL_MARK-survived"');
   await expect(terminalText()).toContainText("session-one-survived");
 
-  // Exercise 2 starts failing, while exercise 1's pod is untouched.
+  // Exercise 2 starts failing, and exercise 1's work was cleared when it took over.
   await checkButton().click();
   await expect(page.locator('[data-testid="check-results"] h3')).not.toHaveText("✓ Passed");
   await expect(page.locator('[data-testid="check-results"]')).toContainText("Deployment");
-  await runInTerminal("kubectl get pod web -o name");
-  await expect(terminalText()).toContainText("pod/web");
+  await runInTerminal("kubectl get pod web");
+  await expect(terminalText()).toContainText('pods "web" not found');
 });
 
-test("resetting an exercise removes the learner's work", async () => {
+test("a revisited exercise starts fresh; resetting removes the learner's work", async () => {
   await lessons().nth(0).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your first Pod");
+  await expect(environmentConfirm()).toContainText("Run a Deployment");
+  await page.getByRole("button", { name: "Start this exercise" }).click();
+  // Completed earlier, but stale work is gone: it has to be solved again.
+  await checkButton().click();
+  await expect(page.locator('[data-testid="check-results"] h3')).toContainText("0/4 checks passed");
+
+  await runInTerminal("kubectl run web --image=nginx:1.27");
+  // The arithmetic keeps the typed command itself from matching the marker.
+  await runInTerminal(
+    'kubectl wait --for=condition=Ready pod/web --timeout=240s && echo "ready-again-$((40+2))"',
+  );
+  await expect(terminalText()).toContainText("ready-again-42", { timeout: 260_000 });
   await checkButton().click();
   await expect(page.locator('[data-testid="check-results"] h3')).toHaveText("✓ Passed");
 

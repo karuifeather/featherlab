@@ -117,6 +117,8 @@ test("unknown and malformed ids are 404 with a structured error", async () => {
 });
 
 test("POST /api/exercises/:id/check returns a structured result", async () => {
+  await call("/api/exercises/k8s-0001/activate", { method: "POST" });
+  cluster.put(readyPod());
   const { status, body } = await call("/api/exercises/k8s-0001/check", { method: "POST" });
   assert.equal(status, 200);
   const { result } = body;
@@ -134,12 +136,27 @@ test("POST /api/exercises/:id/check returns a structured result", async () => {
 });
 
 test("POST activate and reset follow the lifecycle", async () => {
-  const activated = await call("/api/exercises/k8s-0002/activate", { method: "POST" });
+  // k8s-0001 holds the environment from the previous test: switching must be confirmed.
+  const refused = await call("/api/exercises/k8s-0002/activate", { method: "POST" });
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.code, "ENVIRONMENT_IN_USE");
+  assert.equal(refused.body.details.activeExerciseId, "k8s-0001");
+
+  const activated = await call("/api/exercises/k8s-0002/activate?discardActive=true", {
+    method: "POST",
+  });
   assert.equal(activated.status, 200);
-  assert.deepEqual(activated.body.steps, ["apply Namespace/staging"]);
+  assert.equal(activated.body.environment, "fresh");
+  assert.ok(activated.body.steps.includes("apply Namespace/staging"));
   assert.equal(activated.body.exercise.id, "k8s-0002");
 
-  const reset = await call("/api/exercises/k8s-0001/reset", { method: "POST" });
+  const reopened = await call("/api/exercises/k8s-0002/activate", { method: "POST" });
+  assert.equal(reopened.body.environment, "resumed");
+  assert.deepEqual(reopened.body.steps, ["apply Namespace/staging"]);
+
+  const reset = await call("/api/exercises/k8s-0001/reset?discardActive=true", {
+    method: "POST",
+  });
   assert.equal(reset.status, 200);
   assert.equal(cluster.find("Pod", "web", "default"), undefined);
 });
@@ -153,6 +170,7 @@ test("methods are enforced and unknown endpoints are JSON 404s", async () => {
 });
 
 test("cross-origin mutating requests are rejected; same-origin and no-origin pass", async () => {
+  await call("/api/exercises/k8s-0001/activate", { method: "POST" });
   const evil = await call("/api/exercises/k8s-0001/check", {
     method: "POST",
     headers: { Origin: "http://evil.example" },
@@ -165,13 +183,14 @@ test("cross-origin mutating requests are rejected; same-origin and no-origin pas
   assert.equal(same.status, 200);
 });
 
-test("legacy /api/check and /api/reset keep their v0.1 response shapes", async () => {
+test("legacy /api/check keeps its v0.1 response shape; /api/reset is gone", async () => {
+  await call("/api/exercises/k8s-0001/activate", { method: "POST" });
   cluster.put(readyPod());
   const check = await call("/api/check", { method: "POST" });
   assert.deepEqual(Object.keys(check.body).sort(), ["checks", "passed", "success", "total"]);
   assert.equal(check.body.success, true);
   assert.deepEqual(Object.keys(check.body.checks[0]).sort(), ["id", "label", "pass"]);
-  assert.deepEqual((await call("/api/reset", { method: "POST" })).body, { reset: true });
+  assert.equal((await call("/api/reset", { method: "POST" })).status, 404);
 });
 
 test("a cluster outage is a 503 with a code, not a stack trace", async () => {

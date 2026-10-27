@@ -36,7 +36,11 @@ export const api = {
   listExercises: (query = "") => request(`/api/exercises${query}`),
   getExercise: (id) => request(exercisePath(id)),
   getHint: (id, index) => request(`${exercisePath(id)}/hints/${index}`),
-  activate: (id) => request(`${exercisePath(id)}/activate`, { method: "POST" }),
+  // `discardActive` confirms resetting another exercise that holds the practice environment.
+  activate: (id, { discardActive = false } = {}) =>
+    request(`${exercisePath(id)}/activate${discardActive ? "?discardActive=true" : ""}`, {
+      method: "POST",
+    }),
   check: (id) => request(`${exercisePath(id)}/check`, { method: "POST" }),
   reset: (id) => request(`${exercisePath(id)}/reset`, { method: "POST" }),
   select: (id) => request(`${exercisePath(id)}/select`, { method: "POST" }),

@@ -25,6 +25,15 @@ learner's machine**.
   `kube-node-lease` are rejected.
 - `cleanup` only deletes setup-created objects that still carry the `featherlab.dev/exercise=<id>` label,
   so it cannot remove a resource the learner created under the same name.
+- One exercise owns the shared cluster at a time. Opening another one (after confirmation)
+  cleans up the previous owner's declared objects and resets the new one. A freshly reset
+  exercise must not already pass (baseline guard), and only the ready owner can be graded
+  (`409 EXERCISE_NOT_ACTIVE`). Learner objects under the names an exercise declares therefore
+  cannot carry a stale pass into a revisited or different exercise.
+- **Isolation caveat:** undeclared learner objects survive a switch. Cluster-shaping kinds
+  (NetworkPolicy, ResourceQuota, LimitRange, RoleBinding) and Services with broad selectors can
+  influence later exercises. The authoring contract in `authoring.md` limits this. Labs that
+  change cluster-wide state need disposable environments (planned).
 - One operation per exercise at a time (`409 OPERATION_IN_PROGRESS`); every operation has a deadline
   (`504` on timeout) and failures report which step stopped and what had completed. Every step is
   idempotent, so the remedy is to run the operation again.

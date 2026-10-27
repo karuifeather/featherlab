@@ -6,8 +6,14 @@ import { ValidatorRegistry } from "../../src/core/validation/registry.mjs";
 import { createFakeCluster, deployment, readyPod } from "../helpers/fake-cluster.mjs";
 
 const quiet = { warn() {}, error() {} };
-const appWith = (resources) =>
-  createApp({ runner: createFakeCluster({ resources }), logger: quiet }).service;
+/** Open the exercise as the UI does, then put the learner's work in place and grade it. */
+async function gradeWith(cluster, id, resources = [], service = undefined) {
+  service ??= createApp({ runner: cluster, logger: quiet }).service;
+  await service.activate(id);
+  for (const resource of resources) cluster.put(resource);
+  return service.check(id);
+}
+const appWith = (resources) => ({ check: (id) => gradeWith(createFakeCluster(), id, resources) });
 
 // --- Regression: the original Pod exercise, previously covered by gradePod() tests ---
 
@@ -46,18 +52,13 @@ test("regression k8s-0001: the right pod in the wrong namespace earns nothing", 
 
 test("k8s-0002 grades a correct Deployment", async () => {
   const result = await appWith([deployment()]).check("k8s-0002");
-  assert.equal(result.checks.find((c) => c.id === "namespace").passed, false);
-  assert.equal(result.checks.filter((c) => c.passed).length, 5);
+  assert.equal(result.checks.find((c) => c.id === "namespace").passed, true, "setup created it");
+  assert.equal(result.checks.filter((c) => c.passed).length, 6);
+  assert.equal(result.success, true);
 });
 
 test("k8s-0002 weights count toward partial credit", async () => {
-  const cluster = createFakeCluster({
-    resources: [
-      { kind: "Namespace", apiVersion: "v1", metadata: { name: "staging" } },
-      deployment({ available: 0 }),
-    ],
-  });
-  const result = await createApp({ runner: cluster, logger: quiet }).service.check("k8s-0002");
+  const result = await appWith([deployment({ available: 0 })]).check("k8s-0002");
   const available = result.checks.find((c) => c.id === "available");
   assert.equal(available.passed, false);
   assert.equal(available.weight, 2);
@@ -119,9 +120,11 @@ test("aggregate of no results is not a success", () => {
 });
 
 test("an unreachable cluster yields an incomplete grading with helpful feedback", async () => {
-  const cluster = createFakeCluster({ resources: [readyPod()] });
+  const cluster = createFakeCluster();
+  const { service } = createApp({ runner: cluster, logger: quiet });
+  await service.activate("k8s-0001");
   cluster.down = true;
-  const result = await createApp({ runner: cluster, logger: quiet }).service.check("k8s-0001");
+  const result = await service.check("k8s-0001");
   assert.equal(result.outcome, "incomplete");
   assert.equal(result.counts.errored, 4);
   assert.match(result.checks[0].feedback, /practice cluster/);
@@ -140,7 +143,8 @@ test("hidden checks reveal pass/fail but not what they test", async () => {
       },
     ],
   });
-  const result = await appFor(files, createFakeCluster()).service.check("demo-0001");
+  const cluster = createFakeCluster();
+  const result = await gradeWith(cluster, "demo-0001", [], appFor(files, cluster).service);
   assert.equal(result.checks[0].label, "Hidden check");
   assert.equal(result.checks[0].id, "hidden-1");
   assert.doesNotMatch(JSON.stringify(result), /SECRETNAME|secret-name/);

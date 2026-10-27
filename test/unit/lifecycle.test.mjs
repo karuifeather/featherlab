@@ -12,7 +12,7 @@ const packaged = (cluster) => createApp({ runner: cluster, logger: quiet });
 test("activate creates the namespace with FeatherLab ownership labels", async () => {
   const cluster = createFakeCluster();
   const { steps } = await packaged(cluster).service.activate("k8s-0002");
-  assert.deepEqual(steps, ["apply Namespace/staging"]);
+  assert.ok(steps.includes("apply Namespace/staging"));
   const ns = cluster.find("Namespace", "staging");
   assert.equal(ns.metadata.labels["app.kubernetes.io/managed-by"], "featherlab");
   assert.equal(ns.metadata.labels[EXERCISE_LABEL], "k8s-0002");
@@ -28,11 +28,13 @@ test("activate is idempotent", async () => {
   assert.equal(cluster.all().length, 1);
 });
 
-test("an exercise with no setup activates as a no-op", async () => {
+test("an exercise with no setup creates nothing on activate", async () => {
   const cluster = createFakeCluster();
-  const { steps } = await packaged(cluster).service.activate("k8s-0001");
-  assert.deepEqual(steps, []);
+  const { service } = packaged(cluster);
+  await service.activate("k8s-0001");
   assert.equal(cluster.all().length, 0);
+  const { steps } = await service.activate("k8s-0001");
+  assert.deepEqual(steps, [], "reopening the active exercise only re-applies (empty) setup");
 });
 
 test("reset removes the learner's work and restores the setup state", async () => {
@@ -62,7 +64,7 @@ test("resetting one exercise never touches resources of another", async () => {
   assert.ok(cluster.find("Pod", "web", "default"), "exercise 1 work survives exercise 2 reset");
   assert.equal(cluster.find("Deployment", "api", "staging"), undefined);
 
-  await service.reset("k8s-0001");
+  await service.reset("k8s-0001", { discardActive: true });
   assert.equal(cluster.find("Pod", "web", "default"), undefined);
   assert.ok(cluster.find("Pod", "keepme", "default"), "unrelated pods are never deleted");
   assert.ok(cluster.find("Pod", "web", "other"), "same name in another namespace is untouched");
@@ -165,10 +167,13 @@ test("concurrent operations on one exercise are rejected, then allowed once fini
   await service.check("k8s-0001");
 });
 
-test("different exercises may run concurrently", async () => {
+test("operations on different exercises are queued, not rejected", async () => {
   const cluster = createFakeCluster();
   const { service } = packaged(cluster);
-  await Promise.all([service.reset("k8s-0001"), service.reset("k8s-0002")]);
+  await Promise.all([
+    service.reset("k8s-0001"),
+    service.reset("k8s-0002", { discardActive: true }),
+  ]);
 });
 
 test("the operation deadline is delivered to the runner as an AbortSignal", async () => {
@@ -179,7 +184,9 @@ test("the operation deadline is delivered to the runner as an AbortSignal", asyn
     seen.push(options.signal);
     return original(argv, options);
   };
-  await packaged(cluster).service.check("k8s-0001");
+  const { service } = packaged(cluster);
+  await service.activate("k8s-0001");
+  await service.check("k8s-0001");
   assert.ok(seen.length > 0 && seen.every((s) => s instanceof AbortSignal));
 });
 

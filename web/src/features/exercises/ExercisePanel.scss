@@ -283,3 +283,33 @@
     padding: 12px 16px;
   }
 }
+
+// Shown instead of silently resetting another exercise that holds the shared cluster.
+.env-confirm {
+  margin-top: 16px;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--color-warning);
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+
+  h3 {
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--text-primary);
+    margin: 0 0 6px;
+  }
+
+  p {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin: 0 0 12px;
+  }
+}
+
+.env-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

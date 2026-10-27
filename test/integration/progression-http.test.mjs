@@ -38,6 +38,7 @@ const CONTENT_FILES = {
 
 let stateDir;
 let contentRoot;
+let cluster;
 let server;
 let persistence;
 let base;
@@ -45,12 +46,7 @@ let base;
 before(async () => {
   stateDir = mkdtempSync(path.join(os.tmpdir(), "featherlab-http-"));
   contentRoot = makeContent(CONTENT_FILES);
-  const cluster = createFakeCluster({
-    resources: [
-      readyPod({ name: "demo", namespace: "default" }),
-      readyPod({ name: "demo2", namespace: "default" }),
-    ],
-  });
+  cluster = createFakeCluster();
   const app = createApp({ runner: cluster, contentRoot, stateDir, logger: quiet });
   persistence = app.persistence;
   server = await startServer(0, { service: app.service });
@@ -73,6 +69,8 @@ const call = async (urlPath, init) => {
 // ── Phase 1: grade demo-0001 via HTTP ─────────────────────────────────────────
 
 test("POST /check returns passed outcome with progress field", async () => {
+  await call("/api/exercises/demo-0001/activate", { method: "POST" });
+  cluster.put(readyPod({ name: "demo", namespace: "default" })); // the learner's work
   const { status, body } = await call("/api/exercises/demo-0001/check", { method: "POST" });
   assert.equal(status, 200);
   assert.equal(body.result.outcome, "passed");
@@ -140,7 +138,7 @@ test("completion persists across app restart; /progress still shows completed", 
 
 test("POST /check after completion: outcome=failed, progress.completed stays true", async () => {
   // demo-0001 is already completed from Phase 1. Grade it again against an empty cluster.
-  // It must fail, but completion must remain true and attemptCount must increase.
+  // It is still the active exercise (persisted in SQLite), so grading is allowed. It must fail, but completion must remain true and attemptCount must increase.
   const failCluster = createFakeCluster({ resources: [] }); // no pods → all checks fail
   await server.close();
   persistence.close();

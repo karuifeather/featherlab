@@ -67,6 +67,27 @@ export class LifecycleError extends FeatherLabError {
 }
 
 /**
+ * The exercise is not the one currently holding the shared practice environment, so its
+ * cluster state cannot be trusted for grading. Opening (activating) it again fixes this.
+ */
+export class InactiveExerciseError extends FeatherLabError {
+  constructor(message, details) {
+    super("EXERCISE_NOT_ACTIVE", message, { details });
+  }
+}
+
+/**
+ * Opening the exercise would reset another exercise that currently owns the practice
+ * environment. The caller must confirm (discard the active exercise's cluster work) first.
+ * `details.activeExerciseId` names the exercise whose work would be lost.
+ */
+export class EnvironmentInUseError extends FeatherLabError {
+  constructor(message, details) {
+    super("ENVIRONMENT_IN_USE", message, { details });
+  }
+}
+
+/**
  * The requested exercise is locked because one or more prerequisites have not been
  * completed yet. `details.unmetPrerequisites` lists the blocking exercise ids.
  */

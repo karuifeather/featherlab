@@ -42,9 +42,5 @@ export function legacyRoutes(route) {
     route("POST", /^\/api\/check$/, async (_, { service }) => ({
       body: legacyResult(await service.check(LEGACY_EXERCISE_ID)),
     })),
-    route("POST", /^\/api\/reset$/, async (_, { service }) => {
-      await service.reset(LEGACY_EXERCISE_ID);
-      return { body: { reset: true } };
-    }),
   ];
 }

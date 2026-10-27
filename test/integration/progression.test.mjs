@@ -41,12 +41,7 @@ const CONTENT_FILES = {
 test("full progression lifecycle: grade → unlock → restart → resume", async () => {
   const contentRoot = makeContent(CONTENT_FILES);
   const stateDir = mkdtempSync(path.join(os.tmpdir(), "featherlab-prog-"));
-  const cluster = createFakeCluster({
-    resources: [
-      readyPod({ name: "demo", namespace: "default" }),
-      readyPod({ name: "demo2", namespace: "default" }),
-    ],
-  });
+  const cluster = createFakeCluster();
 
   try {
     // ── Phase 1: initial state ────────────────────────────────────────────────
@@ -73,7 +68,9 @@ test("full progression lifecycle: grade → unlock → restart → resume", asyn
     assert.equal(resume1.exerciseId, "demo-0001");
     assert.equal(resume1.fallback, false);
 
-    // Grade demo-0001 successfully
+    // Open and solve demo-0001, then grade it
+    await svc1.activate("demo-0001");
+    cluster.put(readyPod({ name: "demo", namespace: "default" }));
     const result1 = await svc1.check("demo-0001");
     assert.equal(result1.outcome, "passed");
     assert.ok(result1.progress !== undefined);
@@ -87,6 +84,8 @@ test("full progression lifecycle: grade → unlock → restart → resume", asyn
 
     // ── Phase 3: select and grade demo-0002 ──────────────────────────────────
     svc1.select("demo-0002");
+    await svc1.activate("demo-0002", { discardActive: true }); // leaving the solved demo-0001
+    cluster.put(readyPod({ name: "demo2", namespace: "default" }));
     const result2 = await svc1.check("demo-0002");
     assert.equal(result2.outcome, "passed");
     assert.equal(result2.progress.completed, true);
@@ -170,6 +169,7 @@ test("failed grading: attempt recorded, exercise remains incomplete", async () =
       stateDir,
       logger: quiet,
     });
+    await service.activate("demo-0001");
     const result = await service.check("demo-0001");
     assert.equal(result.outcome, "failed");
     assert.equal(result.progress.completed, false);
@@ -188,7 +188,6 @@ test("incomplete grading result is not recorded as a learning attempt", async ()
   const contentRoot = makeContent(CONTENT_FILES);
   const stateDir = mkdtempSync(path.join(os.tmpdir(), "featherlab-incomplete-"));
   const cluster = createFakeCluster({ resources: [] });
-  cluster.down = true; // simulate unreachable cluster
   try {
     const { service, persistence } = createApp({
       runner: cluster,
@@ -196,6 +195,8 @@ test("incomplete grading result is not recorded as a learning attempt", async ()
       stateDir,
       logger: quiet,
     });
+    await service.activate("demo-0001");
+    cluster.down = true; // simulate unreachable cluster
     const result = await service.check("demo-0001");
     assert.equal(result.outcome, "incomplete");
     assert.equal(result.progress, undefined); // no progress field
@@ -234,9 +235,7 @@ test("getResume falls back when stored exercise is locked after restart", async 
 test("track progress summary counts reflect actual states", async () => {
   const contentRoot = makeContent(CONTENT_FILES);
   const stateDir = mkdtempSync(path.join(os.tmpdir(), "featherlab-track-"));
-  const cluster = createFakeCluster({
-    resources: [readyPod({ name: "demo", namespace: "default" })],
-  });
+  const cluster = createFakeCluster();
   try {
     const { service, persistence } = createApp({
       runner: cluster,
@@ -244,6 +243,8 @@ test("track progress summary counts reflect actual states", async () => {
       stateDir,
       logger: quiet,
     });
+    await service.activate("demo-0001");
+    cluster.put(readyPod({ name: "demo", namespace: "default" }));
     await service.check("demo-0001"); // passes → completed
     const trackProgress = service.getTrackProgress("kubernetes");
     const states = trackProgress.map((e) => e.state);

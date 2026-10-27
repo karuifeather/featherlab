@@ -8,6 +8,14 @@ import { legacyRoutes, legacyStatusFields } from "./legacy.mjs";
  *
  * Route table entry: {method, pattern, handler(match, {service, url, cluster}) -> {status?, body}}
  */
+/**
+ * `?discardActive=true` confirms that opening or resetting this exercise may reset another
+ * exercise that currently owns the practice environment. Without it, that is a 409.
+ */
+const discardActive = (url) => ({
+  discardActive: url.searchParams.get("discardActive") === "true",
+});
+
 export function buildRoutes() {
   const id = "([a-z0-9-]{1,63})";
   const route = (method, pattern, handler) => ({ method, pattern, handler });
@@ -50,8 +58,8 @@ export function buildRoutes() {
     route(
       "POST",
       new RegExp(`^/api/exercises/${id}/activate$`),
-      async ([, exerciseId], { service }) => ({
-        body: await service.activate(exerciseId),
+      async ([, exerciseId], { service, url }) => ({
+        body: await service.activate(exerciseId, discardActive(url)),
       }),
     ),
     route(
@@ -64,8 +72,8 @@ export function buildRoutes() {
     route(
       "POST",
       new RegExp(`^/api/exercises/${id}/reset$`),
-      async ([, exerciseId], { service }) => ({
-        body: await service.reset(exerciseId),
+      async ([, exerciseId], { service, url }) => ({
+        body: await service.reset(exerciseId, discardActive(url)),
       }),
     ),
     route("POST", new RegExp(`^/api/exercises/${id}/select$`), ([, exerciseId], { service }) => ({

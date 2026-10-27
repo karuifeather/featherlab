@@ -7,6 +7,7 @@ import { startServer } from "../src/server.mjs";
 import { createRuntime } from "../src/lib/runtime.mjs";
 import { LifecycleCoordinator } from "../src/lifecycle/coordinator.mjs";
 import { resolveEnvironment } from "../src/infrastructure/environment.mjs";
+import { PORT_FILE, resetExercise } from "../src/cli/reset.mjs";
 import { checkForUpdate, readCachedUpdateInfo } from "../src/lib/update-check.mjs";
 import {
   printBanner,
@@ -24,7 +25,7 @@ const args = process.argv.slice(2);
 const noOpen = args.includes("--no-open");
 const cmdArgs = args.filter((a) => a !== "--no-open");
 const cmd = cmdArgs[0] || "start";
-const port = Number(process.env.featherlab_PORT || 4317);
+const port = Number(process.env.FEATHERLAB_PORT || 4317);
 const stateDir = resolveEnvironment().stateDir;
 
 // Passive update notice: read the cache synchronously — zero I/O overhead, never delays exit.
@@ -100,13 +101,14 @@ const cliLogger = {
 async function runStart() {
   printBanner(version);
   if (!Number.isInteger(port) || port < 1024 || port > 65535)
-    throw new Error("featherlab_PORT must be a non-privileged TCP port.");
+    throw new Error("FEATHERLAB_PORT must be a non-privileged TCP port.");
 
   const runtime = createRuntime({}, { log: cliLogger });
   const { service, persistence } = createApp({ stateDir: runtime.config.stateDir });
   const coordinator = new LifecycleCoordinator({ runtime, log: cliLogger });
   // PID file path is known upfront; the file is only written after successful startup.
   const pidFile = path.join(runtime.config.stateDir, "featherlab.pid");
+  const portFile = path.join(runtime.config.stateDir, PORT_FILE);
 
   let shutdownInProgress = false;
   let startupComplete = false;
@@ -120,6 +122,7 @@ async function runStart() {
     }
     try {
       rmSync(pidFile, { force: true });
+      rmSync(portFile, { force: true });
     } catch {
       // Ignore — PID file may not exist if startup was interrupted.
     }
@@ -162,6 +165,8 @@ async function runStart() {
     const startTime = processStartTime(process.pid);
     const pidContent = startTime != null ? `${process.pid} ${startTime}` : String(process.pid);
     writeFileSync(pidFile, pidContent, { mode: 0o600 });
+    // `featherlab reset` sends its request here so the server stays the only mutator.
+    writeFileSync(portFile, String(actualPort), { mode: 0o600 });
   } catch {
     // stateDir is created by provision(), but guard against unexpected failures.
   }
@@ -192,9 +197,10 @@ try {
           "  doctor             Check Docker and kind prerequisites\n" +
           "  status             Show runtime status\n" +
           "  exercises          List available exercises\n" +
-          "  reset [id]         Reset an exercise to its initial state (default: k8s-0001)\n" +
+          "  reset [id] [--yes] Reset an exercise to its initial state (default: k8s-0001);\n" +
+          "                     --yes also resets another exercise that holds the environment\n" +
           "  validate-content   Validate exercise definitions offline (no Docker needed)\n\n" +
-          "Environment: FEATHERLAB_IMAGE, featherlab_PORT, FEATHERLAB_STATE_DIR",
+          "Environment: FEATHERLAB_IMAGE, FEATHERLAB_PORT, FEATHERLAB_STATE_DIR",
       );
       break;
 
@@ -272,8 +278,21 @@ try {
 
     case "reset": {
       const id = cmdArgs[1] && !cmdArgs[1].startsWith("-") ? cmdArgs[1] : "k8s-0001";
-      const { steps } = await createApp().service.reset(id);
-      console.log(`Exercise ${id} reset (${steps.length} step${steps.length === 1 ? "" : "s"}).`);
+      try {
+        const { steps } = await resetExercise({
+          id,
+          discardActive: cmdArgs.includes("--yes") || cmdArgs.includes("-y"),
+          stateDir,
+          isAlive: isFeatherLabProcess,
+          createLocalApp: () => createApp({ stateDir }),
+        });
+        console.log(`Exercise ${id} reset (${steps.length} step${steps.length === 1 ? "" : "s"}).`);
+      } catch (error) {
+        if (error.code !== "ENVIRONMENT_IN_USE") throw error;
+        printError(error.message);
+        printInfo(`Re-run with --yes to reset it anyway: featherlab reset ${id} --yes`);
+        process.exitCode = 1;
+      }
       break;
     }
 
@@ -322,6 +341,7 @@ try {
           }
           // Dead PID — clean the stale file silently before continuing.
           rmSync(pidFile, { force: true });
+          rmSync(path.join(stateDir, PORT_FILE), { force: true });
         }
       } catch {
         // No PID file or unreadable — nothing to clean.
@@ -415,7 +435,7 @@ try {
       throw new Error(`Unknown command: ${cmd}`);
   }
 } catch (error) {
-  const hint = error.code === "EADDRINUSE" ? "Try: featherlab_PORT=<other-port> featherlab" : "";
+  const hint = error.code === "EADDRINUSE" ? "Try: FEATHERLAB_PORT=<other-port> featherlab" : "";
   printError(error.message, { hint });
   process.exitCode = 1;
 }

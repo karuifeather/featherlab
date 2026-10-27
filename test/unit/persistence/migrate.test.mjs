@@ -148,3 +148,30 @@ test("resume_state enforces at most one row", () => {
   });
   db.close();
 });
+
+// ── Active environment (002, 003) ─────────────────────────────────────────────
+
+test("a v2 database upgrades to v3 and its active environment row is ready", async () => {
+  const migration001 =
+    await import("../../../src/infrastructure/persistence/migrations/001-initial.mjs");
+  const migration002 =
+    await import("../../../src/infrastructure/persistence/migrations/002-active-environment.mjs");
+  const db = freshDb();
+  // Reproduce a database written by the release that shipped migration 002 only.
+  db.transaction(() => {
+    migration001.up(db);
+    migration002.up(db);
+    db.setUserVersion(2);
+  });
+  db.prepare(
+    `INSERT INTO active_environment (id, track_id, exercise_id, activated_at)
+     VALUES (1, 'kubernetes', 'k8s-0001', '2026-10-27T00:00:00.000Z')`,
+  ).run();
+
+  runMigrations(db);
+  assert.equal(db.getUserVersion(), CURRENT_VERSION);
+  const row = db.prepare("SELECT exercise_id, state FROM active_environment").get();
+  assert.deepEqual({ ...row }, { exercise_id: "k8s-0001", state: "ready" });
+  assert.throws(() => db.prepare("UPDATE active_environment SET state = 'bogus'").run());
+  db.close();
+});

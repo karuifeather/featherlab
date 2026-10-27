@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./ExercisePanel.scss";
 import { api } from "../../api/client.js";
 import { Inline, Markdown } from "../../components/Markdown.jsx";
@@ -11,6 +11,11 @@ import { useAction } from "./useAction.js";
  * One exercise: statement, requirements, hints, grading and reset. Mount it with
  * `key={exerciseId}` so switching exercises starts from clean state. It never touches the
  * terminal, which lives alongside it in the workspace.
+ *
+ * The practice cluster is shared, so opening this exercise may have to reset another one
+ * that holds it. The server refuses that unless asked; the panel then shows a confirmation
+ * (setup state "confirm") instead of discarding the learner's work. `switchConfirmed` skips
+ * it when the learner already chose to move on (e.g. "Next exercise" after a pass).
  */
 export function ExercisePanel({
   exerciseId,
@@ -19,8 +24,12 @@ export function ExercisePanel({
   nextExercise,
   onProgressUpdate,
   onSelectNext,
+  onOpenExercise,
+  titleOf = () => null,
+  switchConfirmed = false,
 }) {
   const [exercise, setExercise] = useState(null);
+  // state: preparing | ready | failed | confirm (another exercise holds the environment)
   const [setup, setSetup] = useState({ state: "preparing", message: "" });
   const [loadError, setLoadError] = useState("");
   const [result, setResult] = useState(null);
@@ -37,6 +46,37 @@ export function ExercisePanel({
     }
   }, [exerciseProgress]);
 
+  // False once unmounted, so a late activation response cannot touch a stale panel.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  // Only the first activation of this mount may skip the confirmation.
+  const switchConfirmedRef = useRef(switchConfirmed);
+
+  const prepare = useCallback(
+    async ({ discardActive = false } = {}) => {
+      setSetup({ state: "preparing", message: "" });
+      try {
+        await api.activate(exerciseId, { discardActive });
+        if (mounted.current) setSetup({ state: "ready", message: "" });
+      } catch (e) {
+        if (!mounted.current) return;
+        if (e.code === "ENVIRONMENT_IN_USE")
+          setSetup({
+            state: "confirm",
+            message: e.message,
+            activeExerciseId: e.details?.activeExerciseId,
+          });
+        else setSetup({ state: "failed", message: e.message });
+      }
+    },
+    [exerciseId],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -48,21 +88,28 @@ export function ExercisePanel({
         if (!cancelled) setLoadError(e.message);
         return;
       }
-      // Activation is idempotent: it (re)creates whatever the exercise needs.
-      try {
-        await api.activate(exerciseId);
-        if (!cancelled) setSetup({ state: "ready", message: "" });
-      } catch (e) {
-        if (!cancelled) setSetup({ state: "failed", message: e.message });
-      }
+      // Reopening the exercise that holds the environment keeps the learner's work.
+      await prepare({ discardActive: switchConfirmedRef.current });
     })();
     return () => {
       cancelled = true;
     };
-  }, [exerciseId]);
+  }, [exerciseId, prepare]);
+
+  /** Another tab or the CLI took the environment: go back through the confirmation. */
+  const lostEnvironment = (e) =>
+    e.code === "EXERCISE_NOT_ACTIVE" || e.code === "ENVIRONMENT_IN_USE";
 
   const check = useAction(async () => {
-    const data = await api.check(exerciseId);
+    let data;
+    try {
+      data = await api.check(exerciseId);
+    } catch (e) {
+      if (!lostEnvironment(e)) throw e;
+      setResult(null);
+      await prepare();
+      return;
+    }
     setResult(data.result);
     // Detect first-time completion: the result carries a progress field with completed=true
     // and this exercise was not already completed at session start.
@@ -78,14 +125,22 @@ export function ExercisePanel({
   });
 
   const reset = useAction(async () => {
-    await api.reset(exerciseId);
+    try {
+      await api.reset(exerciseId);
+    } catch (e) {
+      if (!lostEnvironment(e)) throw e;
+      setResult(null);
+      await prepare();
+      return;
+    }
     setResult(null);
     setSetup({ state: "ready", message: "" });
   });
 
   // Activation holds the server-side lock for this exercise; wait for it instead of
   // letting a click race it into a "busy" error.
-  const disabled = check.busy || reset.busy || setup.state === "preparing";
+  const disabled =
+    check.busy || reset.busy || setup.state === "preparing" || setup.state === "confirm";
 
   if (loadError)
     return (
@@ -139,6 +194,19 @@ export function ExercisePanel({
           </ul>
         </div>
 
+        {setup.state === "confirm" && (
+          <EnvironmentConfirm
+            activeTitle={titleOf(setup.activeExerciseId)}
+            message={setup.message}
+            onStart={() => prepare({ discardActive: true })}
+            onBack={
+              setup.activeExerciseId && onOpenExercise
+                ? () => onOpenExercise(setup.activeExerciseId)
+                : undefined
+            }
+          />
+        )}
+
         {setup.state === "failed" && (
           <div className="error" data-testid="error-message">
             Could not prepare the environment: {setup.message}
@@ -190,6 +258,37 @@ export function ExercisePanel({
         </div>
       </div>
     </div>
+  );
+}
+
+function EnvironmentConfirm({ activeTitle, message, onStart, onBack }) {
+  return (
+    <section
+      className="env-confirm"
+      data-testid="environment-confirm"
+      aria-labelledby="env-confirm-title"
+    >
+      <h3 id="env-confirm-title">
+        {activeTitle
+          ? `Your cluster is set up for “${activeTitle}”`
+          : "Your cluster is set up for another exercise"}
+      </h3>
+      <p>
+        {activeTitle
+          ? "Starting this exercise resets that exercise's Kubernetes resources, including any unfinished work. Your progress and history stay saved."
+          : message}
+      </p>
+      <div className="env-confirm-actions">
+        <button type="button" className="check-btn" onClick={onStart}>
+          Start this exercise
+        </button>
+        {onBack && (
+          <button type="button" className="reset-btn" onClick={onBack}>
+            {activeTitle ? `Back to “${activeTitle}”` : "Go back"}
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 

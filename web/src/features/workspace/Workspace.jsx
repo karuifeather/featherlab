@@ -37,6 +37,9 @@ export function Workspace({ track, initialExerciseId }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState("problem");
   const [focusTerminal, setFocusTerminal] = useState(false);
+  // The exercise the learner moved to via "Next exercise" after passing: they chose to
+  // leave the solved one, so its environment is reset without asking again.
+  const [switchConfirmedFor, setSwitchConfirmedFor] = useState(null);
   const { containerRef, gridStyle, separatorProps } = useSplitPane({
     storageKey: `fl-split-${track}`,
   });
@@ -65,10 +68,11 @@ export function Workspace({ track, initialExerciseId }) {
   const selectedProgress = selected ? progressMap.get(selected.id) : undefined;
   const nextExercise = selected ? findNextAvailable(exercises, selected.id, progressMap) : null;
 
-  const pick = (id) => {
+  const pick = (id, { confirmed = false } = {}) => {
     // Guard: never open a locked exercise
     if (progressMap.get(id)?.state === "locked") return;
 
+    setSwitchConfirmedFor(confirmed ? id : null);
     setChosenId(id);
     setDrawerOpen(false);
     setMobileTab("problem");
@@ -157,7 +161,10 @@ export function Workspace({ track, initialExerciseId }) {
                 exerciseProgress={selectedProgress}
                 nextExercise={nextExercise}
                 onProgressUpdate={handleProgressUpdate}
-                onSelectNext={pick}
+                onSelectNext={(id) => pick(id, { confirmed: true })}
+                onOpenExercise={pick}
+                titleOf={(id) => exercises.find((e) => e.id === id)?.title ?? null}
+                switchConfirmed={switchConfirmedFor === selected.id}
               />
             ) : (
               <div className="workspace-panel-placeholder muted">

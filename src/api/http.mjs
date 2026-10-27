@@ -36,13 +36,22 @@ const STATUS_BY_CODE = {
   NOT_FOUND: 404,
   INVALID_INPUT: 400,
   OPERATION_IN_PROGRESS: 409,
+  EXERCISE_NOT_ACTIVE: 409,
+  ENVIRONMENT_IN_USE: 409,
   ENVIRONMENT_UNAVAILABLE: 503,
   LIFECYCLE_FAILED: 500,
   METHOD_NOT_ALLOWED: 405,
 };
 
 // Only these detail keys are safe to show a learner; stderr and the like stay in the logs.
-const PUBLIC_DETAIL_KEYS = ["operation", "step", "completed", "reason", "unmetPrerequisites"];
+const PUBLIC_DETAIL_KEYS = [
+  "operation",
+  "step",
+  "completed",
+  "reason",
+  "unmetPrerequisites",
+  "activeExerciseId",
+];
 
 /**
  * Map any thrown value to `{status, body}`. `error` stays a string for compatibility with

@@ -43,6 +43,8 @@ jobs:
           done
           curl -fsS http://127.0.0.1:4317/api/status
           docker exec featherlab-workstation kubectl cluster-info
+          # Open the exercise first: only the exercise that owns the environment is graded.
+          curl -fsS -X POST http://127.0.0.1:4317/api/exercises/k8s-0001/activate >/dev/null
           docker exec featherlab-workstation kubectl run web --image=nginx:1.27
           docker exec featherlab-workstation kubectl wait --for=condition=Ready pod/web --timeout=120s
           curl -fsS -X POST http://127.0.0.1:4317/api/check | tee check.json
