@@ -42,7 +42,7 @@ environment: # required
   profile: kind-default # must be offered by the track
 
 content: # optional; defaults shown
-  description: description.md # Markdown problem statement
+  description: description.md # Markdown problem statement (see "Markdown subset" below)
   solution: solution.md # optional; PRIVATE reference solution
 
 requirements: # required; learner-visible, inline Markdown
@@ -68,6 +68,24 @@ checks: # required; declarative, graded against real state
 
 Unknown properties are errors. `lifecycle.reset` (the pre-M5.1 per-object delete list) is
 rejected with an explanation: namespaces replace it.
+
+### Markdown subset
+
+`description.md` supports a safe subset of Markdown — no raw HTML is ever rendered:
+
+| Feature            | Syntax                                                                   |
+| ------------------ | ------------------------------------------------------------------------ |
+| Inline code        | `` `kubectl get pods` ``                                                 |
+| Bold               | `**text**`                                                               |
+| Links              | `[label](https://…)` — https:// only; other schemes render as plain text |
+| Fenced code blocks | ` ```yaml … ``` `                                                        |
+| Bullet lists       | `- item` or `* item`                                                     |
+| Pipe tables        | `\| col \| col \|` followed by a separator row                           |
+| Headings           | `#`, `##`, `###`                                                         |
+
+`requirements` and `hints` fields support inline Markdown only (inline code, bold, https links).
+Links open in a new tab with `rel="noopener noreferrer"`. Raw `<html>` tags and `javascript:` URLs
+are never interpreted.
 
 ### Isolation contract
 

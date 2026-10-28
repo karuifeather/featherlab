@@ -14,3 +14,87 @@
     color: var(--terminal-fg) !important;
   }
 }
+
+// Links in exercise descriptions: accent colour, no underline by default.
+.problem-scroll a,
+.kc-panel a {
+  color: var(--accent);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+.md-heading {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-primary);
+  margin: 14px 0 4px;
+  letter-spacing: -0.1px;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+// Pipe tables: scrollable wrapper prevents overflow-wrap: anywhere from breaking
+// individual characters inside cells. Reset text wrapping within the table so command
+// strings like `kubectl get pods -n <ns>` stay on one line.
+.md-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  margin: 4px 0;
+}
+
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  overflow-wrap: normal;
+
+  th,
+  td {
+    padding: 7px 12px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+
+  // Allow the rightmost (prose) column to wrap so the table doesn't force a wide scroll.
+  td:last-child,
+  th:last-child {
+    white-space: normal;
+    min-width: 140px;
+  }
+
+  th {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--text-muted);
+    background: var(--surface-2);
+  }
+
+  tr:last-child td {
+    border-bottom: 0;
+  }
+
+  tr:hover td {
+    background: var(--surface-2);
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+}

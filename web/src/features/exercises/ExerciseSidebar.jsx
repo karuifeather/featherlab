@@ -41,9 +41,6 @@ function mergeByLevel(exercises, quizzes) {
   }
   for (const items of levelMap.values()) {
     items.sort((a, b) => {
-      // Sort by explicit order (float). Items without an order keep their original
-      // relative position (stable sort returns 0 — never fall through to id compare,
-      // which would break tests whose exercise stubs have no order field).
       const aOrd = a.order ?? Infinity;
       const bOrd = b.order ?? Infinity;
       return aOrd - bOrd;
@@ -66,12 +63,29 @@ export function ExerciseSidebar({
   summary = null,
 }) {
   const levels = mergeByLevel(exercises, quizzes);
-  const [collapsedLevels, setCollapsedLevels] = useState(() => new Set());
+  // Track which locked items have had their prereq note expanded (click to reveal).
+  const [expandedPrereqs, setExpandedPrereqs] = useState(() => new Set());
 
-  const toggleLevel = (level) =>
-    setCollapsedLevels((prev) => {
+  // The active level is derived every render so no effect is needed.
+  const activeLevel =
+    selectedId != null
+      ? (levels.find(([, items]) => items.some((item) => item.id === selectedId))?.[0] ?? null)
+      : null;
+
+  // Level open/close overrides. The active field records which activeLevel was in force when
+  // the user last toggled; when selectedId changes and activeLevel moves, overrides reset so
+  // the new active level expands automatically.
+  const [ov, setOv] = useState({ active: activeLevel, map: new Map() });
+  const overrides = ov.active === activeLevel ? ov.map : new Map();
+  const isOpen = (l) =>
+    overrides.get(l) ?? (activeLevel == null ? l === levels[0]?.[0] : l === activeLevel);
+  const toggleLevel = (l) =>
+    setOv({ active: activeLevel, map: new Map(overrides).set(l, !isOpen(l)) });
+
+  const togglePrereq = (id) =>
+    setExpandedPrereqs((prev) => {
       const next = new Set(prev);
-      next.has(level) ? next.delete(level) : next.add(level);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
 
@@ -104,7 +118,7 @@ export function ExerciseSidebar({
 
       <nav className="sidebar-levels" aria-label="Exercises">
         {levels.map(([level, items]) => {
-          const open = !collapsedLevels.has(level);
+          const open = isOpen(level);
           const totalCount = items.length;
           return (
             <div className="level-group" key={level}>
@@ -143,10 +157,10 @@ export function ExerciseSidebar({
                     const unmetTitles = isLocked
                       ? prereqLabel(info?.unmetPrerequisites, progressMap)
                       : null;
+                    const prereqExpanded = isLocked && expandedPrereqs.has(item.id);
                     const ariaLabel = isLocked
                       ? `${item.title} — locked${unmetTitles ? `, requires: ${unmetTitles}` : ""}`
                       : item.title;
-                    // Ordinal counts only labs
                     const labOrdinal =
                       items
                         .filter((x) => x._itemType === "lab")
@@ -161,14 +175,20 @@ export function ExerciseSidebar({
                         aria-disabled={isLocked ? "true" : undefined}
                         aria-label={ariaLabel}
                         title={isLocked && unmetTitles ? `Requires: ${unmetTitles}` : item.title}
-                        onClick={isLocked ? undefined : () => onSelect(item.id)}
+                        onClick={
+                          isLocked
+                            ? unmetTitles
+                              ? () => togglePrereq(item.id)
+                              : undefined
+                            : () => onSelect(item.id)
+                        }
                       >
                         <span className="lesson-ord" aria-hidden="true">
                           {isCompleted ? "✓" : isLocked ? "⊘" : String(labOrdinal).padStart(2, "0")}
                         </span>
                         <div className="lesson-main">
                           <span className="lesson-title">{item.title}</span>
-                          {isLocked && unmetTitles && (
+                          {prereqExpanded && unmetTitles && (
                             <span className="lesson-prereq-note" aria-hidden="true">
                               Requires: {unmetTitles}
                             </span>
@@ -214,9 +234,6 @@ function QuizSidebarItem({ quiz, active, onSelect }) {
       </span>
       <div className="kc-sidebar-main">
         <span className="kc-sidebar-title">{quiz.title}</span>
-        <span className="kc-sidebar-sub">
-          Quiz · {quiz.questionCount ?? quiz.questions?.length ?? "?"} questions
-        </span>
       </div>
     </button>
   );

@@ -50,8 +50,9 @@ const lessons = () => page.locator('[data-testid="lesson"]');
 const checkButton = () => page.getByRole("button", { name: "Check solution" });
 const resetButton = () => page.getByRole("button", { name: "Reset task" });
 const environmentConfirm = () => page.locator('[data-testid="environment-confirm"]');
-/** The sidebar lesson whose own title is exactly `title` (locked lessons also show the titles
- * of the prerequisites they wait for, so plain text matching would be ambiguous). */
+/** The sidebar lesson whose own title is exactly `title`. Locked lessons carry prerequisite
+ * titles in their aria-label only, not as visible text, so the title locator avoids false
+ * matches on prerequisite names that happen to match another exercise's title. */
 const lesson = (title) =>
   lessons().filter({ has: page.locator(".lesson-title").getByText(title, { exact: true }) });
 
@@ -59,8 +60,13 @@ test("launcher offers the Kubernetes track, in curriculum order across three lev
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kubernetes" })).toBeVisible();
   await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
-  await expect(lessons()).toHaveCount(18);
+  // Level 0 is open by default (it holds the first exercise). Expand Level 1 and Level 2
+  // so the full list of 18 labs is in the DOM and can be addressed by index.
+  const levelHeaders = page.locator(".level-header");
   await expect(page.locator(".level-label")).toHaveText(["Level 0", "Level 1", "Level 2"]);
+  await levelHeaders.nth(1).click(); // expand Level 1
+  await levelHeaders.nth(2).click(); // expand Level 2
+  await expect(lessons()).toHaveCount(18);
   // Backend order, not id order: k8s-0011..k8s-0014 come before k8s-0002.
   await expect(lessons().nth(0)).toContainText("Your first Pod");
   await expect(lessons().nth(1)).toContainText("Inspect a Pod");
@@ -71,11 +77,14 @@ test("launcher offers the Kubernetes track, in curriculum order across three lev
 });
 
 test("locked exercises explain which prerequisite unlocks them", async () => {
+  // Prerequisites are not shown as visible subtitle text; they are in aria-label.
   await expect(lesson("Inspect a Pod")).toHaveAttribute("aria-disabled", "true");
-  await expect(lesson("Inspect a Pod")).toContainText("Your first Pod");
+  await expect(lesson("Inspect a Pod")).toHaveAccessibleName(/requires: Your first Pod/i);
   // Levels 1 and 2 wait behind the Level 0 challenge.
   await expect(lesson("Namespace Matters")).toHaveAttribute("aria-disabled", "true");
-  await expect(lesson("Namespace Matters")).toContainText("Foundations Challenge");
+  await expect(lesson("Namespace Matters")).toHaveAccessibleName(
+    /requires: Foundations Challenge/i,
+  );
   await expect(lesson("The Wrong Image")).toHaveAttribute("aria-disabled", "true");
 });
 

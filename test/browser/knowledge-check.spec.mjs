@@ -137,8 +137,10 @@ test("lab items in sidebar still use lesson testid, not knowledge-check-item", a
   baseURL,
 }) => {
   await enterWorkspace(page, baseURL);
+  // Level 1 is collapsed by default (active exercise is Level 0); expand it to count all labs.
+  await page.getByRole("button", { name: /Level 1/ }).click();
   const lessons = page.getByTestId("lesson");
-  // 3 exercises in the default stub
+  // 3 exercises in the default stub (2 in Level 0, 1 in Level 1)
   await expect(lessons).toHaveCount(3);
 });
 

@@ -7,6 +7,10 @@ function InlineParts({ parts }) {
       <code key={i}>{part.text}</code>
     ) : part.type === "strong" ? (
       <strong key={i}>{part.text}</strong>
+    ) : part.type === "link" ? (
+      <a key={i} href={part.href} target="_blank" rel="noopener noreferrer">
+        {part.text}
+      </a>
     ) : (
       part.text
     ),
@@ -36,6 +40,42 @@ export function Markdown({ source }) {
             </li>
           ))}
         </ul>
+      );
+    if (block.type === "heading") {
+      // Exercise titles are h1; descriptions use h3/h4 to stay in hierarchy.
+      const Tag = block.level === 1 ? "h3" : block.level === 2 ? "h3" : "h4";
+      return (
+        <Tag className="md-heading" key={i}>
+          <InlineParts parts={block.inline} />
+        </Tag>
+      );
+    }
+    if (block.type === "table")
+      return (
+        <div className="md-table-wrap" key={i}>
+          <table className="md-table">
+            <thead>
+              <tr>
+                {block.headers.map((cell, j) => (
+                  <th key={j}>
+                    <InlineParts parts={cell} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, j) => (
+                <tr key={j}>
+                  {row.map((cell, k) => (
+                    <td key={k}>
+                      <InlineParts parts={cell} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       );
     return (
       <p key={i}>
