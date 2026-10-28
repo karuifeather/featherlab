@@ -22,18 +22,23 @@ import { createKubernetesTrack } from "./tracks/kubernetes/index.mjs";
  * Throws ContentError if any packaged exercise is invalid, so a broken exercise is
  * caught at startup rather than when a learner opens it.
  *
+ * Pass `cluster` (the kind cluster name) so lifecycle operations verify the workstation's
+ * kubeconfig points at it before touching anything.
+ *
  * Pass `stateDir` to enable SQLite persistence. When omitted, `persistence` in the
  * return value is null; the exercise engine operates without it (no M4 features).
  */
 export function createApp({
   workstation,
+  cluster,
   runner = createWorkstationRunner(workstation ? { container: workstation } : undefined),
   contentRoot,
   logger = console,
   timeouts,
   stateDir,
+  driverOptions,
 } = {}) {
-  const tracks = new TrackRegistry([createKubernetesTrack({ runner })]);
+  const tracks = new TrackRegistry([createKubernetesTrack({ runner, cluster, driverOptions })]);
   const validators = new ValidatorRegistry([
     ...combinators,
     ...tracks.all().flatMap((track) => track.validators),

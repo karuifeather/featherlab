@@ -9,7 +9,9 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # test:kind provisions three disposable clusters (the Level 0 circuit alone takes ~15 min
+    # locally) and test:e2e a fourth; GitHub runners are slower and start with a cold image cache.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -44,11 +46,15 @@ jobs:
           curl -fsS http://127.0.0.1:4317/api/status
           docker exec featherlab-workstation kubectl cluster-info
           # Open the exercise first: only the exercise that owns the environment is graded.
-          curl -fsS -X POST http://127.0.0.1:4317/api/exercises/k8s-0001/activate >/dev/null
-          docker exec featherlab-workstation kubectl run web --image=nginx:1.27
-          docker exec featherlab-workstation kubectl wait --for=condition=Ready pod/web --timeout=120s
-          curl -fsS -X POST http://127.0.0.1:4317/api/check | tee check.json
-          node -e 'if (!JSON.parse(require("fs").readFileSync("check.json","utf8")).success) process.exit(1)'
+          curl -fsS -X POST http://127.0.0.1:4317/api/exercises/k8s-0001/activate | tee activate.json
+          node -e 'if (JSON.parse(require("fs").readFileSync("activate.json","utf8")).environment !== "fresh") process.exit(1)'
+          # The exercise works in its own namespace, created by the activation above.
+          docker exec featherlab-workstation kubectl run web --image=nginx:1.27 -n fl-k8s-0001
+          docker exec featherlab-workstation kubectl wait --for=condition=Ready pod/web -n fl-k8s-0001 --timeout=120s
+          curl -fsS -X POST http://127.0.0.1:4317/api/exercises/k8s-0001/check | tee check.json
+          node -e 'const { result } = JSON.parse(require("fs").readFileSync("check.json","utf8")); if (result.outcome !== "passed") process.exit(1)'
+          # The removed v0.1 alias must stay gone.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:4317/api/check)" = 404
       - name: Exercise lifecycle (activate, check, reset) on a disposable test cluster
         run: npm run test:kind
         env:

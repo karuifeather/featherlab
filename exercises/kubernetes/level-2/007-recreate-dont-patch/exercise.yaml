@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0007
+type: task
+title: Recreate, Don't Patch
+summary: A running Pod needs a configuration change Kubernetes will not apply in place. Replace it safely.
+track: kubernetes
+level: 2
+order: 3
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [pods, immutability, labels, services, kubectl]
+prerequisites: [k8s-0003]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0007`"
+  - "A Pod named `audit-log` whose `app` container has the environment variable `LOG_LEVEL=debug`"
+  - "The container still runs `nginx:1.27`"
+  - "The Pod is `Ready`"
+  - "The existing `audit-log` Service still routes to the Pod"
+
+hints:
+  - "Try the obvious first: `kubectl edit pod audit-log -n fl-k8s-0007` and change the variable. Read the error carefully: which fields may change on a running Pod?"
+  - "When a Pod field is immutable, the Pod has to be replaced. Save its current definition with `kubectl get pod audit-log -n fl-k8s-0007 -o yaml > audit-log.yaml` before you remove anything."
+  - "Edit the saved file, then `kubectl replace --force -f audit-log.yaml` (or delete and re-apply). Keep the Pod's labels: the Service selects the Pod by them."
+
+lifecycle:
+  namespaces: [fl-k8s-0007]
+  setup:
+    manifests: [setup/audit-log.yaml]
+
+checks:
+  - id: env
+    type: k8s.container-env
+    label: Container app sets LOG_LEVEL=debug
+    weight: 2
+    params:
+      kind: Pod
+      name: audit-log
+      namespace: fl-k8s-0007
+      container: app
+      env: LOG_LEVEL
+      value: debug
+  - id: image
+    type: k8s.container-image
+    label: Container app still runs nginx:1.27
+    params:
+      { kind: Pod, name: audit-log, namespace: fl-k8s-0007, container: app, image: "nginx:1.27" }
+  - id: ready
+    type: k8s.pod-ready
+    label: Pod audit-log is Ready
+    params: { name: audit-log, namespace: fl-k8s-0007 }
+  - id: routed
+    type: k8s.service-selects
+    label: Service audit-log still routes to the Pod
+    params:
+      name: audit-log
+      namespace: fl-k8s-0007
+      workload: { kind: Pod, name: audit-log }

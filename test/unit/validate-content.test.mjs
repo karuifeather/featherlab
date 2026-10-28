@@ -30,7 +30,7 @@ test("the packaged exercises are valid", () => {
   const result = validateContent();
   assert.deepEqual(result.problems, []);
   assert.equal(result.ok, true);
-  assert.equal(result.count, 2);
+  assert.equal(result.count, 18);
 });
 
 test("valid content passes", () => {
@@ -83,36 +83,52 @@ const invalid = [
     "unknown property",
   ],
   [
-    "a reset target in a protected namespace",
+    "a leftover reset.delete section",
     {
       o: {
-        lifecycle: { reset: { delete: [{ kind: "Pod", name: "x", namespace: "kube-system" }] } },
+        lifecycle: {
+          namespaces: ["fl-demo-0001"],
+          reset: { delete: [{ kind: "Pod", name: "x", namespace: "default" }] },
+        },
       },
     },
-    "reset.delete[0]",
+    "lifecycle.reset",
+    "no longer supported",
+  ],
+  [
+    "an exercise that declares no namespace",
+    { o: { lifecycle: {} } },
+    "lifecycle.namespaces",
+    "is required",
+  ],
+  [
+    "a namespace not derived from the exercise id",
+    { o: { lifecycle: { namespaces: ["staging"] } } },
+    "lifecycle.namespaces[0]",
+    'must be "fl-demo-0001"',
+  ],
+  [
+    "a protected namespace",
+    { o: { lifecycle: { namespaces: ["fl-demo-0001", "kube-system"] } } },
+    "lifecycle.namespaces[1]",
     "protected",
   ],
   [
-    "a reset target of a kind that is not allowed",
+    "a check outside the exercise's namespaces",
     {
       o: {
-        lifecycle: { reset: { delete: [{ kind: "ClusterRole", name: "x" }] } },
+        checks: [
+          {
+            id: "x",
+            type: "k8s.resource-exists",
+            label: "x",
+            params: { kind: "Pod", name: "web", namespace: "default" },
+          },
+        ],
       },
     },
-    "reset.delete[0].kind",
-    "must be one of",
-  ],
-  [
-    "a reset that would delete a namespace",
-    { o: { lifecycle: { reset: { delete: [{ kind: "Namespace", name: "demo" }] } } } },
-    "reset.delete[0]",
-    "cannot be deleted",
-  ],
-  [
-    "a reset target without a namespace",
-    { o: { lifecycle: { reset: { delete: [{ kind: "Pod", name: "x" }] } } } },
-    "reset.delete[0]",
-    "requires an explicit namespace",
+    "checks[0]",
+    "does not declare",
   ],
   [
     "a missing setup manifest",
@@ -204,7 +220,7 @@ function cli(...args) {
 test("CLI: exits 0 for the packaged content, without docker or kind on PATH", () => {
   const out = cli();
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /Validated 2 exercises: OK/);
+  assert.match(out.stdout, /Validated 18 exercises: OK/);
 });
 
 test("CLI: exits non-zero and prints file, property and message for bad content", () => {

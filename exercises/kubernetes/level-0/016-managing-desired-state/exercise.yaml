@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0016
+type: task
+title: Managing Desired State
+summary: Bring a running Deployment in line with a changed specification without breaking it.
+track: kubernetes
+level: 0
+order: 8
+difficulty: beginner
+estimatedMinutes: 10
+tags: [deployments, labels, replicas, desired-state, kubectl]
+prerequisites: [k8s-0014, k8s-0015]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0016` (already contains Deployment `reports`)"
+  - "`reports` runs 2 replicas, all available"
+  - "The Deployment object is labelled `team=analytics` and keeps its `app=reports` label"
+  - "It keeps running `nginx:1.27`"
+
+hints:
+  - "Compare the specification with what is running: `kubectl get deployment reports -n fl-k8s-0016 --show-labels`, then `-o yaml` for the full object."
+  - "Two fields differ from the specification: `spec.replicas` and `metadata.labels`. Labels on the Deployment are not the labels in its Pod template."
+  - "Change both with the commands you already know, or with `kubectl edit deployment reports -n fl-k8s-0016`, which opens the live object in an editor and applies it when you save."
+
+lifecycle:
+  namespaces: [fl-k8s-0016]
+  setup:
+    manifests: [setup/reports.yaml]
+
+checks:
+  - id: replicas
+    type: k8s.replicas-desired
+    label: reports asks for 2 replicas
+    params: { kind: Deployment, name: reports, namespace: fl-k8s-0016, replicas: 2 }
+  - id: available
+    type: k8s.rollout-complete
+    label: reports has 2 available replicas
+    weight: 2
+    params: { name: reports, namespace: fl-k8s-0016, replicas: 2 }
+  - id: labels
+    type: k8s.labels
+    label: The Deployment carries team=analytics and app=reports
+    params:
+      kind: Deployment
+      name: reports
+      namespace: fl-k8s-0016
+      labels: { team: analytics, app: reports }
+  - id: image
+    type: k8s.container-image
+    label: reports still runs nginx:1.27
+    params: { kind: Deployment, name: reports, namespace: fl-k8s-0016, image: "nginx:1.27" }

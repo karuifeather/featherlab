@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
  * Release gate for the npm tarball: everything the installed CLI needs is present, and
@@ -15,11 +18,21 @@ const REQUIRED = [
   "src/app.mjs",
   "src/server.mjs",
   "dist/web/index.html",
-  "exercises/kubernetes/level-0/001-first-pod/exercise.yaml",
-  "exercises/kubernetes/level-0/001-first-pod/description.md",
-  "exercises/kubernetes/level-0/002-first-deployment/exercise.yaml",
-  "exercises/kubernetes/level-0/002-first-deployment/setup/namespace.yaml",
 ];
+
+/**
+ * Every file of every exercise (definition, description, solution, setup manifests) must
+ * ship: a missing setup manifest only shows up when a learner opens that exercise.
+ */
+export function contentFiles(root = ROOT) {
+  return readdirSync(path.join(root, "exercises"), { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.relative(root, path.join(entry.parentPath, entry.name)))
+    .map((file) => file.split(path.sep).join("/"))
+    .sort();
+}
+
+export const requiredFiles = () => [...REQUIRED, ...contentFiles()];
 const ALLOWED_PREFIXES = ["bin/", "src/", "exercises/", "dist/web/"];
 const ALLOWED_ROOT = ["package.json", "README.md", "LICENSE"];
 const FORBIDDEN = [
@@ -34,10 +47,10 @@ const FORBIDDEN = [
 ];
 
 /** @returns {string[]} human-readable problems; empty when the package is fine */
-export function checkPackedFiles(files) {
+export function checkPackedFiles(files, expected = requiredFiles()) {
   const problems = [];
   const present = new Set(files);
-  for (const required of REQUIRED)
+  for (const required of expected)
     if (!present.has(required)) problems.push(`missing from tarball: ${required}`);
   for (const file of files) {
     const allowed = ALLOWED_ROOT.includes(file) || ALLOWED_PREFIXES.some((p) => file.startsWith(p));

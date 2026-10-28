@@ -1,0 +1,64 @@
+schemaVersion: 1
+id: k8s-0009
+type: task
+title: Two Broken Workloads
+summary: Two services in one namespace are failing for unrelated reasons. Diagnose and fix both.
+track: kubernetes
+level: 2
+order: 5
+difficulty: advanced
+estimatedMinutes: 20
+tags: [troubleshooting, services, configmaps, deployments, container-states]
+prerequisites: [k8s-0005, k8s-0008]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0009`"
+  - "The `orders` Service routes to the Pods of the `orders` Deployment, which keeps 2 available replicas"
+  - "Deployment `payments` finishes rolling out with 2 available replicas"
+  - "The `web` container of `payments` reads `PAYMENT_MODE` from key `mode` of the existing `payments-config` ConfigMap"
+
+hints:
+  - "Treat them separately. For each workload ask: are its Pods running and Ready? If they are, is anything routing traffic to them? `kubectl get pods,svc,endpointslices -n fl-k8s-0009` is a good overview."
+  - "`orders` looks healthy, but its Service has no endpoints: compare the Service's selector with the Pods' labels (`kubectl get pods --show-labels`). `payments` never starts: its Pods' STATUS and Events name the missing piece."
+  - "Fix each problem where it originates: the Service's `spec.selector` for one, the Deployment's environment reference (`valueFrom.configMapKeyRef`) for the other. `kubectl get configmaps -n fl-k8s-0009` shows what really exists."
+
+lifecycle:
+  namespaces: [fl-k8s-0009]
+  setup:
+    manifests: [setup/orders.yaml, setup/payments.yaml]
+
+checks:
+  - id: orders-routed
+    type: k8s.service-selects
+    label: Service orders routes to the orders Pods
+    weight: 2
+    params:
+      name: orders
+      namespace: fl-k8s-0009
+      workload: { kind: Deployment, name: orders }
+  - id: orders-available
+    type: k8s.rollout-complete
+    label: orders keeps 2 available replicas
+    params: { name: orders, namespace: fl-k8s-0009, replicas: 2 }
+  - id: payments-env
+    type: k8s.container-env
+    label: payments reads PAYMENT_MODE from payments-config
+    params:
+      kind: Deployment
+      name: payments
+      namespace: fl-k8s-0009
+      container: web
+      env: PAYMENT_MODE
+      configMapKeyRef: { name: payments-config, key: mode }
+  - id: payments-available
+    type: k8s.rollout-complete
+    label: payments rolled out with 2 available replicas
+    weight: 2
+    params: { name: payments, namespace: fl-k8s-0009, replicas: 2 }

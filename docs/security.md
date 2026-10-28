@@ -18,28 +18,61 @@ learner's machine**.
 
 ## Lifecycle safety
 
-- Actions are a closed set: `apply` a manifest of an allow-listed kind, `delete` a named object, `get`.
-  There is no "run this command" lifecycle step; unknown `lifecycle` keys fail content validation.
-- `reset.delete` entries name one object each (`kind`, `name`, `namespace`). There are no selectors,
-  `--all`, or wildcards, namespaces cannot be deleted, and `kube-system`, `kube-public` and
-  `kube-node-lease` are rejected.
-- `cleanup` only deletes setup-created objects that still carry the `featherlab.dev/exercise=<id>` label,
-  so it cannot remove a resource the learner created under the same name.
+- Actions are a closed set: create allow-listed, namespaced objects from setup manifests,
+  create and delete the exercise's own namespaces, and `get`. There is no "run this command"
+  lifecycle step; unknown `lifecycle` keys fail content validation.
+- Every exercise declares the namespaces it owns, named `fl-<id>` or `fl-<id>-<suffix>`.
+  `default`, `kube-system`, `kube-public`, `kube-node-lease`, any `kube-*` name and any
+  other name are rejected at load time, as is a namespace claimed by two exercises. Setup
+  manifests may contain only namespaced kinds placed in declared namespaces; checks may only
+  read declared namespaces.
+- **Deletion is ownership-verified.** Before a namespace is deleted, FeatherLab reads it and
+  requires both `app.kubernetes.io/managed-by=featherlab` and
+  `featherlab.dev/exercise=<that exercise's id>`. The delete carries a UID precondition for the
+  object it verified, so a namespace that was replaced in the meantime is not deleted. A
+  same-named namespace without those labels is refused before anything changes (the
+  operation fails at step `ownership`, the active exercise stays intact, and the message tells
+  the learner how to remove it themselves). There are no selectors, `--all`, wildcards or
+  name-only deletes.
+- **Termination is bounded.** After the delete, FeatherLab polls until the namespace is gone
+  (default 75 s). A namespace stuck in `Terminating` fails with the conditions Kubernetes
+  reports. FeatherLab never removes finalizers; the exercise stays `preparing` (not gradable)
+  until the learner resolves it and retries.
+- Objects are created with `kubectl create`, never `apply`, so an object that already exists
+  is an error rather than silently adopted and labelled as FeatherLab's.
+- Before any lifecycle operation the driver checks that the workstation's kubeconfig context is
+  `kind-<configured cluster>`. A workstation pointed anywhere else fails before any command
+  that could change state.
 - One exercise owns the shared cluster at a time. Opening another one (after confirmation)
-  cleans up the previous owner's declared objects and resets the new one. A freshly reset
-  exercise must not already pass (baseline guard), and only the ready owner can be graded
-  (`409 EXERCISE_NOT_ACTIVE`). Learner objects under the names an exercise declares therefore
-  cannot carry a stale pass into a revisited or different exercise.
-- **Isolation caveat:** undeclared learner objects survive a switch. Cluster-shaping kinds
-  (NetworkPolicy, ResourceQuota, LimitRange, RoleBinding) and Services with broad selectors can
-  influence later exercises. The authoring contract in `authoring.md` limits this. Labs that
-  change cluster-wide state need disposable environments (planned).
+  deletes the previous owner's namespaces and resets the new one. A freshly reset exercise
+  must grade `failed` (baseline guard), and only the ready owner can be graded
+  (`409 EXERCISE_NOT_ACTIVE`). Stale state therefore cannot carry a pass into a revisited or
+  different exercise.
 - One operation per exercise at a time (`409 OPERATION_IN_PROGRESS`); every operation has a deadline
-  (`504` on timeout) and failures report which step stopped and what had completed. Every step is
-  idempotent, so the remedy is to run the operation again.
-- **Scope caveat:** `reset` deletes the objects an exercise declares, even if the learner created
-  them for another purpose (for example their own `api` Deployment in `staging`). That is the
-  definition of the exercise's scope.
+  (`504` on timeout) and failures report which step stopped and what had completed. Every step can
+  be re-run, so the remedy is to run the operation again.
+
+### What namespace isolation does and does not cover
+
+| Covered                                                                                                                                                                                                    | Not covered                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Every namespaced object in an exercise's namespaces, declared or not (Pods, Deployments, Services, ConfigMaps, Secrets, NetworkPolicies, ResourceQuotas, RoleBindings, ...) is deleted on reset and switch | Cluster-scoped objects (nodes and their labels/taints, ClusterRoles, CRDs, PersistentVolumes, StorageClasses, webhook configurations) |
+| Exercises never depend on objects outside their own namespaces                                                                                                                                             | Changes the learner makes in `default` or any other namespace                                                                         |
+| Two exercises can use the same object names without interfering                                                                                                                                            | A learner (who has cluster-admin) deliberately changing other namespaces or cluster-wide state                                        |
+| Stale work cannot satisfy a revisited exercise                                                                                                                                                             | Files in the learner's workstation home directory (never deleted, never graded)                                                       |
+
+Namespaces are an isolation mechanism for cooperative exercises, **not a security boundary**:
+the credential in the learner's terminal is cluster-admin. The current curriculum (Levels 0 to 2) is written so that no task
+needs, or is helped by, a cluster-scoped change. CKA/CKS administration labs (nodes, CNI,
+admission, etcd, upgrades, RBAC boundaries, runtime security) need a disposable environment per
+lab, a fresh cluster or VM, which is planned and does not exist yet.
+
+**Upgrading from 1.0 and earlier.** Those versions ran k8s-0001 in `default` (Pod `web`) and
+k8s-0002 in a labelled `staging` namespace. FeatherLab never deletes them now: a Pod named
+`web` in `default` may be the learner's own, and `staging` is not declared by any current
+exercise. A saved "ready" record from the old layout is detected (its `fl-<id>` namespace is
+missing) and the exercise is prepared again from scratch. Remove the old objects yourself if
+you no longer want them: `kubectl delete pod web -n default`, `kubectl delete namespace staging`.
 
 ## Known limitation: shared cluster-admin credential
 

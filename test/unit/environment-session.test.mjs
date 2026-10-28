@@ -12,12 +12,31 @@ import {
 } from "../../src/core/errors.mjs";
 import { startServer } from "../../src/server.mjs";
 import { appFor, exerciseFiles } from "../helpers/content.mjs";
-import { createFakeCluster, deployment, readyPod } from "../helpers/fake-cluster.mjs";
+import {
+  createFakeCluster,
+  deployment,
+  ownedNamespace,
+  readyPod,
+} from "../helpers/fake-cluster.mjs";
 
 const quiet = { warn() {}, error() {} };
-const packaged = (cluster, options = {}) =>
-  createApp({ runner: cluster, logger: quiet, ...options });
-const stagingNs = (cluster) => cluster.find("Namespace", "staging");
+/**
+ * These tests are about switching between two owners, k8s-0001 and k8s-0002, not about
+ * locking. With persistence, k8s-0002 also needs k8s-0012 (Working With YAML), so that one
+ * completion is seeded; the tests still earn k8s-0001's completion themselves.
+ */
+function packaged(cluster, options = {}) {
+  const app = createApp({ runner: cluster, logger: quiet, ...options });
+  if (app.persistence && !app.persistence.progress.get("k8s-0012", "kubernetes")?.completed)
+    app.persistence.progress.upsert({
+      exerciseId: "k8s-0012",
+      trackId: "kubernetes",
+      completed: true,
+      firstCompletedAt: new Date().toISOString(),
+    });
+  return app;
+}
+const ns2 = (cluster) => cluster.find("Namespace", "fl-k8s-0002");
 const confirmed = { discardActive: true };
 
 function withStateDir(fn) {
@@ -67,7 +86,7 @@ test("returning to a passed exercise starts from scratch; stale work cannot pass
   assert.equal((await service.check("k8s-0001")).success, true);
 
   await service.activate("k8s-0002", confirmed);
-  assert.equal(cluster.find("Pod", "web", "default"), undefined, "A's work removed on switch");
+  assert.equal(cluster.find("Pod", "web", "fl-k8s-0001"), undefined, "A's work removed on switch");
 
   const back = await service.activate("k8s-0001", confirmed);
   assert.equal(back.environment, "fresh");
@@ -81,17 +100,38 @@ test("switching away removes the previous exercise's work and its setup objects"
   cluster.put(deployment());
 
   await service.activate("k8s-0001", confirmed);
-  assert.equal(cluster.find("Deployment", "api", "staging"), undefined);
-  assert.equal(stagingNs(cluster), undefined, "managed namespace torn down");
+  assert.equal(cluster.find("Deployment", "api", "fl-k8s-0002"), undefined);
+  assert.equal(ns2(cluster), undefined, "managed namespace torn down");
 });
 
-test("switching does not delete objects the previous exercise does not declare", async () => {
-  // Documented limit (docs/authoring.md, "Isolation contract"): undeclared objects survive.
-  const cluster = createFakeCluster({ resources: [readyPod({ name: "keepme" })] });
+test("switching removes undeclared objects in the previous exercise's namespace, nothing outside it", async () => {
+  const cluster = createFakeCluster({
+    resources: [readyPod({ name: "keepme", namespace: "default" })],
+  });
   const { service } = packaged(cluster);
   await service.activate("k8s-0001");
+  // Strays no exercise declares.
+  cluster.put(readyPod({ name: "extra" }));
+  cluster.put({
+    apiVersion: "v1",
+    kind: "Service",
+    metadata: { name: "web", namespace: "fl-k8s-0001" },
+  });
+  cluster.put({
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: { name: "deny-all", namespace: "fl-k8s-0001" },
+  });
   await service.activate("k8s-0002", confirmed);
-  assert.ok(cluster.find("Pod", "keepme", "default"));
+  assert.deepEqual(
+    cluster.all().filter((r) => r.metadata.namespace === "fl-k8s-0001"),
+    [],
+    "nothing is left in the previous exercise's namespace",
+  );
+  assert.equal(cluster.find("Namespace", "fl-k8s-0001"), undefined);
+  assert.ok(cluster.find("Pod", "keepme", "default"), "objects outside it survive");
+  assert.ok(cluster.find("Namespace", "default"));
+  assert.ok(cluster.find("Namespace", "kube-system"));
 });
 
 test("reopening the ready exercise (page reload) keeps the learner's work", async () => {
@@ -102,7 +142,7 @@ test("reopening the ready exercise (page reload) keeps the learner's work", asyn
 
   const reopened = await service.activate("k8s-0001");
   assert.equal(reopened.environment, "resumed");
-  assert.ok(cluster.find("Pod", "web", "default"));
+  assert.ok(cluster.find("Pod", "web", "fl-k8s-0001"));
   assert.equal((await service.check("k8s-0001")).success, true);
 });
 
@@ -118,7 +158,7 @@ test("the ready exercise survives a restart, so stop/start keeps work in progres
     assert.equal(second.persistence.environment.get().state, "ready");
     const reopened = await second.service.activate("k8s-0001");
     assert.equal(reopened.environment, "resumed");
-    assert.ok(cluster.find("Pod", "web", "default"), "work in progress kept");
+    assert.ok(cluster.find("Pod", "web", "fl-k8s-0001"), "work in progress kept");
     second.persistence.close();
   }));
 
@@ -179,8 +219,12 @@ async function assertRecoverable(service, persistence, ownerId) {
 }
 
 const failureCases = [
-  { name: "cleanup of the previous owner fails", owner: "k8s-0001", fail: /delete pods web/ },
-  { name: "reset of the new exercise fails", owner: "k8s-0002", fail: / apply / },
+  {
+    name: "cleanup of the previous owner fails",
+    owner: "k8s-0001",
+    fail: /delete --raw \/api\/v1\/namespaces\/fl-k8s-0001/,
+  },
+  { name: "reset of the new exercise fails", owner: "k8s-0002", fail: / create / },
 ];
 
 for (const { name, owner, fail } of failureCases) {
@@ -199,8 +243,8 @@ for (const { name, owner, fail } of failureCases) {
       // A preparing owner is cleaned up without asking: its work was already being discarded.
       const retry = await service.activate("k8s-0002");
       assert.equal(retry.environment, "fresh");
-      assert.equal(cluster.find("Pod", "web", "default"), undefined);
-      assert.ok(stagingNs(cluster));
+      assert.equal(cluster.find("Pod", "web", "fl-k8s-0001"), undefined);
+      assert.ok(ns2(cluster));
       assert.equal(persistence.environment.get().state, "ready");
       persistence.close();
     }));
@@ -213,24 +257,30 @@ test("recovery: reopening a preparing exercise resets it instead of resuming", (
     await solveFirst(service, cluster);
 
     let failing = true;
-    failWhen(cluster, /delete pods web/, () => failing);
+    failWhen(cluster, /delete --raw \/api\/v1\/namespaces\/fl-k8s-0001/, () => failing);
     await assert.rejects(service.activate("k8s-0002", confirmed));
     failing = false;
 
     const reopened = await service.activate("k8s-0001");
     assert.equal(reopened.environment, "fresh");
-    assert.equal(cluster.find("Pod", "web", "default"), undefined, "full reset, not a resume");
+    assert.equal(cluster.find("Pod", "web", "fl-k8s-0001"), undefined, "full reset, not a resume");
     assert.equal((await service.check("k8s-0001")).success, false);
     persistence.close();
   }));
 
 test("recovery: the baseline guard leaves the exercise preparing and ungradable", () =>
   withStateDir(async (stateDir) => {
-    // This content forgets to declare reset.delete, so the learner's Pod is never removed.
-    const cluster = createFakeCluster({ resources: [readyPod({ name: "demo" })] });
-    const { service, persistence } = appFor(exerciseFiles("001-leaky", {}), cluster, {
-      stateDir,
-    });
+    // Broken content: its own setup creates the object its check looks for.
+    const cluster = createFakeCluster();
+    const files = exerciseFiles(
+      "001-presolved",
+      { lifecycle: { namespaces: ["fl-demo-0001"], setup: { manifests: ["setup/demo.yaml"] } } },
+      {
+        "setup/demo.yaml":
+          "apiVersion: v1\nkind: Pod\nmetadata:\n  name: demo\n  namespace: fl-demo-0001\nspec:\n  containers: [{ name: c, image: nginx:1.27 }]\n",
+      },
+    );
+    const { service, persistence } = appFor(files, cluster, { stateDir });
 
     await assert.rejects(service.activate("demo-0001"), (error) => {
       assert.ok(error instanceof LifecycleError);
@@ -265,8 +315,8 @@ test("recovery: a crash mid-transition is cleaned up after restart", () =>
     await assert.rejects(second.service.check("k8s-0002"), InactiveExerciseError);
     const opened = await second.service.activate("k8s-0001"); // no confirmation needed
     assert.equal(opened.environment, "fresh");
-    assert.equal(cluster.find("Deployment", "api", "staging"), undefined, "cleaned up");
-    assert.equal(stagingNs(cluster), undefined);
+    assert.equal(cluster.find("Deployment", "api", "fl-k8s-0002"), undefined, "cleaned up");
+    assert.equal(ns2(cluster), undefined);
     assert.equal(second.persistence.environment.get().state, "ready");
     second.persistence.close();
   }));
@@ -281,8 +331,8 @@ test("protocol: a switch that fails before any mutation keeps the owner ready, w
     await assert.rejects(service.activate("k8s-0002", confirmed), EnvironmentError);
     cluster.down = false;
     assert.equal(
-      cluster.commands().filter((c) => / (apply|delete) /.test(c)).length,
-      1, // only the reset from opening k8s-0001 in solveFirst
+      cluster.mutations().length,
+      1, // only the namespace created when opening k8s-0001 in solveFirst
       "no mutating command was sent by the failed switch",
     );
     assert.deepEqual(
@@ -292,7 +342,7 @@ test("protocol: a switch that fails before any mutation keeps the owner ready, w
     assert.equal((await service.check("k8s-0001")).success, true, "still gradable");
     const reopened = await service.activate("k8s-0001");
     assert.equal(reopened.environment, "resumed");
-    assert.ok(cluster.find("Pod", "web", "default"), "work intact");
+    assert.ok(cluster.find("Pod", "web", "fl-k8s-0001"), "work intact");
     persistence.close();
   }));
 
@@ -318,7 +368,7 @@ test("protocol: the record turns preparing before the first mutating command, re
     const original = cluster.run;
     cluster.run = async (argv, options) => {
       const line = argv.join(" ");
-      const kind = /readyz/.test(line) ? "probe" : / (apply|delete) /.test(line) ? "mutate" : null;
+      const kind = /readyz/.test(line) ? "probe" : / (create|delete) /.test(line) ? "mutate" : null;
       if (kind) {
         const { exerciseId, state } = persistence.environment.get();
         observed.push(`${kind}:${exerciseId}:${state}`);
@@ -344,10 +394,16 @@ test("protocol: if the cluster drops after the probe, recovery stays conservativ
     const { service, persistence } = packaged(cluster, { stateDir });
     await solveFirst(service, cluster);
 
-    // The probe succeeds; the next readiness check (inside cleanup) fails. FeatherLab cannot
-    // prove nothing was deleted in between, so it must not report the old work as intact.
+    // Both probes (previous owner, new exercise) succeed; the next readiness check (inside
+    // cleanup) fails. FeatherLab cannot prove nothing was deleted in between, so it must not
+    // report the old work as intact.
     let probes = 0;
-    failWhen(cluster, /readyz/, () => ++probes > 1);
+    const original = cluster.run;
+    cluster.run = async (argv, options) => {
+      if (argv.includes("/readyz") && ++probes > 2)
+        return { stdout: "", stderr: "Unable to connect to the server", exitCode: 1 };
+      return original(argv, options);
+    };
     await assert.rejects(service.activate("k8s-0002", confirmed));
     await assertRecoverable(service, persistence, "k8s-0001");
     persistence.close();
@@ -373,7 +429,7 @@ test("concurrent opens of different exercises are serialized; the last one wins"
 
   await Promise.all([service.activate("k8s-0002"), service.activate("k8s-0001", confirmed)]);
   assert.equal(maxInFlight, 1, "no two cluster commands ever overlapped");
-  assert.equal(stagingNs(cluster), undefined, "k8s-0001 took over and tore down k8s-0002");
+  assert.equal(ns2(cluster), undefined, "k8s-0001 took over and tore down k8s-0002");
   cluster.put(readyPod());
   assert.equal((await service.check("k8s-0001")).success, true);
 });
@@ -383,8 +439,8 @@ test("a duplicate open of the same exercise joins the pending one", async () => 
   const { service } = packaged(cluster);
   const [a, b] = await Promise.all([service.activate("k8s-0002"), service.activate("k8s-0002")]);
   assert.deepEqual(a.steps, b.steps);
-  const applies = cluster.commands().filter((c) => c.includes(" apply "));
-  assert.equal(applies.length, 1);
+  const creates = cluster.commands().filter((c) => c.includes(" create "));
+  assert.equal(creates.length, 1);
 });
 
 test("a confirmed open never joins a pending unconfirmed one", async () => {
@@ -418,5 +474,89 @@ test("completed exercises stay completed and reopen fresh for independent practi
     assert.equal(retry.success, false, "must be solved again");
     assert.equal(retry.progress.completed, true, "earlier completion is not revoked");
     assert.equal(service.getExerciseProgress("k8s-0002").state, "completed");
+    persistence.close();
+  }));
+
+// ── Upgrading from the pre-namespace layout (FeatherLab ≤ 1.0) ───────────────
+
+test("upgrade: a ready record from the old layout is prepared again, never trusted", () =>
+  withStateDir(async (stateDir) => {
+    // 1.0 ran k8s-0001 in `default`. Its record says ready; the new namespace does not exist.
+    const cluster = createFakeCluster({
+      resources: [readyPod({ name: "web", namespace: "default" })],
+    });
+    const first = packaged(cluster, { stateDir });
+    first.persistence.environment.set({
+      trackId: "kubernetes",
+      exerciseId: "k8s-0001",
+      state: "ready",
+    });
+    first.persistence.close();
+
+    const { service, persistence } = packaged(cluster, { stateDir });
+    const opened = await service.activate("k8s-0001");
+    assert.equal(opened.environment, "fresh");
+    assert.equal(opened.recreated, true);
+    assert.ok(cluster.find("Namespace", "fl-k8s-0001"), "the new namespace exists");
+    assert.ok(cluster.find("Pod", "web", "default"), "the old Pod in default is never deleted");
+    assert.equal(persistence.environment.get().state, "ready");
+    assert.equal((await service.check("k8s-0001")).outcome, "failed", "old work does not count");
+    persistence.close();
+  }));
+
+test("upgrade: switching away from an old-layout owner leaves its legacy namespace alone", () =>
+  withStateDir(async (stateDir) => {
+    // 1.0's k8s-0002 created a labelled `staging` namespace; the exercise no longer declares it.
+    const cluster = createFakeCluster({
+      resources: [ownedNamespace("staging", "k8s-0002"), deployment({ namespace: "staging" })],
+    });
+    const first = packaged(cluster, { stateDir });
+    first.persistence.environment.set({
+      trackId: "kubernetes",
+      exerciseId: "k8s-0002",
+      state: "ready",
+    });
+    first.persistence.close();
+
+    const { service, persistence } = packaged(cluster, { stateDir });
+    await assert.rejects(service.activate("k8s-0001"), EnvironmentInUseError);
+    await service.activate("k8s-0001", confirmed);
+    assert.ok(cluster.find("Namespace", "staging"), "never deleted by name or label alone");
+    assert.ok(cluster.find("Deployment", "api", "staging"));
+    persistence.close();
+  }));
+
+test("ownership: a switch blocked by a foreign namespace fails before mutation; owner stays ready", () =>
+  withStateDir(async (stateDir) => {
+    const cluster = createFakeCluster();
+    const { service, persistence } = packaged(cluster, { stateDir });
+    await solveFirst(service, cluster);
+    // Someone created k8s-0002's namespace by hand.
+    cluster.put({ apiVersion: "v1", kind: "Namespace", metadata: { name: "fl-k8s-0002" } });
+    const before = cluster.mutations().length;
+
+    await assert.rejects(service.activate("k8s-0002", confirmed), (error) => {
+      assert.equal(error.details.step, "ownership");
+      return true;
+    });
+    assert.equal(cluster.mutations().length, before, "nothing was mutated");
+    assert.equal(persistence.environment.get().state, "ready");
+    assert.equal((await service.check("k8s-0001")).success, true, "work intact and gradable");
+    persistence.close();
+  }));
+
+test("baseline: an unevaluable starting state is not committed as ready", () =>
+  withStateDir(async (stateDir) => {
+    const cluster = createFakeCluster();
+    const { service, persistence } = packaged(cluster, { stateDir });
+    // Reads of the graded Pod fail, so the baseline check cannot be evaluated.
+    failWhen(cluster, /get pods web/, () => true);
+    await assert.rejects(service.activate("k8s-0001"), (error) => {
+      assert.equal(error.details.step, "baseline");
+      assert.match(error.message, /could not be verified/);
+      return true;
+    });
+    assert.equal(persistence.environment.get().state, "preparing");
+    await assert.rejects(service.check("k8s-0001"), InactiveExerciseError);
     persistence.close();
   }));

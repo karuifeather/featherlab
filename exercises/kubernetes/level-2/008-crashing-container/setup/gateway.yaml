@@ -1,0 +1,50 @@
+# A typo in the server block ("server_nmae") makes nginx refuse to start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: fl-k8s-0008
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_nmae gateway.internal;
+
+        location = /healthz {
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+
+        location / {
+            default_type text/plain;
+            return 200 "gateway is up\n";
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: fl-k8s-0008
+  labels: { app: gateway }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports: [{ name: http, containerPort: 80 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 3
+          volumeMounts:
+            - { name: config, mountPath: /etc/nginx/conf.d }
+      volumes:
+        - name: config
+          configMap: { name: gateway-config }

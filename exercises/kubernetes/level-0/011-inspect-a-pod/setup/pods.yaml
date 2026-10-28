@@ -1,0 +1,28 @@
+# Two Pods that look alike from `kubectl get`; only their logs tell them apart. They print one
+# line and then idle, so that line is all `kubectl logs` shows (nginx would bury it under one
+# startup line per CPU).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: alpha
+  namespace: fl-k8s-0011
+  labels: { app: notes }
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: web
+      image: nginx:1.27
+      command: ["sh", "-c", "echo 'status: ok'; exec sleep infinity"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bravo
+  namespace: fl-k8s-0011
+  labels: { app: notes }
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: web
+      image: nginx:1.27
+      command: ["sh", "-c", "echo 'status: needs-review'; exec sleep infinity"]

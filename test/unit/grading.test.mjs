@@ -52,9 +52,16 @@ test("regression k8s-0001: the right pod in the wrong namespace earns nothing", 
 
 test("k8s-0002 grades a correct Deployment", async () => {
   const result = await appWith([deployment()]).check("k8s-0002");
-  assert.equal(result.checks.find((c) => c.id === "namespace").passed, true, "setup created it");
-  assert.equal(result.checks.filter((c) => c.passed).length, 6);
+  assert.equal(result.checks.filter((c) => c.passed).length, 5);
   assert.equal(result.success, true);
+});
+
+test("k8s-0002: an unfinished rollout does not pass even if enough Pods are available", async () => {
+  const rolling = deployment();
+  rolling.status.updatedReplicas = 1; // one replica still runs the old template
+  const result = await appWith([rolling]).check("k8s-0002");
+  assert.equal(result.checks.find((c) => c.id === "available").passed, false);
+  assert.equal(result.outcome, "failed");
 });
 
 test("k8s-0002 weights count toward partial credit", async () => {
@@ -62,7 +69,7 @@ test("k8s-0002 weights count toward partial credit", async () => {
   const available = result.checks.find((c) => c.id === "available");
   assert.equal(available.passed, false);
   assert.equal(available.weight, 2);
-  assert.deepEqual(result.score, { earned: 5, possible: 7, percent: 71 });
+  assert.deepEqual(result.score, { earned: 4, possible: 6, percent: 67 });
 });
 
 // --- Engine behaviour ---
@@ -139,7 +146,7 @@ test("hidden checks reveal pass/fail but not what they test", async () => {
         type: "k8s.resource-exists",
         label: "Pod named SECRETNAME exists",
         hidden: true,
-        params: { kind: "Pod", name: "demo", namespace: "default" },
+        params: { kind: "Pod", name: "demo", namespace: "fl-demo-0001" },
       },
     ],
   });

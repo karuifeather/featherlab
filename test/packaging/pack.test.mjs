@@ -5,7 +5,8 @@ import { mkdtempSync, symlinkSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkPackedFiles } from "../../scripts/check-package.mjs";
+import { checkPackedFiles, contentFiles } from "../../scripts/check-package.mjs";
+import { CURRICULUM_ORDER } from "../helpers/curriculum.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -25,14 +26,9 @@ test("exercises ship in the npm tarball and load from an installed location", ()
   )[0];
 
   const files = packed.files.map((f) => f.path);
-  for (const expected of [
-    "exercises/kubernetes/level-0/001-first-pod/exercise.yaml",
-    "exercises/kubernetes/level-0/001-first-pod/description.md",
-    "exercises/kubernetes/level-0/002-first-deployment/exercise.yaml",
-    "exercises/kubernetes/level-0/002-first-deployment/setup/namespace.yaml",
-    "exercises/kubernetes/level-0/002-first-deployment/solution.md",
-    "src/app.mjs",
-  ])
+  const content = contentFiles();
+  assert.ok(content.length >= 40, "every Level 0 exercise file is enumerated");
+  for (const expected of [...content, "src/app.mjs", "src/tracks/kubernetes/quantity.mjs"])
     assert.ok(files.includes(expected), `tarball is missing ${expected}`);
   assert.ok(!files.some((f) => f.startsWith("test/")), "tests must not be published");
 
@@ -55,7 +51,7 @@ test("exercises ship in the npm tarball and load from an installed location", ()
     ],
     { cwd: elsewhere, encoding: "utf8" },
   );
-  assert.deepEqual(JSON.parse(output), ["k8s-0001", "k8s-0002"]);
+  assert.deepEqual(JSON.parse(output), CURRICULUM_ORDER);
   assert.ok(readdirSync(pkg).includes("exercises"));
 
   // The installed CLI works from an unrelated directory, offline, without Docker or kind.
@@ -67,10 +63,11 @@ test("exercises ship in the npm tarball and load from an installed location", ()
     });
   const validated = cli("validate-content");
   assert.equal(validated.status, 0, validated.stderr);
-  assert.match(validated.stdout, /Validated 2 exercises: OK/);
+  assert.match(validated.stdout, /Validated 18 exercises: OK/);
   const listed = cli("exercises");
   assert.equal(listed.status, 0, listed.stderr);
-  assert.match(listed.stdout, /k8s-0001[\s\S]*k8s-0002/);
+  // Listed in curriculum order (k8s-0011 is taught before k8s-0002), not id order.
+  assert.match(listed.stdout, /k8s-0001[\s\S]*k8s-0011[\s\S]*k8s-0002[\s\S]*k8s-0010/);
   assert.match(cli("help").stdout, /validate-content/);
   assert.equal(cli("no-such-command").status, 1);
 
@@ -103,16 +100,15 @@ test("the package gate flags missing, stray and sensitive files", () => {
     "src/app.mjs",
     "src/server.mjs",
     "dist/web/index.html",
-    "exercises/kubernetes/level-0/001-first-pod/exercise.yaml",
-    "exercises/kubernetes/level-0/001-first-pod/description.md",
-    "exercises/kubernetes/level-0/002-first-deployment/exercise.yaml",
-    "exercises/kubernetes/level-0/002-first-deployment/setup/namespace.yaml",
+    ...contentFiles(),
   ];
   assert.deepEqual(checkPackedFiles(good), []);
   assert.match(
     checkPackedFiles(good.filter((f) => f !== "dist/web/index.html")).join(),
     /dist\/web/,
   );
+  const manifest = "exercises/kubernetes/level-2/005-why-not-ready/setup/status-page.yaml";
+  assert.match(checkPackedFiles(good.filter((f) => f !== manifest)).join(), /status-page\.yaml/);
   for (const extra of [
     ".env",
     "notes/audit.md",

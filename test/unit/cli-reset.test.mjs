@@ -7,7 +7,7 @@ import path from "node:path";
 import { createApp } from "../../src/app.mjs";
 import { PID_FILE, PORT_FILE, resetExercise } from "../../src/cli/reset.mjs";
 import { startServer } from "../../src/server.mjs";
-import { createFakeCluster, readyPod } from "../helpers/fake-cluster.mjs";
+import { createFakeCluster, ownedNamespace, readyPod } from "../helpers/fake-cluster.mjs";
 
 const quiet = { warn() {}, error() {} };
 const noLocalApp = () => {
@@ -38,7 +38,9 @@ async function closedPort() {
 
 test("with no running server, reset changes the environment directly", () =>
   withState(async (stateDir) => {
-    const cluster = createFakeCluster({ resources: [readyPod()] });
+    const cluster = createFakeCluster({
+      resources: [ownedNamespace("fl-k8s-0001", "k8s-0001"), readyPod()],
+    });
     const { steps, via } = await resetExercise({
       id: "k8s-0001",
       discardActive: false,
@@ -48,7 +50,7 @@ test("with no running server, reset changes the environment directly", () =>
     });
     assert.equal(via, "direct");
     assert.ok(steps.length > 0);
-    assert.equal(cluster.find("Pod", "web", "default"), undefined);
+    assert.equal(cluster.find("Pod", "web", "fl-k8s-0001"), undefined);
   }));
 
 test("a stale PID file (process gone) falls back to the direct path", () =>
@@ -85,7 +87,7 @@ test("with a running server, reset goes through it and never touches the cluster
       });
       assert.equal(via, "server");
       assert.deepEqual(seen, [[4242, "999"]]);
-      assert.equal(cluster.find("Pod", "web", "default"), undefined, "the server reset it");
+      assert.equal(cluster.find("Pod", "web", "fl-k8s-0001"), undefined, "the server reset it");
 
       // The server's rules apply: resetting another exercise needs --yes.
       await assert.rejects(
@@ -106,7 +108,7 @@ test("with a running server, reset goes through it and never touches the cluster
         createLocalApp: noLocalApp,
       });
       assert.equal(yes.via, "server");
-      assert.ok(cluster.find("Namespace", "staging"));
+      assert.ok(cluster.find("Namespace", "fl-k8s-0002"));
     } finally {
       await server.close();
     }

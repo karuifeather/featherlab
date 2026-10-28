@@ -127,20 +127,22 @@ inspects the resulting Kubernetes state through reusable validators. See
 
 `GET /api/exercises[?track=&level=&difficulty=&tag=]`, `GET /api/exercises/:id`,
 `GET /api/exercises/:id/hints/:n`, `POST /api/exercises/:id/{activate,check,reset}`,
-`GET /api/status` (v0.1 fields `ready`, `cluster`, `track`, `exercise` are unchanged; `exercises`
-is the added exercise count). Errors are `{error, code}`. Requests must use a loopback `Host`
-header (`127.0.0.1:<port>` or `localhost:<port>`). The v0.1 `POST /api/check` remains as a
-deprecated alias for checking `k8s-0001` (it follows the same rules: the exercise must be open).
+`POST /api/exercises/:id/select`, `GET /api/exercises/:id/progress`,
+`GET /api/progress/track/:trackId`, `GET /api/resume`, and `GET /api/status` (`ready`, `cluster`,
+`exercises` count). Only the exercise that currently owns the practice environment can be
+checked, so open it (`activate`) before `check`. Errors are `{error, code}`. Requests must use a
+loopback `Host` header (`127.0.0.1:<port>` or `localhost:<port>`). The v0.1 `POST /api/check`
+alias and the v0.1 `track`/`exercise` fields of `/api/status` were removed in M5.1.
 
 ### Tests
 
-| Command                             | What it covers                                                                                                                                                                        | Needs Docker/kind |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `npm test`                          | Unit tests with a fake cluster, content validation, API/security, CLI exit codes, isolation guard, and a packaging test that packs the project and runs it from the unpacked tarball. | no                |
-| `npm run validate-content`          | Validates every packaged exercise definition. Also a CI and release gate.                                                                                                             | no                |
-| `npm run pack:check`                | Verifies the tarball contains the runtime files (including `dist/web`) and nothing else.                                                                                              | no                |
-| `npm run test:kind`                 | Real exercise lifecycle against a **disposable** `featherlab-test-<id>` kind cluster.                                                                                                 | yes               |
-| `npm run build && npm run test:e2e` | Playwright browser workflow (launcher → exercise → terminal → grading → reset → reconnect → failure display) against the real backend and a disposable cluster.                       | yes               |
+| Command                             | What it covers                                                                                                                                                                                                                | Needs Docker/kind |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `npm test`                          | Unit tests with a fake cluster, content validation, API/security, CLI exit codes, isolation guard, and a packaging test that packs the project and runs it from the unpacked tarball.                                         | no                |
+| `npm run validate-content`          | Validates every packaged exercise definition. Also a CI and release gate.                                                                                                                                                     | no                |
+| `npm run pack:check`                | Verifies the tarball contains the runtime files (including `dist/web`) and nothing else.                                                                                                                                      | no                |
+| `npm run test:kind`                 | Every exercise in the curriculum solved for real (baseline, solution, alternatives, wrong variants, switch, revisit), namespace isolation and recovery, stop/resume, on a **disposable** `featherlab-test-<id>` kind cluster. | yes               |
+| `npm run build && npm run test:e2e` | Playwright browser workflow (launcher → exercise → terminal → grading → reset → reconnect → failure display) against the real backend and a disposable cluster.                                                               | yes               |
 
 The Docker/kind suites create and delete their own cluster, workstation and state directory, and
 refuse to run against the `featherlab` cluster; your practice environment and `~/.kube/config`
@@ -160,10 +162,10 @@ shared cluster-admin credential limitation.
 - Start the UI on loopback only. Do not expose it over a public tunnel or bind to a public address without auth, TLS, and additional security review.
 - The CLI can control Docker on the host, so only install it from a trusted release. The learner workstation cannot access the Docker socket.
 - `featherlab stop` validates the PID file by checking both the process entry-point path (`bin/featherlab.mjs`) and its start time before sending any signal. A stale PID file or a recycled PID never causes an unrelated application to be signaled.
-- Only task exercises exist. No progress database, curriculum/locking engine, or CKS hardened VM labs are included yet.
+- Only task exercises exist: an 18-exercise Kubernetes curriculum, a ten-exercise Level 0 foundations course followed by the first Level 1 and Level 2 workload labs ([docs/curriculum.md](docs/curriculum.md)). Cluster-wide CKA/CKS administration labs need disposable per-lab environments, which are not included yet.
 - The CLI currently **requires kind installed** rather than auto-downloading its binary. This is deliberate for the first working milestone; auto-bootstrap can follow.
 - The terminal uses real Docker exec TTY streams and WebSockets. Comprehensive cross-platform PTY testing and backpressure handling remain to be completed.
-- The learner workstation is restarted rather than replaced between sessions. `reset` removes only the objects an exercise declares, not all user files or cluster configuration.
+- The learner workstation is restarted rather than replaced between sessions. Each exercise works in its own `fl-<id>` namespace(s); `reset` deletes and recreates only those (after verifying FeatherLab owns them), never workstation files, other namespaces or cluster-wide configuration. Use `kubectl -n <namespace>`: the workstation's kubeconfig is read-only.
 - Publication (GHCR push, npm trusted publishing) can only be verified by running the release workflow.
 
 ## Next increments

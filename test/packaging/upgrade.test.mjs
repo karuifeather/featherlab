@@ -7,19 +7,17 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import {
   DEFAULT_CLUSTER,
   DEFAULT_WORKSTATION,
   DEFAULT_STATE_DIR,
 } from "../../src/infrastructure/environment.mjs";
 import { createRuntime } from "../../src/lib/runtime.mjs";
+import { cliWithFakeDocker } from "../helpers/fake-docker.mjs";
 
-const bin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../bin/featherlab.mjs");
 const quiet = { log() {}, error() {} };
 
 // Simulates the exec surface left by a v0.1.2 install: cluster "featherlab" exists,
@@ -46,29 +44,6 @@ function fakeV012Exec({ containerState = "true" } = {}) {
         (c.binary === "docker" && ["run", "rm", "stop", "start", "pull"].includes(c.args[0])),
     );
   return { exec, calls, mutating };
-}
-
-// Runs the CLI with a fake `docker` (and no `kind`) on PATH so no real environment is reached.
-function cliWithFakeDocker(args, { dockerExitCode = 0, dockerStderr = "", env = {} } = {}) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "featherlab-upgrade-cli-"));
-  const log = path.join(dir, "calls.log");
-  writeFileSync(
-    path.join(dir, "docker"),
-    `#!/bin/sh\necho "$@" >> "${log}"\n${dockerStderr ? `echo "${dockerStderr}" >&2\n` : ""}exit ${dockerExitCode}\n`,
-  );
-  chmodSync(path.join(dir, "docker"), 0o755);
-  const result = spawnSync(process.execPath, [bin, ...args], {
-    encoding: "utf8",
-    env: { ...process.env, ...env, PATH: dir },
-  });
-  let dockerCalls = [];
-  try {
-    dockerCalls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean);
-  } catch {
-    /* docker was never reached */
-  }
-  rmSync(dir, { recursive: true, force: true });
-  return { ...result, dockerCalls };
 }
 
 // ─── Naming constants ─────────────────────────────────────────────────────────
@@ -182,25 +157,23 @@ test("provision() leaves pre-existing v0.1.2 state files intact", () => {
 
 // ─── CLI backward compatibility ───────────────────────────────────────────────
 
-test("`reset` (no-arg) in M2 deletes the same resource v0.1.2 reset did: pod/web in default", () => {
-  // v0.1.2: kubectl -n default delete pod web --ignore-not-found=true --wait=false
-  // M2 k8s-0001: kubectl delete pods web -n default --ignore-not-found=true ...
+test("`reset` (no-arg) no longer deletes pod/web in default, as v0.1.2 through 1.0 did", () => {
+  // v0.1.2-1.0 deleted pod/web in `default` by name, which could remove a learner's own Pod.
+  // Since M5.1 k8s-0001 lives in fl-k8s-0001, and only that verified namespace is touched.
   const out = cliWithFakeDocker(["reset"]);
   assert.equal(out.status, 0, out.stderr);
-  const deletes = out.dockerCalls.filter((c) => c.includes(" delete "));
-  assert.equal(deletes.length, 1, "exactly one delete on a no-arg reset");
-  assert.match(
-    deletes[0],
-    /exec featherlab-workstation kubectl delete pods web -n default /,
-    "must target pod/web in the default namespace",
+  assert.ok(
+    out.calls.every((c) => !/ delete pods web| -n default\b/.test(c)),
+    "nothing in the default namespace is addressed",
   );
+  assert.ok(out.calls.some((c) => c.includes("get namespaces fl-k8s-0001")));
 });
 
 test("`reset` (no-arg) only addresses the workstation, never a raw Docker or kind resource", () => {
   const out = cliWithFakeDocker(["reset"]);
   assert.equal(out.status, 0, out.stderr);
   assert.ok(
-    out.dockerCalls.every((c) => c.startsWith("exec featherlab-workstation kubectl ")),
+    out.calls.every((c) => /^exec (-i )?featherlab-workstation kubectl /.test(c)),
     "every docker call must be exec-into-workstation",
   );
 });
@@ -217,10 +190,10 @@ test("`exercises` and `validate-content` are available and work offline (new in 
   const ex = cliWithFakeDocker(["exercises"]);
   assert.equal(ex.status, 0, ex.stderr);
   assert.match(ex.stdout, /k8s-0001/);
-  assert.deepEqual(ex.dockerCalls, [], "exercises must not contact Docker");
+  assert.deepEqual(ex.calls, [], "exercises must not contact Docker");
 
   const vc = cliWithFakeDocker(["validate-content"]);
   assert.equal(vc.status, 0, vc.stderr);
   assert.match(vc.stdout, /Validated/);
-  assert.deepEqual(vc.dockerCalls, [], "validate-content must not contact Docker");
+  assert.deepEqual(vc.calls, [], "validate-content must not contact Docker");
 });

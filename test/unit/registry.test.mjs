@@ -7,15 +7,147 @@ import { createApp } from "../../src/app.mjs";
 import { createFsContentSource } from "../../src/infrastructure/content/fs-loader.mjs";
 import { appFor, exerciseFiles, makeContent } from "../helpers/content.mjs";
 import { createFakeCluster } from "../helpers/fake-cluster.mjs";
+import { CURRICULUM, CURRICULUM_ORDER, FOUNDATIONS_CHALLENGE } from "../helpers/curriculum.mjs";
 
 const quiet = { warn() {}, error() {} };
 
-test("the packaged exercises load without any hardcoded imports", () => {
-  const { registry } = createApp({ runner: createFakeCluster(), logger: quiet });
+const packagedRegistry = () => createApp({ runner: createFakeCluster(), logger: quiet }).registry;
+
+test("the packaged exercises load in curriculum order, not id order", () => {
+  const registry = packagedRegistry();
   assert.deepEqual(
     registry.list().map((e) => e.id),
-    ["k8s-0001", "k8s-0002"],
+    CURRICULUM_ORDER,
   );
+  for (const [level, ids] of Object.entries(CURRICULUM))
+    assert.deepEqual(
+      registry.list({ level: Number(level) }).map((e) => e.id),
+      ids,
+      `level ${level}`,
+    );
+});
+
+test("the prerequisite graph is the designed curriculum, not one linear chain", () => {
+  const graph = Object.fromEntries(
+    packagedRegistry()
+      .list()
+      .map((e) => [e.id, e.prerequisites]),
+  );
+  assert.deepEqual(graph, {
+    // Level 0: three strands open after the first Pod, then they join.
+    "k8s-0001": [],
+    "k8s-0011": ["k8s-0001"],
+    "k8s-0012": ["k8s-0001"],
+    "k8s-0013": ["k8s-0001"],
+    "k8s-0014": ["k8s-0011"],
+    "k8s-0002": ["k8s-0012"],
+    "k8s-0015": ["k8s-0002"],
+    "k8s-0016": ["k8s-0014", "k8s-0015"],
+    "k8s-0017": ["k8s-0013", "k8s-0016"],
+    "k8s-0018": ["k8s-0017"],
+    // Level 1 and 2: the M5.1 exercises, gated behind the Level 0 challenge.
+    "k8s-0003": ["k8s-0018"],
+    "k8s-0006": ["k8s-0018"],
+    "k8s-0004": ["k8s-0018"],
+    "k8s-0005": ["k8s-0004"],
+    "k8s-0007": ["k8s-0003"],
+    "k8s-0008": ["k8s-0004"],
+    "k8s-0009": ["k8s-0005", "k8s-0008"],
+    "k8s-0010": ["k8s-0003", "k8s-0006", "k8s-0007", "k8s-0009"],
+  });
+});
+
+/** Every exercise reachable through prerequisites (excluding the start). */
+function requiredBy(registry, id, seen = new Set()) {
+  for (const prereq of registry.get(id).prerequisites)
+    if (!seen.has(prereq)) {
+      seen.add(prereq);
+      requiredBy(registry, prereq, seen);
+    }
+  return seen;
+}
+
+test("the Foundations Challenge cannot be bypassed and covers all of Level 0", () => {
+  const registry = packagedRegistry();
+  const levelZero = CURRICULUM[0].filter((id) => id !== FOUNDATIONS_CHALLENGE);
+  assert.deepEqual(
+    [...requiredBy(registry, FOUNDATIONS_CHALLENGE)].sort(),
+    [...levelZero].sort(),
+    "the challenge requires every other Level 0 exercise",
+  );
+  for (const exercise of registry.list().filter((e) => e.level > 0))
+    assert.ok(
+      requiredBy(registry, exercise.id).has(FOUNDATIONS_CHALLENGE),
+      `${exercise.id} requires the Foundations Challenge`,
+    );
+});
+
+test("each level only builds on itself and earlier levels; difficulty never drops", () => {
+  const registry = packagedRegistry();
+  const rank = { beginner: 0, intermediate: 1, advanced: 2 };
+  for (const exercise of registry.list())
+    for (const prereq of exercise.prerequisites)
+      assert.ok(registry.get(prereq).level <= exercise.level, `${exercise.id} <- ${prereq}`);
+  // Level 1 and 2 are never labelled beginner; Level 0 has nothing advanced.
+  for (const exercise of registry.list()) {
+    if (exercise.level > 0) assert.ok(rank[exercise.difficulty] >= 1, exercise.id);
+    if (exercise.level === 0) assert.ok(rank[exercise.difficulty] <= 1, exercise.id);
+  }
+});
+
+test("relocated exercises keep their identity: id, namespace and checks", () => {
+  const registry = packagedRegistry();
+  for (const id of [...CURRICULUM[1], ...CURRICULUM[2]]) {
+    const exercise = registry.get(id);
+    assert.equal(exercise.lifecycle.namespaces[0], `fl-${id}`);
+    assert.ok(exercise.checks.length > 0);
+  }
+  assert.equal(registry.get("k8s-0010").title, "Workload Recovery Mastery");
+});
+
+test("explicit order wins over id order; a duplicate order in a level is rejected", () => {
+  const ordered = (id, order) => exerciseFiles(`${id}`, { id, order });
+  const { registry } = appFor(
+    {
+      ...ordered("demo-0001", 2),
+      ...ordered("demo-0002", 1),
+      ...exerciseFiles("x", { id: "demo-0003" }),
+    },
+    createFakeCluster(),
+  );
+  assert.deepEqual(
+    registry.list().map((e) => e.id),
+    ["demo-0002", "demo-0001", "demo-0003"],
+    "ordered first by `order`, then exercises without one by id",
+  );
+  assert.throws(
+    () => appFor({ ...ordered("demo-0001", 1), ...ordered("demo-0002", 1) }, createFakeCluster()),
+    /order 1 in level 0 is already used by "demo-0001"/,
+  );
+});
+
+test("a prerequisite at a higher level is rejected", () => {
+  assert.throws(
+    () =>
+      appFor(
+        {
+          ...exerciseFiles("a", { id: "demo-0001", level: 1 }),
+          ...exerciseFiles("b", { id: "demo-0002", prerequisites: ["demo-0001"] }),
+        },
+        createFakeCluster(),
+      ),
+    /prerequisite "demo-0001" is at level 1, above this exercise's level 0/,
+  );
+});
+
+test("every packaged exercise owns fl-<id> and states its namespace in the first requirement", () => {
+  const { registry } = createApp({ runner: createFakeCluster(), logger: quiet });
+  for (const exercise of registry.list()) {
+    assert.equal(exercise.lifecycle.namespaces[0], `fl-${exercise.id}`);
+    assert.match(exercise.requirements[0], new RegExp(`\`fl-${exercise.id}\``), exercise.id);
+    assert.equal(exercise.hints.length, 3, `${exercise.id} has three graduated hints`);
+    assert.ok(exercise.solution, `${exercise.id} has a private reference solution`);
+  }
 });
 
 test("duplicate exercise ids are rejected and both files are named", () => {

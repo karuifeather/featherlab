@@ -21,7 +21,10 @@ export default async function globalSetup() {
   try {
     const { workstation, cluster } = env.config;
     server = await startServer(E2E_PORT, {
-      service: createApp({ workstation, logger: quiet }).service,
+      // Real persistence (in the test-owned state directory), so locks, unlocks and
+      // completion behave exactly as for a learner.
+      service: createApp({ workstation, cluster, stateDir: env.config.stateDir, logger: quiet })
+        .service,
       workstation,
       cluster,
     });

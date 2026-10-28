@@ -34,7 +34,7 @@ before(async () => {
   env = new IsolatedEnvironment({ log: console }).start();
   const { workstation, cluster } = env.config;
   server = await startServer(0, {
-    service: createApp({ workstation, logger: quiet }).service,
+    service: createApp({ workstation, cluster, logger: quiet }).service,
     workstation,
     cluster,
   });
@@ -50,52 +50,58 @@ const post = async (id, action, query = "") =>
 // Taking the environment from another exercise that holds it must be confirmed.
 const CONFIRM = "?discardActive=true";
 
-test("k8s-0001: reset -> fail -> solve in the workstation -> pass -> reset", options, async () => {
-  await post("k8s-0001", "reset");
-  assert.equal((await post("k8s-0001", "check")).result.success, false);
+test(
+  "k8s-0001 over HTTP: reset -> fail -> solve in the workstation -> pass -> reset",
+  options,
+  async () => {
+    await post("k8s-0001", "reset");
+    assert.equal((await post("k8s-0001", "check")).result.outcome, "failed");
 
-  kubectl("run", "web", "--image=nginx:1.27");
-  kubectl("wait", "--for=condition=Ready", "pod/web", "--timeout=120s");
-  const { result } = await post("k8s-0001", "check");
-  assert.equal(result.success, true, JSON.stringify(result));
+    kubectl("run", "web", "--image=nginx:1.27", "-n", "fl-k8s-0001");
+    kubectl("wait", "--for=condition=Ready", "pod/web", "-n", "fl-k8s-0001", "--timeout=120s");
+    const { result } = await post("k8s-0001", "check");
+    assert.equal(result.outcome, "passed", JSON.stringify(result));
 
-  await post("k8s-0001", "reset");
-  assert.equal(kubectl("get", "pods", "-n", "default", "--no-headers", "-l", "run=web").trim(), "");
-  assert.equal((await post("k8s-0001", "check")).result.success, false);
-});
+    await post("k8s-0001", "reset");
+    assert.equal(kubectl("get", "pods", "-n", "fl-k8s-0001", "--no-headers").trim(), "");
+    assert.equal((await post("k8s-0001", "check")).result.outcome, "failed");
+  },
+);
 
 test(
-  "k8s-0002: activate is idempotent, grading reflects real state, reset is scoped",
+  "k8s-0002 over HTTP: confirmation, read-only resume, real grading, scoped reset",
   options,
   async () => {
     assert.equal((await post("k8s-0002", "reset")).code, "ENVIRONMENT_IN_USE");
     await post("k8s-0002", "reset", CONFIRM);
-    await post("k8s-0002", "activate");
-    await post("k8s-0002", "activate");
+    const resumed = await post("k8s-0002", "activate");
+    assert.equal(resumed.environment, "resumed");
+    assert.deepEqual(resumed.steps, []);
     assert.match(
-      kubectl("get", "namespace", "staging", "-o", "jsonpath={.metadata.labels}"),
+      kubectl("get", "namespace", "fl-k8s-0002", "-o", "jsonpath={.metadata.labels}"),
       /featherlab/,
     );
 
-    // Learner work for exercise 1 must survive exercise 2 operations.
-    kubectl("run", "web", "--image=nginx:1.27");
+    // A learner's own Pod in default is never part of any exercise.
+    kubectl("run", "web", "--image=nginx:1.27", "-n", "default");
     const before = (await post("k8s-0002", "check")).result;
-    assert.equal(before.success, false);
-    assert.equal(before.checks.find((c) => c.id === "namespace").passed, true);
+    assert.equal(before.outcome, "failed");
 
-    kubectl("create", "deployment", "api", "--image=nginx:1.27", "--replicas=2", "-n", "staging");
-    kubectl("label", "deployment", "api", "tier=backend", "-n", "staging");
-    kubectl("rollout", "status", "deployment/api", "-n", "staging", "--timeout=180s");
+    const ns = "fl-k8s-0002";
+    kubectl("create", "deployment", "api", "--image=nginx:1.27", "--replicas=2", "-n", ns);
+    kubectl("label", "deployment", "api", "tier=backend", "-n", ns);
+    kubectl("rollout", "status", "deployment/api", "-n", ns, "--timeout=180s");
     const solved = (await post("k8s-0002", "check")).result;
-    assert.equal(solved.success, true, JSON.stringify(solved));
+    assert.equal(solved.outcome, "passed", JSON.stringify(solved));
 
     await post("k8s-0002", "reset");
-    assert.equal((await post("k8s-0002", "check")).result.success, false);
+    assert.equal((await post("k8s-0002", "check")).result.outcome, "failed");
     assert.match(kubectl("get", "pod", "web", "-n", "default", "-o", "name"), /pod\/web/);
 
-    // Switching back cleans up k8s-0002 (Deployment and its managed namespace).
+    // Switching back cleans up k8s-0002's namespace entirely.
     await post("k8s-0001", "reset", CONFIRM);
-    assert.equal(kubectl("get", "deployments", "-n", "staging", "--no-headers").trim(), "");
+    assert.doesNotMatch(kubectl("get", "namespaces", "-o", "name"), /fl-k8s-0002/);
+    assert.match(kubectl("get", "pod", "web", "-n", "default", "-o", "name"), /pod\/web/);
   },
 );
 

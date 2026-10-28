@@ -8,13 +8,18 @@
  * @property {ValidatorDefinition[]} validators  track-specific validators (see validation/registry.mjs)
  * @property {(raw: object, ctx: {exerciseId: string, reader: ContentReader, problems: Problems}) => object} compileLifecycle
  *   Validate the exercise's opaque `lifecycle` section at load time and return an immutable
- *   plan. Record defects on `ctx.problems`; never throw for bad content.
+ *   plan. Record defects on `ctx.problems`; never throw for bad content. The plan may carry
+ *   `claims`: identifiers of environment resources the exercise owns exclusively; the
+ *   registry rejects two exercises claiming the same one.
+ * @property {(checks: object[], plan: object, ctx: {problems: Problems}) => void} [validateCheckScope]
+ *   Optional load-time check that the exercise's checks only look at what it owns.
  * @property {LifecycleDriver} driver
  *
  * @typedef {Object} LifecycleDriver
  *   Every method is idempotent and receives `{exercise, signal}`.
- * @property {(ctx) => Promise<void>} prepare   Verify the environment is reachable.
- * @property {(ctx) => Promise<string[]>} setup    Create what the exercise needs; returns step names.
+ * @property {(ctx) => Promise<void>} prepare   Verify the environment is reachable (read-only).
+ * @property {(ctx) => Promise<{intact: boolean, blockers: string[]}>} inspect  Read-only:
+ *   whether a previous preparation is still in place, and why a reset/cleanup would be refused.
  * @property {(ctx) => Promise<string[]>} reset    Remove the learner's work, then restore setup state.
  * @property {(ctx) => Promise<string[]>} cleanup  Remove everything the exercise owns.
  * @property {(ctx) => object} createQuery      Per-grading read-only state adapter exposed to

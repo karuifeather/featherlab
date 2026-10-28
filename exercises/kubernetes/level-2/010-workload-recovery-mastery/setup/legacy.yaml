@@ -1,0 +1,20 @@
+# The previous release, still running in its own namespace under the same name.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-api
+  namespace: fl-k8s-0010-legacy
+  labels: { app: inventory-api, release: legacy }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: inventory-api }
+  template:
+    metadata:
+      labels: { app: inventory-api }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: api
+          image: nginx:1.27
+          ports: [{ name: http, containerPort: 80 }]

@@ -26,18 +26,23 @@ const silent = { warn() {} };
  * The session records which one (and whether it is `ready` or still `preparing`) and
  * enforces:
  *
- *  - Opening a different exercise removes the previous owner's declared learner objects and
- *    its setup objects, then resets the new one. That covers everything an exercise
- *    declares; objects the learner created under other names are NOT removed and can
- *    still affect later exercises (see "Isolation contract" in docs/authoring.md).
+ *  - Opening a different exercise cleans up the previous owner, then resets the new one. For
+ *    the Kubernetes track that deletes and recreates the exercises' own namespaces, which
+ *    removes every namespaced object in them, declared or not. Cluster-scoped objects and
+ *    other namespaces are never touched (see "Isolation contract" in docs/authoring.md).
  *  - Taking the cluster from a `ready` owner discards the learner's work there, so it needs
  *    explicit confirmation (`discardActive`); without it the request fails with
  *    EnvironmentInUseError and nothing is touched.
  *  - Reopening the `ready` owner keeps the learner's work, so a page reload or
- *    `featherlab stop` / `start` does not throw it away.
- *  - Baseline guard: right after a reset the exercise must NOT already pass. If it does,
- *    the environment is contaminated or the content is broken, and the exercise is not
- *    handed to the learner as ready.
+ *    `featherlab stop` / `start` does not throw it away. It is read-only. If the probe finds
+ *    the exercise's environment missing (an older layout, or removed by hand), there is no
+ *    work left to keep and the exercise is prepared again (`recreated: true`).
+ *  - Ownership guard: if the probe reports blockers (an exercise resource FeatherLab does not
+ *    own and would refuse to delete), the operation fails before any mutation.
+ *  - Baseline guard: right after a reset the exercise's checks must run and report
+ *    `failed`. If they pass, the environment is contaminated or the content is broken; if
+ *    they cannot be evaluated, the starting state is unproven. Either way the exercise is
+ *    not handed to the learner as ready.
  *  - Only the `ready` owner can be graded, so returning to a completed problem means
  *    solving it again rather than passing on stale state.
  *  - Operations are serialized across exercises: the cluster is shared, so a cleanup for
@@ -90,8 +95,20 @@ export class EnvironmentSession {
     return this.#exclusive("activate", exercise, discardActive, async () => {
       const active = this.#store.get();
       if (active?.exerciseId === exercise.id && active.state === "ready") {
-        const { steps } = await this.#lifecycle.activate(exercise);
-        return { steps, environment: "resumed" };
+        // Resuming is read-only: re-applying setup would undo a learner's fix.
+        const probe = await this.#lifecycle.probe(exercise);
+        if (probe.intact) return { steps: [], environment: "resumed" };
+        // The record says ready, but the exercise's environment is not there (created by an
+        // older FeatherLab layout, or removed by hand). Nothing of it is left to keep, so it is
+        // prepared again from scratch rather than trusted.
+        this.#logger.warn(
+          `Exercise "${exercise.id}" was recorded as ready but its environment is missing; preparing it again.`,
+        );
+        return {
+          steps: await this.#takeOver(exercise, "activate", discardActive, probe),
+          environment: "fresh",
+          recreated: true,
+        };
       }
       return {
         steps: await this.#takeOver(exercise, "activate", discardActive),
@@ -121,7 +138,9 @@ export class EnvironmentSession {
 
   cleanup(exercise) {
     return this.#exclusive("cleanup", exercise, false, async () => {
-      await this.#lifecycle.probe(exercise);
+      const { blockers } = await this.#lifecycle.probe(exercise);
+      if (blockers.length > 0)
+        throw new LifecycleError("cleanup", "ownership", blockers.join(" "), { completed: [] });
       const active = this.#store.get();
       if (active?.exerciseId === exercise.id) this.#store.set({ ...active, state: "preparing" });
       const outcome = await this.#lifecycle.cleanup(exercise);
@@ -130,7 +149,7 @@ export class EnvironmentSession {
     });
   }
 
-  async #takeOver(exercise, operation, discardActive) {
+  async #takeOver(exercise, operation, discardActive, probed) {
     const steps = [];
     const active = this.#store.get();
     const switching = active !== null && active.exerciseId !== exercise.id;
@@ -141,8 +160,13 @@ export class EnvironmentSession {
         { activeExerciseId: active.exerciseId },
       );
 
-    // 1. Probe: fail before any mutation, leaving the record (and a ready owner) untouched.
-    await this.#lifecycle.probe(exercise);
+    // 1. Probe (read-only): fail before any mutation, leaving the record (and a ready owner)
+    //    untouched. That includes resources the cleanup or reset would refuse to delete.
+    const probes = [probed ?? (await this.#lifecycle.probe(exercise))];
+    if (previous) probes.unshift(await this.#lifecycle.probe(previous));
+    const blockers = probes.flatMap((p) => p.blockers ?? []);
+    if (blockers.length > 0)
+      throw new LifecycleError(operation, "ownership", blockers.join(" "), { completed: [] });
 
     // 2. Journal: from the first mutating command on, the cluster state is not provable.
     if (switching) {
@@ -157,11 +181,19 @@ export class EnvironmentSession {
     this.#store.set({ trackId: exercise.track, exerciseId: exercise.id, state: "preparing" });
     steps.push(...(await this.#lifecycle.reset(exercise)).steps);
     const baseline = await this.#lifecycle.check(exercise);
-    if (baseline.success)
+    if (baseline.outcome === "passed")
       throw new LifecycleError(
         operation,
         "baseline",
         `"${exercise.title}" already passes before any work was done, so it cannot be graded fairly. Reset it to try again; if this persists the exercise content is not resetting its own resources.`,
+        { completed: steps },
+      );
+    // An unevaluable baseline proves nothing about the starting state: do not commit it.
+    if (baseline.outcome !== "failed")
+      throw new LifecycleError(
+        operation,
+        "baseline",
+        `The starting state of "${exercise.title}" could not be verified because the cluster could not be read. Reset it to try again.`,
         { completed: steps },
       );
     // 4. Commit.

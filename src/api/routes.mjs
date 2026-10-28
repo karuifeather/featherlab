@@ -1,6 +1,5 @@
 import { NotFoundError } from "../core/errors.mjs";
 import { MethodNotAllowedError } from "./http.mjs";
-import { legacyRoutes, legacyStatusFields } from "./legacy.mjs";
 
 /**
  * Thin HTTP adapters over ExerciseService. A handler maps request -> service call ->
@@ -28,7 +27,6 @@ export function buildRoutes() {
       body: {
         ready: true,
         cluster,
-        ...legacyStatusFields(service),
         exercises: service.exerciseCount,
       },
     })),
@@ -99,7 +97,6 @@ export function buildRoutes() {
     route("GET", /^\/api\/resume$/, (_, { service }) => ({
       body: { resume: service.getResume() },
     })),
-    ...legacyRoutes(route),
   ];
 }
 

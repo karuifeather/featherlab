@@ -34,8 +34,16 @@ function detectCycles(exercises, byId, problems) {
   }
 }
 
+/** Exercises without an explicit `order` follow the ordered ones, by id. */
+const positionOf = (e) => e.order ?? Number.POSITIVE_INFINITY;
+
 function byOrder(a, b) {
-  return collator.compare(a.track, b.track) || a.level - b.level || collator.compare(a.id, b.id);
+  return (
+    collator.compare(a.track, b.track) ||
+    a.level - b.level ||
+    positionOf(a) - positionOf(b) ||
+    collator.compare(a.id, b.id)
+  );
 }
 
 /**
@@ -91,6 +99,21 @@ export class ExerciseRegistry {
       problems.push(...scoped.list);
     }
 
+    // Two exercises must never own the same environment resource (e.g. a namespace):
+    // resetting one would destroy the other's state.
+    const claimedBy = new Map();
+    for (const exercise of exercises)
+      for (const claim of exercise.lifecycle?.claims ?? []) {
+        const key = `${exercise.track}:${claim}`;
+        if (claimedBy.has(key))
+          problems.push({
+            file: exercise.source,
+            path: "lifecycle",
+            message: `${claim} is already owned by exercise "${claimedBy.get(key)}"`,
+          });
+        else claimedBy.set(key, exercise.id);
+      }
+
     const ids = new Set(exercises.map((e) => e.id));
     const exerciseById = new Map(exercises.map((e) => [e.id, e]));
 
@@ -133,6 +156,33 @@ export class ExerciseRegistry {
       }
     }
 
+    // A prerequisite never sits at a higher level than the exercise that needs it, so each
+    // level only builds on itself and earlier levels.
+    for (const exercise of exercises)
+      exercise.prerequisites.forEach((prereq, i) => {
+        const other = exerciseById.get(prereq);
+        if (other && other.track === exercise.track && other.level > exercise.level)
+          problems.push({
+            file: exercise.source,
+            path: `prerequisites[${i}]`,
+            message: `prerequisite "${prereq}" is at level ${other.level}, above this exercise's level ${exercise.level}`,
+          });
+      });
+
+    // Display order must be unambiguous within a track's level.
+    const positions = new Map();
+    for (const exercise of exercises) {
+      if (exercise.order === undefined) continue;
+      const key = `${exercise.track}:${exercise.level}:${exercise.order}`;
+      if (positions.has(key))
+        problems.push({
+          file: exercise.source,
+          path: "order",
+          message: `order ${exercise.order} in level ${exercise.level} is already used by "${positions.get(key)}"`,
+        });
+      else positions.set(key, exercise.id);
+    }
+
     detectCycles(exercises, exerciseById, problems);
 
     if (problems.length > 0) throw new ContentError(problems);
@@ -153,7 +203,7 @@ export class ExerciseRegistry {
     return exercise;
   }
 
-  /** Exercises in stable order (track, level, id), optionally filtered. */
+  /** Exercises in curriculum order (track, level, `order`, then id), optionally filtered. */
   list({ track, level, difficulty, tags } = {}) {
     const wanted = tags ? [tags].flat() : [];
     return this.#ordered.filter(

@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import {
+  exercises,
+  noProgress,
   stubApi,
   forceDomTerminal,
   enterWorkspace,
@@ -490,4 +492,64 @@ test("code blocks are fully readable after hints and results are shown", async (
     // No vertical clipping: the rendered box holds its full content (±1px rounding).
     expect(scrollHeight - clientHeight).toBeLessThanOrEqual(1);
   }
+});
+
+test("an environment prepared again after an upgrade is explained", async ({ page, baseURL }) => {
+  await enterWorkspace(page, baseURL);
+  await expect(page.getByTestId("environment-recreated")).toHaveCount(0);
+
+  // Routes registered later win: the server now reports that it had to recreate it.
+  await page.route("**/api/exercises/*/activate", (r) =>
+    r.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ environment: "fresh", recreated: true, steps: [] }),
+    }),
+  );
+  await page.reload();
+  await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
+  await expect(page.getByTestId("environment-recreated")).toContainText(
+    "prepared again from scratch",
+  );
+});
+
+// Curriculum order comes from the backend and is not id order (k8s-0011 is taught before
+// k8s-0002). The sidebar, the per-level ordinal and "Next" must all follow it.
+test("sidebar order and Next follow the backend's curriculum order, not ids", async ({
+  page,
+  baseURL,
+}) => {
+  const ordered = [
+    exercises[0], // k8s-0001
+    { ...exercises[0], id: "k8s-0011", title: "Inspect a Pod", prerequisites: ["k8s-0001"] },
+    exercises[1], // k8s-0002
+  ];
+  const progress = {
+    exercises: ordered.map((e) => ({
+      ...noProgress.exercises[0],
+      exerciseId: e.id,
+      title: e.title,
+      level: e.level,
+      prerequisites: e.prerequisites,
+    })),
+    summary: { total: 3, completed: 0, available: 3, locked: 0 },
+  };
+  // Registered after stubApi, so these win.
+  await page.route(/\/api\/exercises(\?.*)?$/, (r) =>
+    r.fulfill({ contentType: "application/json", body: JSON.stringify({ exercises: ordered }) }),
+  );
+  await page.route(/\/api\/progress\/track\/[^/]+/, (r) =>
+    r.fulfill({ contentType: "application/json", body: JSON.stringify(progress) }),
+  );
+  await enterWorkspace(page, baseURL);
+
+  await expect(page.locator('[data-testid="lesson"] .lesson-title')).toHaveText([
+    "Your first Pod",
+    "Inspect a Pod",
+    "Run a Deployment",
+  ]);
+  await page.getByRole("button", { name: "Check solution" }).click();
+  await page.getByRole("button", { name: "Check solution" }).click();
+  await expect(page.getByTestId("next-exercise-btn")).toContainText("Inspect a Pod");
+  await page.getByTestId("next-exercise-btn").click();
+  await expect(page.getByTestId("exercise-panel")).toContainText("Exercise 02");
 });

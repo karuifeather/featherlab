@@ -3,7 +3,7 @@ import { EnvironmentError } from "../../core/errors.mjs";
 import { DEFAULT_WORKSTATION } from "../environment.mjs";
 
 const DOCKER_LEVEL_FAILURE =
-  /Cannot connect to the Docker daemon|Error response from daemon|No such container|is not running/i;
+  /Cannot connect to the Docker daemon|Error response from daemon|No such container|is not running|is paused/i;
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
 /**

@@ -22,7 +22,9 @@ src/
     kinds.mjs                allow-list of kinds, protected namespaces
     query.mjs                read-only cluster state adapter (ctx.query)
     validators.mjs           reusable validators
-    lifecycle.mjs            load-time lifecycle validation + the driver that mutates the cluster
+    quantity.mjs             resource quantities compared by amount ("0.1" == "100m")
+    lifecycle.mjs            load-time lifecycle validation (namespaces, setup placement, check
+                             scope) + the driver: ownership-verified namespace delete/create
   infrastructure/
     content/fs-loader.mjs    discovery, YAML parsing, path-confined reader
     docker/workstation-runner.mjs  CommandRunner over `docker exec`
@@ -87,38 +89,57 @@ no-op when objects are gone, so any partially failed operation is recovered by r
 again; errors report which step failed and which completed. Each operation has a deadline
 (`AbortSignal`) and a per-exercise lock; a second concurrent operation gets HTTP 409.
 
-**Reset is scoped.** Reset deletes exactly the objects named in `lifecycle.reset.delete`
-(explicit kind/name/namespace; never selectors or `--all`), then re-applies setup. Setup
-objects carry `app.kubernetes.io/managed-by=featherlab` and `featherlab.dev/exercise=<id>`;
-cleanup only deletes setup objects that still carry that label.
+**Exercises own namespaces (M5.1).** A Kubernetes exercise declares the namespaces it owns
+(`lifecycle.namespaces`: `fl-<id>`, then optional `fl-<id>-<suffix>`); everything it sets up,
+and everything it grades, lives there. A fresh start deletes those namespaces and recreates
+them from setup, which also removes undeclared learner objects. Deletion is guarded:
+
+- the namespace must carry `app.kubernetes.io/managed-by=featherlab` and
+  `featherlab.dev/exercise=<id>`;
+- the delete is UID-preconditioned;
+- termination is awaited, with a bounded wait and no finalizer removal;
+- a foreign namespace with the same name is refused before anything changes.
+
+Setup objects are created with `kubectl create`, never adopted with `apply`. The driver also
+checks that the kube context is `kind-<cluster>`. Content validation enforces naming,
+placement, check scope, and unique ownership across exercises. The boundary (namespaced
+objects only; not a security boundary) is documented in `security.md` and `authoring.md`.
 
 **One exercise owns the cluster at a time.** Every exercise shares one practice cluster, so
 `application/environment-session.mjs` records which exercise owns it and whether that owner is
 `ready` or `preparing` (SQLite `active_environment`, so it survives `stop`/`start`). It enforces:
 
-- Opening a _different_ exercise runs `cleanup` on the previous owner, then `reset` on the new
-  one. That removes everything the previous exercise _declares_ (its `reset.delete` objects and
-  its labelled setup objects). Objects the learner created under other names are not removed,
-  and some of them can still affect later exercises: a NetworkPolicy, ResourceQuota, LimitRange
-  or RoleBinding in a shared namespace, or a Service whose selector matches another exercise's
-  Pods. See "Isolation contract" in `authoring.md`.
+- Opening a _different_ exercise runs `cleanup` on the previous owner (deletes its
+  namespaces), then `reset` on the new one (recreates its namespaces from setup). Undeclared
+  learner objects in those namespaces go with them; nothing outside them is touched. See
+  "Isolation contract" in `authoring.md`.
 - Taking the cluster from a `ready` owner discards the learner's work there, so it must be
   confirmed (`?discardActive=true`, `featherlab reset --yes`). Without confirmation the request
   is `409 ENVIRONMENT_IN_USE` (`details.activeExerciseId`) and nothing is touched. The UI shows a
   confirmation card. "Next exercise" after a pass counts as confirmation; the note under the
   button says the next exercise opens in a fresh environment.
-- Reopening the `ready` owner (page reload, restart) only re-applies setup; work is kept.
-- Baseline guard: right after a reset the exercise's checks run once. If they already pass,
-  activation fails at step `baseline` and the exercise stays `preparing`. This catches content
-  whose `reset.delete` misses an object the checks look for.
+- Reopening the `ready` owner (page reload, restart) is read-only: the probe confirms its
+  primary namespace still exists and is owned, and the learner's work is kept untouched
+  (re-applying setup would revert a fix in a troubleshooting lab). If the namespace is missing,
+  for example a record saved by FeatherLab 1.0 (which used `default`/`staging`), there is
+  nothing to keep: the exercise is prepared again (`environment: "fresh"`, `recreated: true`)
+  instead of being trusted.
+- Baseline guard: right after a reset the exercise's checks run once and must report `failed`.
+  If they pass (broken content), or cannot be evaluated (unproven state), activation fails at
+  step `baseline` and the exercise stays `preparing`.
+- Ownership guard: the probe also reports namespaces FeatherLab would refuse to delete. A
+  takeover, reset or cleanup that would hit one fails at step `ownership` before step 2, so
+  the owner stays `ready`.
 - Only the `ready` owner can be graded (`409 EXERCISE_NOT_ACTIVE` otherwise), so returning to a
   completed problem means solving it again. Completion itself is never revoked.
 - Operations are serialized across exercises; a repeat request for an exercise that already
   has one pending gets 409 (an identical activate joins the pending one).
 - Transitions follow a recovery protocol, because SQLite and the cluster cannot share a
   transaction:
-  1. **Probe.** A read-only reachability check (`LifecycleManager.probe`). If it fails, nothing
-     has changed: the record is untouched, and a `ready` owner keeps its work and stays gradable.
+  1. **Probe.** Read-only (`LifecycleManager.probe`): the cluster is reachable through the
+     expected context, and the namespaces of the previous owner and the new exercise are
+     either absent or owned. If it fails, nothing has changed: the record is untouched, and a
+     `ready` owner keeps its work and stays gradable.
   2. **Journal.** The record turns `preparing` immediately before the first mutating command.
   3. **Mutate.** Cleanup of the previous owner, reset of the new exercise, the baseline check.
   4. **Commit.** The new exercise turns `ready`.
@@ -178,13 +199,15 @@ server (src/api/terminal.mjs) ──hold latest size until the exec exists──
 ## Lifecycle
 
 ```text
-activate = ready owner: prepare -> setup (apply manifests); work is kept
-           otherwise:   [confirm if another owner is ready] -> probe (read-only)
+probe    = prepare (context, readyz) -> inspect namespaces (absent | owned | foreign); read-only
+activate = ready owner, intact: probe; nothing else (work is kept)
+           otherwise:   [confirm if another owner is ready] -> probe previous + new
                         -> journal preparing -> cleanup(previous owner) -> reset
-                        -> baseline check must fail -> commit ready
+                        -> baseline check must be `failed` -> commit ready
 check    = query state -> run validators -> weighted score
-reset    = prepare -> delete learner work -> re-apply setup
-cleanup  = prepare -> delete learner work -> delete managed setup objects
+reset    = prepare -> delete owned namespaces (UID-bound, wait) -> create namespaces
+           -> wait for default ServiceAccount -> create setup objects
+cleanup  = prepare -> delete owned namespaces (UID-bound, wait)
 ```
 
 ## Learning Progression (M4.2)

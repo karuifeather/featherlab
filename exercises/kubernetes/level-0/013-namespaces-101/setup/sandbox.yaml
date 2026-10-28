@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  namespace: fl-k8s-0013-sandbox
+  labels: { app: web }
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - { name: web, image: nginx:1.27 }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: scratch
+  namespace: fl-k8s-0013-sandbox
+  labels: { app: scratch }
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - { name: web, image: nginx:1.27 }

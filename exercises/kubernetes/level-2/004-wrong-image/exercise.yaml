@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0004
+type: task
+title: The Wrong Image
+summary: A release never came up. Diagnose the failing Pods and repair the Deployment.
+track: kubernetes
+level: 2
+order: 1
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [troubleshooting, deployments, images, events, kubectl]
+prerequisites: [k8s-0018]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0004`"
+  - "The `web` container of Deployment `storefront` runs the team's standard image, `nginx:1.27`"
+  - "`storefront` finishes rolling out with 2 available replicas"
+
+hints:
+  - "Start from the Pods: `kubectl get pods -n fl-k8s-0004`. The STATUS column already tells you which stage fails."
+  - "`kubectl describe pod <name> -n fl-k8s-0004` ends with Events. Read the message on the failing event: what exactly could the node not do?"
+  - "Pods of a Deployment are recreated from its template, so fix the Deployment, not the Pods. `kubectl set image` or `kubectl edit` both work; then follow `kubectl rollout status`."
+
+lifecycle:
+  namespaces: [fl-k8s-0004]
+  setup:
+    manifests: [setup/storefront.yaml]
+
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container web runs nginx:1.27
+    params:
+      {
+        kind: Deployment,
+        name: storefront,
+        namespace: fl-k8s-0004,
+        container: web,
+        image: "nginx:1.27",
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: storefront rolled out with 2 available replicas
+    weight: 2
+    params: { name: storefront, namespace: fl-k8s-0004, replicas: 2 }

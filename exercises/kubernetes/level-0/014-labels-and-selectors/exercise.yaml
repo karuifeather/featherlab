@@ -1,0 +1,67 @@
+schemaVersion: 1
+id: k8s-0014
+type: task
+title: Labels and Selectors
+summary: Organise Pods with labels so a selector picks out exactly the right ones.
+track: kubernetes
+level: 0
+order: 5
+difficulty: beginner
+estimatedMinutes: 10
+tags: [labels, selectors, pods, kubectl]
+prerequisites: [k8s-0011]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0014` (already contains Pods `cart-a`, `cart-b` and `search-a`)"
+  - "`cart-a`, `cart-b` and `search-a` all carry `env=prod` (they are currently labelled `env=dev`)"
+  - "`search-a` no longer carries the `debug` label"
+  - "A new Pod `cart-c` running `nginx:1.27` is `Ready` and carries `app=cart` and `env=prod`"
+  - "Afterwards, `kubectl get pods -n fl-k8s-0014 -l app=cart,env=prod` lists exactly the three cart Pods"
+
+hints:
+  - "`kubectl get pods -n fl-k8s-0014 --show-labels` shows every Pod's labels, and `-l app=cart` filters by them. Try a few selectors before changing anything."
+  - "Changing the value of a label that already exists is refused unless you say you mean it: `kubectl label` needs `--overwrite` for that. A trailing minus (`debug-`) removes a label."
+  - "`kubectl run` accepts `--labels=key=value,key=value`, so a new Pod can start with the right labels."
+
+lifecycle:
+  namespaces: [fl-k8s-0014]
+  setup:
+    manifests: [setup/pods.yaml]
+
+checks:
+  - id: cart-a
+    type: k8s.labels
+    label: cart-a carries app=cart, env=prod
+    params: { kind: Pod, name: cart-a, namespace: fl-k8s-0014, labels: { app: cart, env: prod } }
+  - id: cart-b
+    type: k8s.labels
+    label: cart-b carries app=cart, env=prod
+    params: { kind: Pod, name: cart-b, namespace: fl-k8s-0014, labels: { app: cart, env: prod } }
+  - id: search
+    type: k8s.labels
+    label: search-a carries app=search, env=prod
+    params:
+      { kind: Pod, name: search-a, namespace: fl-k8s-0014, labels: { app: search, env: prod } }
+  - id: search-debug-removed
+    type: k8s.label-absent
+    label: search-a no longer carries debug
+    params: { kind: Pod, name: search-a, namespace: fl-k8s-0014, label: debug }
+  - id: cart-c-labels
+    type: k8s.labels
+    label: cart-c carries app=cart, env=prod
+    params: { kind: Pod, name: cart-c, namespace: fl-k8s-0014, labels: { app: cart, env: prod } }
+  - id: cart-c-image
+    type: k8s.container-image
+    label: cart-c runs nginx:1.27
+    params: { kind: Pod, name: cart-c, namespace: fl-k8s-0014, image: "nginx:1.27" }
+  - id: cart-c-ready
+    type: k8s.pod-ready
+    label: cart-c is Ready
+    params: { name: cart-c, namespace: fl-k8s-0014 }

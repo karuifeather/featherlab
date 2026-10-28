@@ -3,7 +3,6 @@ import { runChecks } from "../validation/engine.mjs";
 
 const DEFAULT_TIMEOUTS_MS = Object.freeze({
   probe: 30_000,
-  activate: 120_000,
   check: 60_000,
   reset: 120_000,
   cleanup: 120_000,
@@ -14,8 +13,7 @@ const silent = { warn() {}, error() {} };
 /**
  * Orchestrates the exercise lifecycle:
  *
- *   probe    = prepare only: is the environment reachable? Read-only, never mutates.
- *   activate = prepare (environment reachable) -> setup (create required resources)
+ *   probe    = prepare -> inspect: reachable? previous preparation intact? Read-only.
  *   check    = read state through the track's query adapter -> run validators -> score
  *   reset    = prepare -> remove the learner's work -> restore setup state
  *   cleanup  = prepare -> remove everything the exercise owns
@@ -43,19 +41,19 @@ export class LifecycleManager {
     this.#logger = logger;
   }
 
-  /** Read-only reachability check, so callers can fail before any mutation begins. */
+  /**
+   * Read-only: is the environment reachable, and what does the exercise's previous
+   * preparation look like? Callers use it to fail before any mutation begins.
+   *
+   * @returns {Promise<{exerciseId: string, intact: boolean, blockers: string[]}>}
+   *   `intact`: a previous preparation of this exercise is still in place (can be resumed).
+   *   `blockers`: learner-safe reasons a reset or cleanup would be refused.
+   */
   async probe(exercise) {
     return this.#run("probe", exercise, async ({ driver, signal }) => {
       await driver.prepare({ exercise, signal });
-      return { exerciseId: exercise.id };
-    });
-  }
-
-  async activate(exercise) {
-    return this.#run("activate", exercise, async ({ driver, signal }) => {
-      await driver.prepare({ exercise, signal });
-      const steps = await driver.setup({ exercise, signal });
-      return { exerciseId: exercise.id, steps };
+      const { intact, blockers } = await driver.inspect({ exercise, signal });
+      return { exerciseId: exercise.id, intact, blockers: [...blockers] };
     });
   }
 

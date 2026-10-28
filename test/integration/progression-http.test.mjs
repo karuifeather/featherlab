@@ -30,7 +30,7 @@ const CONTENT_FILES = {
         id: "exists",
         type: "k8s.resource-exists",
         label: "Pod demo2 exists",
-        params: { kind: "Pod", name: "demo2", namespace: "default" },
+        params: { kind: "Pod", name: "demo2", namespace: "fl-demo-0002" },
       },
     ],
   }),
@@ -70,7 +70,7 @@ const call = async (urlPath, init) => {
 
 test("POST /check returns passed outcome with progress field", async () => {
   await call("/api/exercises/demo-0001/activate", { method: "POST" });
-  cluster.put(readyPod({ name: "demo", namespace: "default" })); // the learner's work
+  cluster.put(readyPod({ name: "demo", namespace: "fl-demo-0001" })); // the learner's work
   const { status, body } = await call("/api/exercises/demo-0001/check", { method: "POST" });
   assert.equal(status, 200);
   assert.equal(body.result.outcome, "passed");

@@ -1,0 +1,63 @@
+schemaVersion: 1
+id: k8s-0006
+type: task
+title: Resource Boundaries
+summary: Give one container of a two-container workload the CPU and memory requests and limits it needs.
+track: kubernetes
+level: 1
+order: 2
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [resources, deployments, containers, kubectl]
+prerequisites: [k8s-0018]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0006`"
+  - "Container `app` of Deployment `ledger` requests `100m` CPU and `64Mi` memory"
+  - "Container `app` is limited to `250m` CPU and `128Mi` memory"
+  - "Container `metrics` keeps its current requests and memory limit unchanged"
+  - "`ledger` finishes rolling out with 2 available replicas"
+
+hints:
+  - "`kubectl get deployment ledger -n fl-k8s-0006 -o yaml` shows both containers. One of them already declares resources: use it as an example of the structure."
+  - "Requests are what the scheduler reserves for a container; limits are the ceiling it may not exceed. Both live under each container's own `resources` field."
+  - "`kubectl set resources` changes every container unless you name one with `-c`. `kubectl edit` lets you change just the `app` container."
+
+lifecycle:
+  namespaces: [fl-k8s-0006]
+  setup:
+    manifests: [setup/ledger.yaml]
+
+checks:
+  - id: app-resources
+    type: k8s.container-resources
+    label: Container app has the required requests and limits
+    weight: 2
+    params:
+      kind: Deployment
+      name: ledger
+      namespace: fl-k8s-0006
+      container: app
+      requests: { cpu: 100m, memory: 64Mi }
+      limits: { cpu: 250m, memory: 128Mi }
+  - id: metrics-unchanged
+    type: k8s.container-resources
+    label: Container metrics keeps its original resources
+    params:
+      kind: Deployment
+      name: ledger
+      namespace: fl-k8s-0006
+      container: metrics
+      requests: { cpu: 10m, memory: 16Mi }
+      limits: { memory: 32Mi }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: ledger rolled out with 2 available replicas
+    params: { name: ledger, namespace: fl-k8s-0006, replicas: 2 }

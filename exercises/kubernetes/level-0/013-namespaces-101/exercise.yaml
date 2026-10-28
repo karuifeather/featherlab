@@ -1,0 +1,57 @@
+schemaVersion: 1
+id: k8s-0013
+type: task
+title: Namespaces 101
+summary: Work in two namespaces at once, with the same Pod name in each.
+track: kubernetes
+level: 0
+order: 4
+difficulty: beginner
+estimatedMinutes: 8
+tags: [namespaces, pods, kubectl]
+prerequisites: [k8s-0001]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespaces: `fl-k8s-0013` and `fl-k8s-0013-sandbox`"
+  - "A Pod named `web` running `nginx:1.27` is `Ready` in `fl-k8s-0013`"
+  - "The existing `web` Pod in `fl-k8s-0013-sandbox` is still `Ready`"
+  - "The `scratch` Pod no longer exists in `fl-k8s-0013-sandbox`"
+
+hints:
+  - "`kubectl get pods -A` lists Pods in every namespace, with a NAMESPACE column. Find where `web` and `scratch` are right now."
+  - "A name only has to be unique inside one namespace. Creating `web` in `fl-k8s-0013` does not touch the `web` in the sandbox, as long as every command says which namespace it means."
+  - "`kubectl delete pod <name> -n <namespace>` removes exactly one Pod in exactly one namespace. Double-check the `-n` before you press Enter."
+
+lifecycle:
+  namespaces: [fl-k8s-0013, fl-k8s-0013-sandbox]
+  setup:
+    manifests: [setup/sandbox.yaml]
+
+checks:
+  - id: web-placed
+    type: k8s.resource-exists
+    label: Pod web exists in fl-k8s-0013
+    params: { kind: Pod, name: web, namespace: fl-k8s-0013 }
+  - id: web-image
+    type: k8s.container-image
+    label: That Pod runs nginx:1.27
+    params: { kind: Pod, name: web, namespace: fl-k8s-0013, image: "nginx:1.27" }
+  - id: web-ready
+    type: k8s.pod-ready
+    label: Pod web in fl-k8s-0013 is Ready
+    params: { name: web, namespace: fl-k8s-0013 }
+  - id: sandbox-web-kept
+    type: k8s.pod-ready
+    label: Pod web in fl-k8s-0013-sandbox is untouched and Ready
+    params: { name: web, namespace: fl-k8s-0013-sandbox }
+  - id: scratch-removed
+    type: k8s.resource-absent
+    label: Pod scratch is gone from fl-k8s-0013-sandbox
+    params: { kind: Pod, name: scratch, namespace: fl-k8s-0013-sandbox }

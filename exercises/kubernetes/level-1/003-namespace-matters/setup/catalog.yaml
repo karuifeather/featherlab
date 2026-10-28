@@ -1,0 +1,45 @@
+# The Service waits in the namespace where catalog belongs ...
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+  namespace: fl-k8s-0003
+spec:
+  selector: { app: catalog }
+  ports:
+    - { name: http, port: 80, targetPort: 80 }
+---
+# ... but the Deployment was applied to the sandbox namespace by mistake.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: fl-k8s-0003-sandbox
+  labels: { app: catalog }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: catalog }
+  template:
+    metadata:
+      labels: { app: catalog }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports: [{ containerPort: 80 }]
+---
+# Unrelated work in the sandbox that must survive the fix.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: notes
+  namespace: fl-k8s-0003-sandbox
+  labels: { app: notes }
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: nginx
+      image: nginx:1.27
+      ports: [{ containerPort: 80 }]

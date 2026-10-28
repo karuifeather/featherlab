@@ -1,5 +1,6 @@
 import { check } from "../../core/schema.mjs";
 import { DNS_LABEL, DNS_SUBDOMAIN, KIND_NAMES, KINDS, podSpecOf } from "./kinds.mjs";
+import { parseQuantity, sameQuantity } from "./quantity.mjs";
 
 /**
  * Reusable Kubernetes validators. Each declares its params and reads cluster state only
@@ -250,6 +251,290 @@ function metadataMapValidator(type, field, noun) {
 const labels = metadataMapValidator("k8s.labels", "labels", "label");
 const annotations = metadataMapValidator("k8s.annotations", "annotations", "annotation");
 
+/**
+ * The object exists and does not carry a label key (whatever its value). A missing object
+ * fails: "not labelled" must not be satisfiable by deleting it.
+ */
+const labelAbsent = resourceValidator({
+  type: "k8s.label-absent",
+  params: { label: { type: "string", required: true, minLength: 1, maxLength: 317 } },
+  evaluate(resource, p, ref) {
+    const value = resource.metadata?.labels?.[p.label];
+    return {
+      passed: value === undefined,
+      feedback:
+        value === undefined
+          ? `${describe(ref)} does not carry label "${p.label}".`
+          : `${describe(ref)} still carries label "${p.label}".`,
+    };
+  },
+});
+
+/**
+ * A Deployment whose rollout finished: the controller has seen the latest spec, every
+ * replica runs the current template, none of the old ones are left, and all are available
+ * and ready. Unlike `replicas-available`, this cannot pass while old Pods still serve.
+ */
+const rolloutComplete = resourceValidator({
+  type: "k8s.rollout-complete",
+  kinds: ["Deployment"],
+  params: { replicas: COUNT },
+  evaluate(deployment, p, ref) {
+    const desired = deployment.spec?.replicas ?? 1;
+    const s = deployment.status ?? {};
+    const counts = {
+      desired,
+      updated: s.updatedReplicas ?? 0,
+      total: s.replicas ?? 0,
+      available: s.availableReplicas ?? 0,
+      ready: s.readyReplicas ?? 0,
+    };
+    const fail = (feedback) => ({ passed: false, feedback, details: counts });
+    if (desired !== p.replicas)
+      return fail(`${describe(ref)} requests ${desired} replicas, expected ${p.replicas}.`);
+    if ((s.observedGeneration ?? 0) < (deployment.metadata?.generation ?? 0))
+      return fail(`${describe(ref)} has changes the controller has not rolled out yet.`);
+    if (counts.updated !== desired || counts.total !== desired)
+      return fail(
+        `${describe(ref)} is still rolling out: ${counts.updated} of ${desired} replicas run the current template (${counts.total} in total).`,
+      );
+    if (counts.available !== desired || counts.ready !== desired)
+      return fail(`${describe(ref)} has ${counts.available} of ${desired} replicas available.`);
+    return {
+      passed: true,
+      feedback: `${describe(ref)} finished rolling out: ${desired} of ${desired} replicas available.`,
+      details: counts,
+    };
+  },
+});
+
+const POD_SPEC_KINDS = KIND_NAMES.filter((k) => KINDS[k].podSpecPath);
+const CONTAINER = { type: "string", required: true, pattern: DNS_LABEL };
+
+/** Resolve the named container, or produce the failure result when it is missing. */
+function withContainer(resource, ref, name, evaluate) {
+  const container = (podSpecOf(resource, ref.kind)?.containers ?? []).find((c) => c.name === name);
+  if (!container)
+    return { passed: false, feedback: `${describe(ref)} has no container "${name}".` };
+  return evaluate(container);
+}
+
+const QUANTITY_SPEC = { type: "string", minLength: 1, maxLength: 40 };
+const RESOURCE_MAP = {
+  type: "object",
+  properties: { cpu: QUANTITY_SPEC, memory: QUANTITY_SPEC },
+};
+
+/**
+ * Requests/limits on one container, compared as quantities: "0.1" equals "100m" and
+ * "64Mi" equals "67108864". Only the listed resources are graded.
+ */
+const containerResources = resourceValidator({
+  type: "k8s.container-resources",
+  kinds: POD_SPEC_KINDS,
+  params: { container: CONTAINER, requests: RESOURCE_MAP, limits: RESOURCE_MAP },
+  refine(p, problems) {
+    if (!p.requests && !p.limits) problems.add("", "set requests and/or limits");
+    for (const group of ["requests", "limits"])
+      for (const [key, value] of Object.entries(p[group] ?? {}))
+        if (parseQuantity(value) === undefined)
+          problems.add(`${group}.${key}`, `"${value}" is not a Kubernetes quantity`);
+  },
+  evaluate: (resource, p, ref) =>
+    withContainer(resource, ref, p.container, (container) => {
+      const wrong = [];
+      for (const group of ["requests", "limits"])
+        for (const [key, expected] of Object.entries(p[group] ?? {})) {
+          const actual = container.resources?.[group]?.[key];
+          if (!sameQuantity(actual, expected))
+            wrong.push(
+              actual === undefined
+                ? `${key} ${group.slice(0, -1)} is not set`
+                : `${key} ${group.slice(0, -1)} is ${actual}`,
+            );
+        }
+      return {
+        passed: wrong.length === 0,
+        feedback:
+          wrong.length === 0
+            ? `Container "${p.container}" of ${describe(ref)} has the required resources.`
+            : `Container "${p.container}" of ${describe(ref)}: ${wrong.join("; ")}, which does not meet the requirement.`,
+        details: { resources: container.resources ?? {} },
+      };
+    }),
+});
+
+const PROBE_HANDLERS = ["httpGet", "tcpSocket", "exec", "grpc"];
+
+/**
+ * A probe of the given type exists on the container (optionally with a given handler and
+ * HTTP path). It does not prove the probe succeeds: pair it with a readiness check.
+ */
+const containerProbe = resourceValidator({
+  type: "k8s.container-probe",
+  kinds: POD_SPEC_KINDS,
+  params: {
+    container: CONTAINER,
+    probe: { type: "string", required: true, enum: ["readiness", "liveness", "startup"] },
+    handler: { type: "string", enum: PROBE_HANDLERS },
+    path: { type: "string", minLength: 1, maxLength: 200 },
+  },
+  evaluate: (resource, p, ref) =>
+    withContainer(resource, ref, p.container, (container) => {
+      const probe = container[`${p.probe}Probe`];
+      const what = `Container "${p.container}" of ${describe(ref)}`;
+      if (!probe) return { passed: false, feedback: `${what} has no ${p.probe} probe.` };
+      const handler = PROBE_HANDLERS.find((h) => probe[h]);
+      if (p.handler && handler !== p.handler)
+        return {
+          passed: false,
+          feedback: `${what} has a ${p.probe} probe, but it does not use ${p.handler}.`,
+        };
+      if (p.path !== undefined && probe.httpGet?.path !== p.path)
+        return {
+          passed: false,
+          feedback: `${what} has a ${p.probe} probe, but not for the required path.`,
+        };
+      return { passed: true, feedback: `${what} has the required ${p.probe} probe.` };
+    }),
+});
+
+/** An environment variable on one container: a literal value or a ConfigMap key reference. */
+const containerEnv = resourceValidator({
+  type: "k8s.container-env",
+  kinds: POD_SPEC_KINDS,
+  params: {
+    container: CONTAINER,
+    env: { type: "string", required: true, pattern: /^[A-Za-z_][A-Za-z0-9_]*$/, maxLength: 120 },
+    value: { type: "string", maxLength: 300 },
+    configMapKeyRef: {
+      type: "object",
+      properties: {
+        name: { ...NAME },
+        key: { type: "string", required: true, minLength: 1, maxLength: 253 },
+      },
+    },
+  },
+  refine(p, problems) {
+    if ((p.value === undefined) === (p.configMapKeyRef === undefined))
+      problems.add("", "set exactly one of value or configMapKeyRef");
+  },
+  evaluate: (resource, p, ref) =>
+    withContainer(resource, ref, p.container, (container) => {
+      const what = `Container "${p.container}" of ${describe(ref)}`;
+      const entry = (container.env ?? []).find((e) => e.name === p.env);
+      if (!entry)
+        return { passed: false, feedback: `${what} has no environment variable ${p.env}.` };
+      if (p.value !== undefined) {
+        const passed = entry.valueFrom === undefined && entry.value === p.value;
+        return {
+          passed,
+          feedback: passed
+            ? `${what} sets ${p.env} as required.`
+            : `${what} sets ${p.env}, but not to the required value.`,
+        };
+      }
+      const source = entry.valueFrom?.configMapKeyRef;
+      const passed =
+        source?.name === p.configMapKeyRef.name && source?.key === p.configMapKeyRef.key;
+      return {
+        passed,
+        feedback: passed
+          ? `${what} reads ${p.env} from the required ConfigMap key.`
+          : `${what} does not read ${p.env} from the required ConfigMap key.`,
+      };
+    }),
+});
+
+/** A ConfigMap is mounted into one container as a volume (at any path). */
+const configMapMounted = resourceValidator({
+  type: "k8s.configmap-mounted",
+  kinds: POD_SPEC_KINDS,
+  params: { container: CONTAINER, configMap: { ...NAME } },
+  evaluate: (resource, p, ref) =>
+    withContainer(resource, ref, p.container, (container) => {
+      const volumes = (podSpecOf(resource, ref.kind)?.volumes ?? [])
+        .filter((v) => v.configMap?.name === p.configMap)
+        .map((v) => v.name);
+      const passed = (container.volumeMounts ?? []).some((m) => volumes.includes(m.name));
+      return {
+        passed,
+        feedback: passed
+          ? `Container "${p.container}" of ${describe(ref)} mounts ConfigMap "${p.configMap}".`
+          : `Container "${p.container}" of ${describe(ref)} does not mount ConfigMap "${p.configMap}".`,
+      };
+    }),
+});
+
+function podTemplateLabels(workload, kind) {
+  return kind === "Pod"
+    ? (workload.metadata?.labels ?? {})
+    : (workload.spec?.template?.metadata?.labels ?? {});
+}
+
+/**
+ * A Service routes to a specific workload: it has a selector, every selector entry matches
+ * the workload's Pod labels, and every named targetPort exists on one of its containers.
+ * Combine it with a rollout/readiness check to prove the endpoints are actually serving.
+ * Matching is against the named workload only, so unrelated Pods that happen to carry the
+ * labels never count.
+ */
+const serviceSelects = {
+  type: "k8s.service-selects",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["name", "namespace", "workload"], problems);
+    validateRef({ ...p, kind: "Service" }, problems, ["Service"]);
+    check(
+      p.workload,
+      {
+        type: "object",
+        required: true,
+        properties: {
+          kind: { type: "string", required: true, enum: POD_SPEC_KINDS },
+          name: NAME,
+        },
+      },
+      "workload",
+      problems,
+    );
+  },
+  async run(p, ctx) {
+    const svcRef = { kind: "Service", name: p.name, namespace: p.namespace };
+    const workRef = { kind: p.workload.kind, name: p.workload.name, namespace: p.namespace };
+    const [service, workload] = await Promise.all([ctx.query.get(svcRef), ctx.query.get(workRef)]);
+    if (!service) return { passed: false, feedback: `${describe(svcRef)} was not found.` };
+    if (!workload) return { passed: false, feedback: `${describe(workRef)} was not found.` };
+    const selector = service.spec?.selector ?? {};
+    const podLabels = podTemplateLabels(workload, workRef.kind);
+    const details = { selector, podLabels };
+    if (Object.keys(selector).length === 0)
+      return { passed: false, feedback: `${describe(svcRef)} has no selector.`, details };
+    if (!Object.entries(selector).every(([k, v]) => podLabels[k] === v))
+      return {
+        passed: false,
+        feedback: `${describe(svcRef)} does not select the Pods of ${workRef.kind} "${workRef.name}".`,
+        details,
+      };
+    const containers = podSpecOf(workload, workRef.kind)?.containers ?? [];
+    const portNames = containers.flatMap((c) => (c.ports ?? []).map((port) => port.name));
+    const unresolved = (service.spec?.ports ?? []).filter(
+      (port) => typeof port.targetPort === "string" && !portNames.includes(port.targetPort),
+    );
+    if (unresolved.length > 0)
+      return {
+        passed: false,
+        feedback: `${describe(svcRef)} targets a named port that the Pods of ${workRef.kind} "${workRef.name}" do not define.`,
+        details,
+      };
+    return {
+      passed: true,
+      feedback: `${describe(svcRef)} routes to the Pods of ${workRef.kind} "${workRef.name}".`,
+      details,
+    };
+  },
+};
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -262,4 +547,11 @@ export const kubernetesValidators = Object.freeze([
   replicasReady,
   labels,
   annotations,
+  labelAbsent,
+  rolloutComplete,
+  containerResources,
+  containerProbe,
+  containerEnv,
+  configMapMounted,
+  serviceSelects,
 ]);

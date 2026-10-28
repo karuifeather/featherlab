@@ -50,30 +50,53 @@ const lessons = () => page.locator('[data-testid="lesson"]');
 const checkButton = () => page.getByRole("button", { name: "Check solution" });
 const resetButton = () => page.getByRole("button", { name: "Reset task" });
 const environmentConfirm = () => page.locator('[data-testid="environment-confirm"]');
+/** The sidebar lesson whose own title is exactly `title` (locked lessons also show the titles
+ * of the prerequisites they wait for, so plain text matching would be ambiguous). */
+const lesson = (title) =>
+  lessons().filter({ has: page.locator(".lesson-title").getByText(title, { exact: true }) });
 
-test("launcher offers the Kubernetes track, which lists both exercises", async () => {
+test("launcher offers the Kubernetes track, in curriculum order across three levels", async () => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kubernetes" })).toBeVisible();
   await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
-  await expect(lessons()).toHaveCount(2);
+  await expect(lessons()).toHaveCount(18);
+  await expect(page.locator(".level-label")).toHaveText(["Level 0", "Level 1", "Level 2"]);
+  // Backend order, not id order: k8s-0011..k8s-0014 come before k8s-0002.
   await expect(lessons().nth(0)).toContainText("Your first Pod");
-  await expect(lessons().nth(1)).toContainText("Run a Deployment");
+  await expect(lessons().nth(1)).toContainText("Inspect a Pod");
+  await expect(lessons().nth(5)).toContainText("Run a Deployment");
+  await expect(lessons().nth(9)).toContainText("Foundations Challenge");
+  await expect(lessons().nth(10)).toContainText("Namespace Matters");
+  await expect(lessons().nth(17)).toContainText("Workload Recovery Mastery");
+});
+
+test("locked exercises explain which prerequisite unlocks them", async () => {
+  await expect(lesson("Inspect a Pod")).toHaveAttribute("aria-disabled", "true");
+  await expect(lesson("Inspect a Pod")).toContainText("Your first Pod");
+  // Levels 1 and 2 wait behind the Level 0 challenge.
+  await expect(lesson("Namespace Matters")).toHaveAttribute("aria-disabled", "true");
+  await expect(lesson("Namespace Matters")).toContainText("Foundations Challenge");
+  await expect(lesson("The Wrong Image")).toHaveAttribute("aria-disabled", "true");
 });
 
 test("the first exercise is loaded dynamically from the API", async () => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your first Pod");
-  await expect(page.locator('[data-testid="exercise-panel"]')).toContainText(
-    "Use the terminal to create a Pod in the default namespace",
-  );
+  const panel = page.locator('[data-testid="exercise-panel"]');
+  await expect(panel).toContainText("Every exercise has its own namespace");
+  await expect(panel).toContainText("-n fl-k8s-0001");
+  // The statement explains namespaces without handing out the command.
+  await expect(panel).not.toContainText("kubectl run web");
   const requirements = page.locator('[data-testid="requirements"] li');
   await expect(requirements).toHaveCount(4);
-  await expect(requirements.first()).toContainText("web");
+  await expect(requirements.first()).toContainText("fl-k8s-0001");
+  await expect(requirements.nth(1)).toContainText("web");
   await expect(requirements.nth(2)).toContainText("nginx:1.27");
 
   await page.getByRole("button", { name: "Need a hint?" }).click();
   await expect(page.locator('[data-testid="hint"]')).toContainText("kubectl run --help");
   await page.getByRole("button", { name: /Next hint/ }).click();
   await expect(page.locator('[data-testid="hint"]')).toHaveCount(2);
+  await expect(page.locator('[data-testid="hint"]').nth(1)).toContainText("-n fl-k8s-0001");
 });
 
 test("a real terminal connects and runs kubectl against the test cluster", async () => {
@@ -174,9 +197,19 @@ test("checking before solving shows failing checks", async () => {
   await expect(page.locator('[data-testid="check-results"]')).toContainText("was not found");
 });
 
-test("solving the exercise in the browser terminal passes grading", async () => {
+test("forgetting the namespace is explained, not silently graded", async () => {
+  // The classic mistake: no -n, so the Pod lands in `default`.
   await runInTerminal("kubectl run web --image=nginx:1.27");
-  await runInTerminal("kubectl wait --for=condition=Ready pod/web --timeout=240s");
+  await checkButton().click();
+  await expect(page.locator('[data-testid="check-results"]')).toContainText(
+    'exists, but in namespace "default" instead of "fl-k8s-0001"',
+  );
+  await expect(page.locator('[data-testid="check-results"] h3')).toContainText("0/4 checks passed");
+});
+
+test("solving the exercise in the browser terminal passes grading", async () => {
+  await runInTerminal("kubectl run web --image=nginx:1.27 -n fl-k8s-0001");
+  await runInTerminal("kubectl wait --for=condition=Ready pod/web -n fl-k8s-0001 --timeout=240s");
   await expect(terminalText()).toContainText("condition met", { timeout: 260_000 });
 
   await checkButton().click();
@@ -184,14 +217,21 @@ test("solving the exercise in the browser terminal passes grading", async () => 
 });
 
 test("switching exercises keeps the terminal session but clears the previous work", async () => {
-  await lessons().nth(1).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Run a Deployment");
-  await expect(page.locator('[data-testid="requirements"] li').first()).toContainText("staging");
+  // Passing the first Pod opened three follow-ups.
+  for (const title of ["Inspect a Pod", "Working With YAML", "Namespaces 101"])
+    await expect(lesson(title)).not.toHaveAttribute("aria-disabled", "true");
+  await expect(lesson("Run a Deployment")).toHaveAttribute("aria-disabled", "true");
+
+  await lesson("Inspect a Pod").click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Inspect a Pod");
+  await expect(page.locator('[data-testid="requirements"] li').first()).toContainText(
+    "fl-k8s-0011",
+  );
 
   // The cluster still holds exercise 1: nothing is reset until the learner confirms.
   await expect(environmentConfirm()).toContainText("Your first Pod");
   await expect(checkButton()).toBeDisabled();
-  await runInTerminal('kubectl get pod web -o name && echo "kept-$((20+1))"');
+  await runInTerminal('kubectl get pod web -n fl-k8s-0001 -o name && echo "kept-$((20+1))"');
   await expect(terminalText()).toContainText("kept-21");
   await page.getByRole("button", { name: "Start this exercise" }).click();
   await expect(environmentConfirm()).toHaveCount(0);
@@ -200,27 +240,31 @@ test("switching exercises keeps the terminal session but clears the previous wor
   await runInTerminal('echo "$FL_MARK-survived"');
   await expect(terminalText()).toContainText("session-one-survived");
 
-  // Exercise 2 starts failing, and exercise 1's work was cleared when it took over.
+  // The new exercise starts unsolved, and exercise 1's namespace was deleted when it took over.
+  await expect(checkButton()).toBeEnabled({ timeout: 180_000 });
   await checkButton().click();
   await expect(page.locator('[data-testid="check-results"] h3')).not.toHaveText("✓ Passed");
-  await expect(page.locator('[data-testid="check-results"]')).toContainText("Deployment");
-  await runInTerminal("kubectl get pod web");
-  await expect(terminalText()).toContainText('pods "web" not found');
+  await expect(page.locator('[data-testid="check-results"]')).toContainText("review");
+  await runInTerminal("kubectl get pod web -n fl-k8s-0001");
+  await expect(terminalText()).toContainText('namespaces "fl-k8s-0001" not found');
+  // The learner's own Pod in `default` was never touched.
+  await runInTerminal('kubectl get pod web -n default -o name && echo "own-$((30+3))"');
+  await expect(terminalText()).toContainText("own-33");
 });
 
 test("a revisited exercise starts fresh; resetting removes the learner's work", async () => {
-  await lessons().nth(0).click();
+  await lesson("Your first Pod").click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your first Pod");
-  await expect(environmentConfirm()).toContainText("Run a Deployment");
+  await expect(environmentConfirm()).toContainText("Inspect a Pod");
   await page.getByRole("button", { name: "Start this exercise" }).click();
   // Completed earlier, but stale work is gone: it has to be solved again.
   await checkButton().click();
   await expect(page.locator('[data-testid="check-results"] h3')).toContainText("0/4 checks passed");
 
-  await runInTerminal("kubectl run web --image=nginx:1.27");
+  await runInTerminal("kubectl run web --image=nginx:1.27 -n fl-k8s-0001");
   // The arithmetic keeps the typed command itself from matching the marker.
   await runInTerminal(
-    'kubectl wait --for=condition=Ready pod/web --timeout=240s && echo "ready-again-$((40+2))"',
+    'kubectl wait --for=condition=Ready pod/web -n fl-k8s-0001 --timeout=240s && echo "ready-again-$((40+2))"',
   );
   await expect(terminalText()).toContainText("ready-again-42", { timeout: 260_000 });
   await checkButton().click();
@@ -228,11 +272,64 @@ test("a revisited exercise starts fresh; resetting removes the learner's work", 
 
   await resetButton().click();
   await expect(page.locator('[data-testid="check-results"]')).toHaveCount(0);
-  await runInTerminal("kubectl get pod web");
+  await runInTerminal("clear; kubectl get pod web -n fl-k8s-0001");
   await expect(terminalText()).toContainText('pods "web" not found');
 
   await checkButton().click();
   await expect(page.locator('[data-testid="check-results"] h3')).toContainText("0/4 checks passed");
+});
+
+test("inspecting with logs and labelling solves Inspect a Pod and unlocks Labels", async () => {
+  await lesson("Inspect a Pod").click();
+  await page.getByRole("button", { name: "Start this exercise" }).click();
+  await expect(environmentConfirm()).toHaveCount(0);
+  // The environment is ready (namespaces recreated) once grading is enabled again.
+  await expect(checkButton()).toBeEnabled({ timeout: 180_000 });
+  // The statement explains the tools but does not say which Pod it is.
+  await expect(page.locator('[data-testid="exercise-panel"]')).not.toContainText("bravo review");
+
+  await runInTerminal(
+    'clear; kubectl wait --for=condition=Ready pod/alpha pod/bravo -n fl-k8s-0011 --timeout=240s && echo "up-$((10+1))"',
+  );
+  await expect(terminalText()).toContainText("up-11", { timeout: 260_000 });
+  await runInTerminal("kubectl logs bravo -n fl-k8s-0011");
+  await expect(terminalText()).toContainText("status: needs-review");
+  await runInTerminal("kubectl label pod bravo review=needed -n fl-k8s-0011");
+  await checkButton().click();
+  await expect(page.locator('[data-testid="check-results"] h3')).toHaveText("✓ Passed");
+  await expect(lesson("Labels and Selectors")).not.toHaveAttribute("aria-disabled", "true");
+  await expect(lesson("Run a Deployment")).toHaveAttribute("aria-disabled", "true");
+});
+
+test("a manifest written in the terminal solves Working With YAML and unlocks Deployments", async () => {
+  await lesson("Working With YAML").click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Working With YAML");
+  await expect(page.locator('[data-testid="exercise-panel"]')).toContainText("apiVersion");
+  await page.getByRole("button", { name: "Start this exercise" }).click();
+  await expect(environmentConfirm()).toHaveCount(0);
+  await expect(checkButton()).toBeEnabled({ timeout: 180_000 });
+
+  await runInTerminal("clear; cat > notes.yaml <<'EOF'");
+  for (const line of [
+    "apiVersion: v1",
+    "kind: Pod",
+    "metadata:",
+    "  name: notes",
+    "  namespace: fl-k8s-0012",
+    "  labels: { app: notes, tier: frontend }",
+    "spec:",
+    "  containers:",
+    "    - { name: web, image: nginx:1.27 }",
+    "EOF",
+  ])
+    await runInTerminal(line);
+  await runInTerminal(
+    'kubectl apply -f notes.yaml && kubectl wait --for=condition=Ready pod/notes -n fl-k8s-0012 --timeout=240s && echo "applied-$((50+5))"',
+  );
+  await expect(terminalText()).toContainText("applied-55", { timeout: 260_000 });
+  await checkButton().click();
+  await expect(page.locator('[data-testid="check-results"] h3')).toHaveText("✓ Passed");
+  await expect(lesson("Run a Deployment")).not.toHaveAttribute("aria-disabled", "true");
 });
 
 test("a dropped terminal can be reconnected", async () => {
@@ -278,6 +375,6 @@ test("API failures are shown as readable errors and the page stays usable", asyn
 
   // 3. Recovery without reloading the page.
   await checkButton().click();
-  await expect(page.locator('[data-testid="check-results"] h3')).toContainText("checks passed");
+  await expect(page.locator('[data-testid="check-results"] h3')).toHaveText("✓ Passed");
   await expect(page.locator('[data-testid="error-message"]')).toHaveCount(0);
 });

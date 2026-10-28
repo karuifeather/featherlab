@@ -4,7 +4,7 @@ import { EnvironmentError } from "../../src/core/errors.mjs";
 import { KubernetesQuery } from "../../src/tracks/kubernetes/query.mjs";
 import { createFakeCluster, readyPod } from "../helpers/fake-cluster.mjs";
 
-const ref = { kind: "Pod", name: "web", namespace: "default" };
+const ref = { kind: "Pod", name: "web", namespace: "fl-k8s-0001" };
 
 test("get returns the resource, or null when it does not exist", async () => {
   const query = new KubernetesQuery({ runner: createFakeCluster({ resources: [readyPod()] }) });

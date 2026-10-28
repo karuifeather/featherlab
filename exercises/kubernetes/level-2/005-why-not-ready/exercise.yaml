@@ -1,0 +1,59 @@
+schemaVersion: 1
+id: k8s-0005
+type: task
+title: Why Isn't It Ready?
+summary: The Pods are Running, yet the Service has nothing to route to. Find and fix the readiness problem.
+track: kubernetes
+level: 2
+order: 2
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [troubleshooting, probes, deployments, services, events]
+prerequisites: [k8s-0004]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0005`"
+  - "Deployment `status-page` finishes rolling out with 2 available replicas"
+  - "Its `web` container keeps an HTTP (`httpGet`) readiness probe"
+  - "The `status-page` Service routes to the `status-page` Pods"
+
+hints:
+  - "`kubectl get pods -n fl-k8s-0005` shows `0/1` in READY although STATUS is `Running`. Something decides the container is not ready to receive traffic."
+  - "`kubectl describe pod` lists the readiness probe configuration and the events it produced. Compare what the probe contacts with what the container actually exposes."
+  - "Correct the probe in the Deployment's Pod template (not in a Pod), so the replacement Pods carry the fix. Removing the probe would make the Pods look ready without proving anything, and does not count."
+
+lifecycle:
+  namespaces: [fl-k8s-0005]
+  setup:
+    manifests: [setup/status-page.yaml]
+
+checks:
+  - id: probe
+    type: k8s.container-probe
+    label: Container web keeps an httpGet readiness probe
+    params:
+      kind: Deployment
+      name: status-page
+      namespace: fl-k8s-0005
+      container: web
+      probe: readiness
+      handler: httpGet
+  - id: rollout
+    type: k8s.rollout-complete
+    label: status-page rolled out with 2 ready replicas
+    weight: 2
+    params: { name: status-page, namespace: fl-k8s-0005, replicas: 2 }
+  - id: routed
+    type: k8s.service-selects
+    label: Service status-page routes to the status-page Pods
+    params:
+      name: status-page
+      namespace: fl-k8s-0005
+      workload: { kind: Deployment, name: status-page }
