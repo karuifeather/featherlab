@@ -4,7 +4,7 @@ dist/
 .env
 .DS_Store
 notes/
-.claude/settings.local.json
 test-results/
 test-results-browser/
 playwright-report/
+.claude
