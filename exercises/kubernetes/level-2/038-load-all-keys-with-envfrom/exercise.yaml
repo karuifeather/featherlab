@@ -1,0 +1,50 @@
+schemaVersion: 1
+id: k8s-0038
+type: task
+title: Load All Keys With envFrom
+summary: Load every key from a ConfigMap into a container's environment at once using envFrom.
+track: kubernetes
+level: 2
+order: 4
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [configmaps, environment-variables, envfrom, deployments, kubectl]
+prerequisites: [k8s-0037]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0038`"
+  - "Deployment `app` rolls out with 1 available replica"
+  - "Container `app` loads all keys from ConfigMap `settings` via `envFrom`"
+
+hints:
+  - "**`kubectl set env --from=configmap/settings`** does NOT create `envFrom` — it creates one `env[]` entry per key. Use `kubectl edit` or `kubectl patch` to add an `envFrom` block instead."
+  - "With **`kubectl edit deployment app -n fl-k8s-0038`**, add `envFrom: [{configMapRef: {name: settings}}]` under `spec.template.spec.containers[0]`."
+  - "After saving, watch the rollout: **`kubectl rollout status deployment/app -n fl-k8s-0038`**."
+
+lifecycle:
+  namespaces: [fl-k8s-0038]
+  setup:
+    manifests: [setup/configmap.yaml, setup/deployment.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 available replica
+    params: { name: app, namespace: fl-k8s-0038, replicas: 1 }
+  - id: env-from
+    type: k8s.container-env-from
+    label: Container app loads all keys from ConfigMap settings
+    weight: 2
+    params:
+      kind: Deployment
+      name: app
+      namespace: fl-k8s-0038
+      container: app
+      configMapRef: "settings"

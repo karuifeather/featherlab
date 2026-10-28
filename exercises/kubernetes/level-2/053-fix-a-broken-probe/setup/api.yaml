@@ -1,0 +1,27 @@
+# Deployment with a broken readiness probe (port 8080 instead of 80) — nginx listens on 80.
+# The learner must change the probe port from 8080 to 80.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: fl-k8s-0053
+  labels: { app: api }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: api
+          image: nginx:1.27
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5

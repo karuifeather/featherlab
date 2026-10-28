@@ -1,0 +1,26 @@
+# Deployment with a readiness probe but no liveness probe — the learner will add a liveness probe.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: fl-k8s-0051
+  labels: { app: api }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: api
+          image: nginx:1.27
+          ports: [{ containerPort: 80 }]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10

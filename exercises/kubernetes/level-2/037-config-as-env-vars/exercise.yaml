@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0037
+type: task
+title: Config as Environment Variables
+summary: Wire a single ConfigMap key into a container as an environment variable using configMapKeyRef.
+track: kubernetes
+level: 2
+order: 3
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [configmaps, environment-variables, deployments, kubectl]
+prerequisites: [k8s-0036]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0037`"
+  - "Deployment `app` rolls out with 1 available replica"
+  - "Container `app` reads `APP_ENV` from ConfigMap `app-config` key `APP_ENV`"
+
+hints:
+  - "**`kubectl set env deployment/app --from=configmap/app-config --keys=APP_ENV -n fl-k8s-0037`** injects one key from the ConfigMap as a `configMapKeyRef` entry."
+  - "With **`kubectl edit deployment app -n fl-k8s-0037`**, add an `env` block: `{name: APP_ENV, valueFrom: {configMapKeyRef: {name: app-config, key: APP_ENV}}}`."
+  - "Inspect the result: **`kubectl get deployment app -n fl-k8s-0037 -o jsonpath='{.spec.template.spec.containers[0].env}'`**."
+
+lifecycle:
+  namespaces: [fl-k8s-0037]
+  setup:
+    manifests: [setup/configmap.yaml, setup/deployment.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 available replica
+    params: { name: app, namespace: fl-k8s-0037, replicas: 1 }
+  - id: env-ref
+    type: k8s.container-env
+    label: Container app reads APP_ENV from ConfigMap app-config
+    weight: 2
+    params:
+      kind: Deployment
+      name: app
+      namespace: fl-k8s-0037
+      container: app
+      env: APP_ENV
+      configMapKeyRef: { name: app-config, key: APP_ENV }

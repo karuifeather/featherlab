@@ -1,0 +1,47 @@
+schemaVersion: 1
+id: k8s-0041
+type: task
+title: Create a Secret
+summary: Create an Opaque Secret from literals and understand that base64 is encoding for binary safety, not encryption.
+track: kubernetes
+level: 2
+order: 7
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [secrets, credentials, base64, kubectl]
+prerequisites: [k8s-0040]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0041`"
+  - "A Secret named `db-credentials` exists in namespace `fl-k8s-0041`"
+  - "The Secret is of type `Opaque`"
+  - "The Secret contains keys `username` and `password`"
+
+hints:
+  - "Use `kubectl create secret generic` with `--from-literal` to supply each key=value pair inline."
+  - "After creating it, run `kubectl get secret db-credentials -n fl-k8s-0041 -o yaml` and look at the `data` field — the values are base64-encoded, not plain text."
+  - "To verify which keys exist: `kubectl get secret db-credentials -n fl-k8s-0041 -o jsonpath='{.data}' | tr ',' '\n'`"
+
+lifecycle:
+  namespaces: [fl-k8s-0041]
+
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: Secret db-credentials exists in fl-k8s-0041
+    params: { kind: Secret, name: db-credentials, namespace: fl-k8s-0041 }
+  - id: type
+    type: k8s.secret-type
+    label: Secret db-credentials is type Opaque
+    params: { name: db-credentials, namespace: fl-k8s-0041, secretType: "Opaque" }
+  - id: keys
+    type: k8s.secret-keys
+    label: Secret db-credentials has keys username and password
+    params: { name: db-credentials, namespace: fl-k8s-0041, keys: ["username", "password"] }

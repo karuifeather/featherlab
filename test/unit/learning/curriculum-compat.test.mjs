@@ -49,8 +49,9 @@ test("an advanced exercise completed under the old curriculum stays completed an
     // Its never-completed neighbours are gated by the new foundations, as designed.
     assert.equal(service.getExerciseProgress("k8s-0003").state, "locked");
     assert.deepEqual(service.getExerciseProgress("k8s-0003").unmetPrerequisites, ["k8s-0018"]);
-    // k8s-0005 only needs k8s-0004, which this learner already earned.
-    assert.equal(service.getExerciseProgress("k8s-0005").state, "available");
+    // k8s-0005 now requires k8s-0004 AND k8s-0051 (added in M5.4 for probes); still locked.
+    assert.equal(service.getExerciseProgress("k8s-0005").state, "locked");
+    assert.ok(service.getExerciseProgress("k8s-0005").unmetPrerequisites.includes("k8s-0051"));
     // The new Level 0 opens after k8s-0001.
     for (const id of ["k8s-0011", "k8s-0012", "k8s-0013"])
       assert.equal(service.getExerciseProgress(id).state, "available", id);
@@ -64,7 +65,7 @@ test("track progress counts every exercise once, in curriculum order", () =>
       exercises.map((e) => e.exerciseId),
       CURRICULUM_ORDER,
     );
-    assert.equal(new Set(exercises.map((e) => e.exerciseId)).size, 34);
+    assert.equal(new Set(exercises.map((e) => e.exerciseId)).size, 53);
     assert.equal(exercises.filter((e) => e.state === "completed").length, 3);
     assert.deepEqual(
       exercises.filter((e) => e.state === "completed").map((e) => e.level),

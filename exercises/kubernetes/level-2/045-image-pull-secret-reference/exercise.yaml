@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: k8s-0045
+type: task
+title: Image-Pull Secret Reference
+summary: Create a docker-registry Secret and wire it to a Deployment's imagePullSecrets; understand how the kubelet uses it for private registry authentication.
+track: kubernetes
+level: 2
+order: 11
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [secrets, image-pull-secrets, registry, docker, kubectl]
+prerequisites: [k8s-0044]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0045`"
+  - "A Secret named `registry-creds` of type `kubernetes.io/dockerconfigjson` exists in `fl-k8s-0045`"
+  - "Deployment `private-app` is fully rolled out with 1 replica"
+
+hints:
+  - "Create the Secret with: `kubectl create secret docker-registry registry-creds --docker-server=registry.example.com --docker-username=fake-user --docker-password=fake-pass -n fl-k8s-0045`"
+  - 'Then add it to the Deployment: `kubectl patch deployment private-app -n fl-k8s-0045 --type=json -p=''[{"op":"add","path":"/spec/template/spec/imagePullSecrets","value":[{"name":"registry-creds"}]}]''`'
+  - "The Deployment uses a public image (`nginx:1.27`) so the rollout will succeed regardless of the registry credentials. This exercise only verifies the configuration is correct."
+
+lifecycle:
+  namespaces: [fl-k8s-0045]
+  setup:
+    manifests: [setup/private-app.yaml]
+
+checks:
+  - id: secret-type
+    type: k8s.secret-type
+    label: Secret registry-creds is type kubernetes.io/dockerconfigjson
+    params:
+      { name: registry-creds, namespace: fl-k8s-0045, secretType: "kubernetes.io/dockerconfigjson" }
+  - id: secret-exists
+    type: k8s.resource-exists
+    label: Secret registry-creds exists in fl-k8s-0045
+    params: { kind: Secret, name: registry-creds, namespace: fl-k8s-0045 }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment private-app rolled out with 1 replica
+    params: { name: private-app, namespace: fl-k8s-0045, replicas: 1 }

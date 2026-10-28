@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: fl-k8s-0035
+  labels: { app: app }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: app }
+  template:
+    metadata:
+      labels: { app: app }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: app
+          image: nginx:1.27
+          ports: [{ name: http, containerPort: 80 }]

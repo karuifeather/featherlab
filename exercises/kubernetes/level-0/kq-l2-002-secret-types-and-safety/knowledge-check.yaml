@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l2-002
+activityType: knowledge-check
+title: Secret Types and Safety
+summary: Test your understanding of Kubernetes Secret types, base64 encoding versus encryption, and safe handling practices.
+track: kubernetes
+level: 2
+order: 40.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [secrets, security, base64, encoding, types]
+relatedLabs: [k8s-0041, k8s-0042, k8s-0043, k8s-0044, k8s-0045]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Is Secret data encrypted by default in Kubernetes?"
+    options:
+      - id: a
+        text: "Yes — Secret values are encrypted with AES-256 before being stored in etcd"
+      - id: b
+        text: "Yes — Secrets are protected by TLS in transit and at rest"
+      - id: c
+        text: "No — Secret values are base64-encoded but NOT encrypted by default; anyone with etcd access can read them"
+      - id: d
+        text: "No — Secret values are stored as plain text with no encoding at all"
+    correctAnswer: c
+    explanation: "Kubernetes Secrets are base64-encoded, not encrypted by default. Base64 is an encoding scheme that is trivially reversible — it provides no confidentiality. To encrypt Secrets at rest, you must configure an EncryptionConfiguration on the API server with a provider such as AES-CBC, AES-GCM, or an external KMS."
+    wrongExplanations:
+      a: "AES-256 encryption at rest is NOT enabled by default. It requires explicit EncryptionConfiguration. Base64 is not AES encryption."
+      b: "TLS protects data in transit between API server and clients, but the Secret values themselves are not encrypted at rest without additional configuration."
+      d: "Secret values ARE base64-encoded (not plain text) in etcd and in API responses. However, base64 is encoding, not encryption, so this does not protect the data."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#information-security-for-secrets"
+
+  - id: q2
+    type: single-choice
+    prompt: "What does the command `kubectl get secret db-creds -o jsonpath='{.data.password}' | base64 -d` do?"
+    options:
+      - id: a
+        text: "Decrypts the password value using the cluster's encryption key and prints the plain text"
+      - id: b
+        text: "Decodes the base64-encoded password value and prints the original plain-text password"
+      - id: c
+        text: "Shows the raw YAML representation of the db-creds Secret without modification"
+      - id: d
+        text: "Fails because Kubernetes prevents users from reading Secret values through jsonpath"
+    correctAnswer: b
+    explanation: "The `.data` field of a Kubernetes Secret stores values as base64-encoded strings. `kubectl get secret ... -o jsonpath='{.data.password}'` retrieves that base64 string. Piping it to `base64 -d` decodes it back to the original plain-text value. This works for any user with `get` permission on the Secret."
+    wrongExplanations:
+      a: "This command performs base64 decoding, not cryptographic decryption. Kubernetes Secrets are base64-encoded, not encrypted by default, so there is no decryption key involved."
+      c: "`-o jsonpath` extracts a specific field value, not a YAML representation. The raw YAML would be retrieved with `-o yaml`."
+      d: "Users with appropriate RBAC permissions (e.g., `get` verb on Secrets) can absolutely read Secret values. There is no special block on jsonpath access."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#working-with-secrets"
+
+  - id: q3
+    type: single-choice
+    prompt: "Which Kubernetes Secret type stores Docker registry credentials used for pulling private images?"
+    options:
+      - id: a
+        text: "Opaque"
+      - id: b
+        text: "kubernetes.io/tls"
+      - id: c
+        text: "kubernetes.io/dockerconfigjson"
+      - id: d
+        text: "kubernetes.io/basic-auth"
+    correctAnswer: c
+    explanation: "`kubernetes.io/dockerconfigjson` is the Secret type designed for Docker registry credentials. It stores a `.dockerconfigjson` key containing a base64-encoded JSON object with registry server, username, and password. This type is referenced by `spec.imagePullSecrets` in a Pod spec."
+    wrongExplanations:
+      a: "`Opaque` is the generic Secret type with no enforced structure. While you could store registry credentials manually in an Opaque Secret, it cannot be directly used as an imagePullSecret."
+      b: "`kubernetes.io/tls` stores TLS certificates and private keys (`tls.crt` and `tls.key`). It is used for HTTPS/TLS termination, not image pulling."
+      d: "`kubernetes.io/basic-auth` stores username and password for HTTP Basic Authentication. It is not used for container registry image pulls."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#secret-types"
+
+  - id: q4
+    type: single-choice
+    prompt: "Which field in a Secret manifest lets you supply plain-text values that Kubernetes automatically base64-encodes when the Secret is created?"
+    options:
+      - id: a
+        text: ".data"
+      - id: b
+        text: ".stringData"
+      - id: c
+        text: ".plaintext"
+      - id: d
+        text: ".values"
+    correctAnswer: b
+    explanation: "`.stringData` accepts plain-text (unencoded) values. When the Secret is created or updated, the Kubernetes API server automatically base64-encodes those values and stores them in `.data`. This is useful in manifests checked into source control because the values are human-readable in the YAML file."
+    wrongExplanations:
+      a: "`.data` requires values to already be base64-encoded. If you put plain text in `.data`, Kubernetes will treat it as an already-encoded value, and decoding it will produce garbled output."
+      c: "`.plaintext` is not a valid Secret field. This field does not exist in the Kubernetes Secret schema."
+      d: "`.values` is not a valid Secret field. ConfigMaps have no such field either."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#restriction-names-data"
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which of the following are valid ways to provide Secret data in a YAML manifest? (select all that apply)"
+    options:
+      - id: a
+        text: "Use `.data` with base64-encoded values (e.g., `password: cGFzc3dvcmQ=`)"
+      - id: b
+        text: "Use `.stringData` with plain-text values (e.g., `password: mysecretpass`)"
+      - id: c
+        text: "Use both `.data` and `.stringData` in the same manifest — `.stringData` values are merged and take precedence"
+      - id: d
+        text: "Use `.plaintextData` with unencoded values (e.g., `password: mysecretpass`)"
+    correctAnswers: [a, b, c]
+    explanation: "`.data` (base64-encoded), `.stringData` (plain text), and a combination of both are all valid. When both are present, `.stringData` values override `.data` values for the same key. The final stored Secret always has base64-encoded values in `.data`."
+    wrongExplanations:
+      d: "`.plaintextData` is not a valid field in the Kubernetes Secret schema. Use `.stringData` to supply plain-text values."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#restriction-names-data"

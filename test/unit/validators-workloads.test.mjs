@@ -191,6 +191,84 @@ test("container-probe requires the probe type, handler and path, without dictati
   assert.equal((await grade(live, "k8s.container-probe", p)).passed, false);
 });
 
+test("container-probe checks optional timing fields when present in params", async () => {
+  const p = {
+    kind: "Deployment",
+    name: "web",
+    namespace: NS,
+    container: "app",
+    probe: "readiness",
+    handler: "httpGet",
+    path: "/",
+    port: 80,
+    initialDelaySeconds: 5,
+    periodSeconds: 10,
+    failureThreshold: 3,
+  };
+  const withTiming = (t) => [
+    workload({
+      containers: [nginx({ readinessProbe: { httpGet: { path: "/", port: 80 }, ...t } })],
+    }),
+  ];
+  assert.equal(
+    (
+      await grade(
+        withTiming({ initialDelaySeconds: 5, periodSeconds: 10, failureThreshold: 3 }),
+        "k8s.container-probe",
+        p,
+      )
+    ).passed,
+    true,
+    "exact timings pass",
+  );
+  assert.equal(
+    (
+      await grade(
+        withTiming({ initialDelaySeconds: 30, periodSeconds: 10, failureThreshold: 3 }),
+        "k8s.container-probe",
+        p,
+      )
+    ).passed,
+    false,
+    "wrong initialDelaySeconds fails",
+  );
+  assert.equal(
+    (
+      await grade(
+        withTiming({ initialDelaySeconds: 5, periodSeconds: 5, failureThreshold: 3 }),
+        "k8s.container-probe",
+        p,
+      )
+    ).passed,
+    false,
+    "wrong periodSeconds fails",
+  );
+  assert.equal(
+    (
+      await grade(
+        withTiming({ initialDelaySeconds: 5, periodSeconds: 10, failureThreshold: 1 }),
+        "k8s.container-probe",
+        p,
+      )
+    ).passed,
+    false,
+    "wrong failureThreshold fails",
+  );
+  // A probe without explicit timings still passes checks that omit those params.
+  const noTiming = {
+    kind: "Deployment",
+    name: "web",
+    namespace: NS,
+    container: "app",
+    probe: "readiness",
+  };
+  assert.equal(
+    (await grade(withTiming({}), "k8s.container-probe", noTiming)).passed,
+    true,
+    "no timing params → timing not checked",
+  );
+});
+
 // ── k8s.container-env ────────────────────────────────────────────────────────
 
 test("container-env distinguishes literal values from ConfigMap references", async () => {
@@ -590,4 +668,112 @@ test("pod-template-labels checks spec.template.metadata.labels, not the object's
   const absent = await grade([], "k8s.pod-template-labels", p);
   assert.equal(absent.passed, false);
   assert.match(absent.feedback, /not found/i);
+});
+
+// ── container-runtime-env ──────────────────────────────────────────────────────────────────
+
+function runtimeEnvCluster({ podPhase = "Running", deletionTimestamp = false, envValue } = {}) {
+  const depl = {
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "app", namespace: NS },
+    spec: {
+      selector: { matchLabels: { app: "app" } },
+      replicas: 1,
+      template: {
+        metadata: { labels: { app: "app" } },
+        spec: { containers: [{ name: "app", image: "nginx:1.27" }] },
+      },
+    },
+    status: {
+      observedGeneration: 1,
+      replicas: 1,
+      updatedReplicas: 1,
+      availableReplicas: 1,
+      readyReplicas: 1,
+    },
+  };
+  const pod = {
+    apiVersion: "v1",
+    kind: "Pod",
+    metadata: {
+      name: "app-abc123",
+      namespace: NS,
+      labels: { app: "app" },
+      ...(deletionTimestamp ? { deletionTimestamp: new Date().toISOString() } : {}),
+    },
+    spec: { containers: [{ name: "app", image: "nginx:1.27" }] },
+    status: { phase: podPhase },
+  };
+  const cluster = createFakeCluster({ resources: [depl, pod] });
+  if (envValue !== undefined) cluster.setEnvResult("app-abc123", "FEATURE_FLAG", envValue);
+  return cluster;
+}
+
+async function gradeRuntimeEnv(cluster, extraParams = {}) {
+  const query = new KubernetesQuery({ runner: cluster });
+  const params = {
+    name: "app",
+    namespace: NS,
+    container: "app",
+    env: "FEATURE_FLAG",
+    value: "enabled",
+    ...extraParams,
+  };
+  return evaluateCheck(
+    { id: "t", type: "k8s.container-runtime-env", label: "t", params },
+    { validators, context: { query } },
+  );
+}
+
+test("container-runtime-env passes when pod sees the expected value", async () => {
+  const result = await gradeRuntimeEnv(runtimeEnvCluster({ envValue: "enabled" }));
+  assert.equal(result.passed, true);
+  assert.match(result.feedback, /FEATURE_FLAG=enabled/);
+});
+
+test("container-runtime-env fails when pod has a stale (wrong) value", async () => {
+  const result = await gradeRuntimeEnv(runtimeEnvCluster({ envValue: "disabled" }));
+  assert.equal(result.passed, false);
+  assert.match(result.feedback, /FEATURE_FLAG=enabled/);
+  assert.doesNotMatch(result.feedback, /disabled/); // must not leak the actual value
+});
+
+test("container-runtime-env fails when env var is not set in the pod", async () => {
+  // envValue not set → exec returns exit 1 (unset)
+  const result = await gradeRuntimeEnv(runtimeEnvCluster());
+  assert.equal(result.passed, false);
+  assert.match(result.feedback, /FEATURE_FLAG=enabled/);
+});
+
+test("container-runtime-env ignores terminating pods and fails when no running pods remain", async () => {
+  const result = await gradeRuntimeEnv(
+    runtimeEnvCluster({ deletionTimestamp: true, envValue: "enabled" }),
+  );
+  assert.equal(result.passed, false);
+  assert.match(result.feedback, /No Running Pod/i);
+});
+
+test("container-runtime-env fails when no running pods exist", async () => {
+  const result = await gradeRuntimeEnv(runtimeEnvCluster({ podPhase: "Pending" }));
+  assert.equal(result.passed, false);
+  assert.match(result.feedback, /No Running Pod/i);
+});
+
+test("container-runtime-env fails when deployment is absent", async () => {
+  const cluster = createFakeCluster({ resources: [] });
+  const result = await gradeRuntimeEnv(cluster);
+  assert.equal(result.passed, false);
+  assert.match(result.feedback, /not found/i);
+});
+
+test("container-runtime-env rejects invalid env key param", () => {
+  const probs = paramProblems("k8s.container-runtime-env", {
+    name: "app",
+    namespace: NS,
+    container: "app",
+    env: "123-invalid",
+    value: "x",
+  });
+  assert.ok(probs.some((m) => /env/i.test(m)));
 });

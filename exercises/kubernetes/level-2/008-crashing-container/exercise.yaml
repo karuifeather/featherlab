@@ -5,11 +5,11 @@ title: The Crashing Container
 summary: A gateway restarts over and over. Use its logs to find the configuration error and stabilise it.
 track: kubernetes
 level: 2
-order: 4
+order: 23
 difficulty: intermediate
 estimatedMinutes: 15
 tags: [troubleshooting, logs, configmaps, deployments, container-states]
-prerequisites: [k8s-0004]
+prerequisites: [k8s-0004, k8s-0039]
 
 environment:
   profile: kind-default

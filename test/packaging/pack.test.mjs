@@ -63,7 +63,7 @@ test("exercises ship in the npm tarball and load from an installed location", ()
     });
   const validated = cli("validate-content");
   assert.equal(validated.status, 0, validated.stderr);
-  assert.match(validated.stdout, /Validated 34 exercises: OK/);
+  assert.match(validated.stdout, /Validated 53 exercises: OK/);
   const listed = cli("exercises");
   assert.equal(listed.status, 0, listed.stderr);
   // Listed in curriculum order (k8s-0011 is taught before k8s-0002), not id order.

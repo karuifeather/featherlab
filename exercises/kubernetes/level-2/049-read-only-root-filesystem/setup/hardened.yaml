@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hardened
+  namespace: fl-k8s-0049
+  labels: { app: hardened }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: hardened }
+  template:
+    metadata:
+      labels: { app: hardened }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do sleep 30; done"]

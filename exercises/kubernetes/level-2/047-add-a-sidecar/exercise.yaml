@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0047
+type: task
+title: Add a Sidecar Container
+summary: A single-container Deployment needs a metrics-exporter sidecar. Add it without disrupting the main container.
+track: kubernetes
+level: 2
+order: 13
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [multi-container, sidecars, deployments, kubectl]
+prerequisites: [k8s-0046]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0047`"
+  - "Deployment `web` rolls out with 1 available replica"
+  - "Container `metrics-exporter` runs `busybox:1.36`"
+
+hints:
+  - "`kubectl edit deployment web -n fl-k8s-0047`"
+  - "Add a second entry to `spec.template.spec.containers` — each entry needs at least `name`, `image`, and `command`"
+  - 'The sidecar entry: `name: metrics-exporter`, `image: busybox:1.36`, `command: ["sh", "-c", "while true; do echo metrics ok; sleep 10; done"]`'
+
+lifecycle:
+  namespaces: [fl-k8s-0047]
+  setup:
+    manifests: [setup/web.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment web rolled out with 1 available replica
+    params: { name: web, namespace: fl-k8s-0047, replicas: 1 }
+  - id: sidecar-image
+    type: k8s.container-image
+    label: Container metrics-exporter runs busybox:1.36
+    params:
+      {
+        kind: Deployment,
+        name: web,
+        namespace: fl-k8s-0047,
+        container: metrics-exporter,
+        image: "busybox:1.36",
+      }

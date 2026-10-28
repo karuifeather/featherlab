@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: fl-k8s-0046
+  labels: { app: app }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: app }
+  template:
+    metadata:
+      labels: { app: app }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports: [{ name: http, containerPort: 80 }]
+        - name: log-agent
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo log tick; sleep 5; done"]

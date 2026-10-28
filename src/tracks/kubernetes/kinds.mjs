@@ -30,6 +30,7 @@ export const KINDS = Object.freeze({
   Job: { resource: "jobs.batch", namespaced: true, podSpecPath: ["spec", "template", "spec"] },
   Service: { resource: "services", namespaced: true },
   ConfigMap: { resource: "configmaps", namespaced: true },
+  Secret: { resource: "secrets", namespaced: true },
   Namespace: { resource: "namespaces", namespaced: false },
 });
 

@@ -1,0 +1,53 @@
+schemaVersion: 1
+id: k8s-0050
+type: task
+title: Add a Readiness Probe
+summary: A Deployment has no readiness probe. Add one so Kubernetes can tell when the container is ready to serve traffic.
+track: kubernetes
+level: 2
+order: 16
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [probes, readiness, deployments, health-checks]
+prerequisites: [k8s-0049]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0050`"
+  - "The `web` container of Deployment `web` has an HTTP readiness probe on path `/` and port `80`"
+  - "Deployment `web` finishes rolling out with 1 available replica"
+
+hints:
+  - "Add a `readinessProbe` field to the container spec inside the Deployment's pod template."
+  - "`kubectl edit deployment web -n fl-k8s-0050` opens the manifest in your editor. Look for the `containers` list and add `readinessProbe` under the container named `web`."
+  - "The minimal httpGet readiness probe needs `httpGet.path`, `httpGet.port`, and nothing else — sensible defaults apply to `initialDelaySeconds`, `periodSeconds`, and `failureThreshold`."
+
+lifecycle:
+  namespaces: [fl-k8s-0050]
+  setup:
+    manifests: [setup/web.yaml]
+
+checks:
+  - id: probe
+    type: k8s.container-probe
+    label: Container web has an httpGet readiness probe on / port 80
+    params:
+      kind: Deployment
+      name: web
+      namespace: fl-k8s-0050
+      container: web
+      probe: readiness
+      handler: httpGet
+      path: /
+      port: 80
+  - id: rollout
+    type: k8s.rollout-complete
+    label: web rolled out with 1 available replica
+    weight: 2
+    params: { name: web, namespace: fl-k8s-0050, replicas: 1 }

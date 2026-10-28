@@ -367,8 +367,8 @@ const containerResources = resourceValidator({
 const PROBE_HANDLERS = ["httpGet", "tcpSocket", "exec", "grpc"];
 
 /**
- * A probe of the given type exists on the container (optionally with a given handler and
- * HTTP path). It does not prove the probe succeeds: pair it with a readiness check.
+ * A probe of the given type exists on the container (optionally with a given handler,
+ * HTTP path and port). It does not prove the probe succeeds: pair it with a readiness check.
  */
 const containerProbe = resourceValidator({
   type: "k8s.container-probe",
@@ -378,6 +378,21 @@ const containerProbe = resourceValidator({
     probe: { type: "string", required: true, enum: ["readiness", "liveness", "startup"] },
     handler: { type: "string", enum: PROBE_HANDLERS },
     path: { type: "string", minLength: 1, maxLength: 200 },
+    port: { type: "any" }, // integer port or named port string
+    initialDelaySeconds: { type: "number" },
+    periodSeconds: { type: "number" },
+    failureThreshold: { type: "number" },
+  },
+  refine(p, problems) {
+    if (p.port !== undefined) {
+      const isInt = Number.isInteger(p.port) && p.port >= 1 && p.port <= 65535;
+      const isStr = typeof p.port === "string" && p.port.length >= 1 && p.port.length <= 253;
+      if (!isInt && !isStr)
+        problems.add("port", "must be an integer (1–65535) or a named port string");
+    }
+    for (const field of ["initialDelaySeconds", "periodSeconds", "failureThreshold"])
+      if (p[field] !== undefined && (!Number.isInteger(p[field]) || p[field] < 0))
+        problems.add(field, "must be a non-negative integer");
   },
   evaluate: (resource, p, ref) =>
     withContainer(resource, ref, p.container, (container) => {
@@ -395,11 +410,26 @@ const containerProbe = resourceValidator({
           passed: false,
           feedback: `${what} has a ${p.probe} probe, but not for the required path.`,
         };
+      if (p.port !== undefined) {
+        const handlerPort = probe.httpGet?.port ?? probe.tcpSocket?.port ?? probe.grpc?.port;
+        if (handlerPort !== p.port)
+          return {
+            passed: false,
+            feedback: `${what} has a ${p.probe} probe, but its port is "${handlerPort ?? "(not set)"}"; expected "${p.port}".`,
+          };
+      }
+      for (const field of ["initialDelaySeconds", "periodSeconds", "failureThreshold"]) {
+        if (p[field] !== undefined && probe[field] !== p[field])
+          return {
+            passed: false,
+            feedback: `${what} has a ${p.probe} probe, but ${field} is "${probe[field] ?? "(not set)"}"; expected "${p[field]}".`,
+          };
+      }
       return { passed: true, feedback: `${what} has the required ${p.probe} probe.` };
     }),
 });
 
-/** An environment variable on one container: a literal value or a ConfigMap key reference. */
+/** An environment variable on one container: a literal value, a ConfigMap key ref, or a Secret key ref. */
 const containerEnv = resourceValidator({
   type: "k8s.container-env",
   kinds: POD_SPEC_KINDS,
@@ -414,10 +444,18 @@ const containerEnv = resourceValidator({
         key: { type: "string", required: true, minLength: 1, maxLength: 253 },
       },
     },
+    secretKeyRef: {
+      type: "object",
+      properties: {
+        name: { ...NAME },
+        key: { type: "string", required: true, minLength: 1, maxLength: 253 },
+      },
+    },
   },
   refine(p, problems) {
-    if ((p.value === undefined) === (p.configMapKeyRef === undefined))
-      problems.add("", "set exactly one of value or configMapKeyRef");
+    const defined = [p.value, p.configMapKeyRef, p.secretKeyRef].filter((x) => x !== undefined);
+    if (defined.length !== 1)
+      problems.add("", "set exactly one of value, configMapKeyRef, or secretKeyRef");
   },
   evaluate: (resource, p, ref) =>
     withContainer(resource, ref, p.container, (container) => {
@@ -434,14 +472,24 @@ const containerEnv = resourceValidator({
             : `${what} sets ${p.env}, but not to the required value.`,
         };
       }
-      const source = entry.valueFrom?.configMapKeyRef;
-      const passed =
-        source?.name === p.configMapKeyRef.name && source?.key === p.configMapKeyRef.key;
+      if (p.configMapKeyRef !== undefined) {
+        const source = entry.valueFrom?.configMapKeyRef;
+        const passed =
+          source?.name === p.configMapKeyRef.name && source?.key === p.configMapKeyRef.key;
+        return {
+          passed,
+          feedback: passed
+            ? `${what} reads ${p.env} from the required ConfigMap key.`
+            : `${what} does not read ${p.env} from the required ConfigMap key.`,
+        };
+      }
+      const source = entry.valueFrom?.secretKeyRef;
+      const passed = source?.name === p.secretKeyRef.name && source?.key === p.secretKeyRef.key;
       return {
         passed,
         feedback: passed
-          ? `${what} reads ${p.env} from the required ConfigMap key.`
-          : `${what} does not read ${p.env} from the required ConfigMap key.`,
+          ? `${what} reads ${p.env} from the required Secret key.`
+          : `${what} does not read ${p.env} from the required Secret key.`,
       };
     }),
 });
@@ -464,6 +512,200 @@ const configMapMounted = resourceValidator({
           : `Container "${p.container}" of ${describe(ref)} does not mount ConfigMap "${p.configMap}".`,
       };
     }),
+});
+
+/** Specific key/value pairs must be present in a ConfigMap's data. */
+const configMapData = resourceValidator({
+  type: "k8s.configmap-data",
+  kinds: ["ConfigMap"],
+  params: { data: STRING_MAP },
+  evaluate(cm, p, ref) {
+    const actual = cm.data ?? {};
+    const missing = Object.entries(p.data).filter(([k, v]) => actual[k] !== v);
+    if (missing.length > 0) {
+      const detail = missing.map(([k]) => `"${k}"`).join(", ");
+      return {
+        passed: false,
+        feedback: `${describe(ref)} is missing or has wrong values for: ${detail}.`,
+        details: { expected: p.data },
+      };
+    }
+    return { passed: true, feedback: `${describe(ref)} has the required data entries.` };
+  },
+});
+
+/** The Secret's type field must match. */
+const secretType = resourceValidator({
+  type: "k8s.secret-type",
+  kinds: ["Secret"],
+  params: { secretType: { type: "string", required: true, minLength: 1, maxLength: 253 } },
+  evaluate(secret, p, ref) {
+    const actual = secret.type ?? "Opaque";
+    const passed = actual === p.secretType;
+    return {
+      passed,
+      feedback: passed
+        ? `${describe(ref)} has type "${p.secretType}".`
+        : `${describe(ref)} has type "${actual}"; expected "${p.secretType}".`,
+    };
+  },
+});
+
+/**
+ * The Secret has all specified keys in its data. Never checks values — exercise content
+ * must not leak answer keys or credential values.
+ */
+const secretKeys = resourceValidator({
+  type: "k8s.secret-keys",
+  kinds: ["Secret"],
+  params: {
+    keys: {
+      type: "array",
+      required: true,
+      minItems: 1,
+      items: { type: "string", minLength: 1, maxLength: 253 },
+    },
+  },
+  evaluate(secret, p, ref) {
+    const actual = Object.keys(secret.data ?? {});
+    const missing = p.keys.filter((k) => !actual.includes(k));
+    if (missing.length > 0) {
+      return {
+        passed: false,
+        feedback: `${describe(ref)} is missing keys: ${missing.map((k) => `"${k}"`).join(", ")}.`,
+      };
+    }
+    return { passed: true, feedback: `${describe(ref)} has the required keys.` };
+  },
+});
+
+/** A container loads all keys from a ConfigMap or Secret via envFrom. */
+const containerEnvFrom = resourceValidator({
+  type: "k8s.container-env-from",
+  kinds: POD_SPEC_KINDS,
+  params: {
+    container: CONTAINER,
+    configMapRef: { type: "string", pattern: DNS_SUBDOMAIN, maxLength: 253 },
+    secretRef: { type: "string", pattern: DNS_SUBDOMAIN, maxLength: 253 },
+  },
+  refine(p, problems) {
+    const defined = [p.configMapRef, p.secretRef].filter((x) => x !== undefined);
+    if (defined.length !== 1) problems.add("", "set exactly one of configMapRef or secretRef");
+  },
+  evaluate: (resource, p, ref) =>
+    withContainer(resource, ref, p.container, (container) => {
+      const what = `Container "${p.container}" of ${describe(ref)}`;
+      const envFrom = container.envFrom ?? [];
+      if (p.configMapRef !== undefined) {
+        const passed = envFrom.some((e) => e.configMapRef?.name === p.configMapRef);
+        return {
+          passed,
+          feedback: passed
+            ? `${what} loads all keys from ConfigMap "${p.configMapRef}".`
+            : `${what} does not load ConfigMap "${p.configMapRef}" via envFrom.`,
+        };
+      }
+      const passed = envFrom.some((e) => e.secretRef?.name === p.secretRef);
+      return {
+        passed,
+        feedback: passed
+          ? `${what} loads all keys from Secret "${p.secretRef}".`
+          : `${what} does not load Secret "${p.secretRef}" via envFrom.`,
+      };
+    }),
+});
+
+/** A Secret is mounted as a volume into the named container. */
+const secretMounted = resourceValidator({
+  type: "k8s.secret-mounted",
+  kinds: POD_SPEC_KINDS,
+  params: { container: CONTAINER, secret: { ...NAME } },
+  evaluate: (resource, p, ref) =>
+    withContainer(resource, ref, p.container, (container) => {
+      const volumes = (podSpecOf(resource, ref.kind)?.volumes ?? [])
+        .filter((v) => v.secret?.secretName === p.secret)
+        .map((v) => v.name);
+      const passed = (container.volumeMounts ?? []).some((m) => volumes.includes(m.name));
+      return {
+        passed,
+        feedback: passed
+          ? `Container "${p.container}" of ${describe(ref)} mounts Secret "${p.secret}".`
+          : `Container "${p.container}" of ${describe(ref)} does not mount Secret "${p.secret}".`,
+      };
+    }),
+});
+
+/**
+ * One or more securityContext fields on a container. Specify any subset of the supported
+ * fields; only the ones provided are checked. capDrop verifies the listed capabilities
+ * appear in capabilities.drop.
+ */
+const containerSecurityContext = resourceValidator({
+  type: "k8s.container-security-context",
+  kinds: POD_SPEC_KINDS,
+  params: {
+    container: CONTAINER,
+    allowPrivilegeEscalation: { type: "boolean" },
+    readOnlyRootFilesystem: { type: "boolean" },
+    runAsNonRoot: { type: "boolean" },
+    runAsUser: { type: "integer", min: 0, max: 65535 },
+    capDrop: {
+      type: "array",
+      minItems: 1,
+      items: { type: "string", minLength: 1, maxLength: 64 },
+    },
+  },
+  refine(p, problems) {
+    const fields = [
+      "allowPrivilegeEscalation",
+      "readOnlyRootFilesystem",
+      "runAsNonRoot",
+      "runAsUser",
+      "capDrop",
+    ];
+    if (fields.every((f) => p[f] === undefined))
+      problems.add("", "at least one security context field must be specified");
+  },
+  evaluate(resource, p, ref) {
+    const podSpec = podSpecOf(resource, ref.kind);
+    const container = (podSpec?.containers ?? []).find((c) => c.name === p.container);
+    if (!container)
+      return { passed: false, feedback: `${describe(ref)} has no container "${p.container}".` };
+    const what = `Container "${p.container}" of ${describe(ref)}`;
+    const sc = container.securityContext ?? {};
+    const podSc = podSpec?.securityContext ?? {};
+    const failures = [];
+    if (
+      p.allowPrivilegeEscalation !== undefined &&
+      sc.allowPrivilegeEscalation !== p.allowPrivilegeEscalation
+    )
+      failures.push(`allowPrivilegeEscalation should be ${p.allowPrivilegeEscalation}`);
+    if (
+      p.readOnlyRootFilesystem !== undefined &&
+      sc.readOnlyRootFilesystem !== p.readOnlyRootFilesystem
+    )
+      failures.push(`readOnlyRootFilesystem should be ${p.readOnlyRootFilesystem}`);
+    // runAsNonRoot and runAsUser may be set at the Pod level and inherited by containers
+    const effectiveRunAsNonRoot = sc.runAsNonRoot ?? podSc.runAsNonRoot;
+    if (p.runAsNonRoot !== undefined && effectiveRunAsNonRoot !== p.runAsNonRoot)
+      failures.push(`runAsNonRoot should be ${p.runAsNonRoot}`);
+    const effectiveRunAsUser = sc.runAsUser ?? podSc.runAsUser;
+    if (p.runAsUser !== undefined && effectiveRunAsUser !== p.runAsUser)
+      failures.push(`runAsUser should be ${p.runAsUser}`);
+    if (p.capDrop !== undefined) {
+      const dropped = sc.capabilities?.drop ?? [];
+      const missing = p.capDrop.filter((cap) => !dropped.includes(cap));
+      if (missing.length > 0)
+        failures.push(`capabilities.drop must include ${missing.map((c) => `"${c}"`).join(", ")}`);
+    }
+    if (failures.length > 0) {
+      return {
+        passed: false,
+        feedback: `${what} has an incorrect security context: ${failures.join("; ")}.`,
+      };
+    }
+    return { passed: true, feedback: `${what} has the required security context settings.` };
+  },
 });
 
 function podTemplateLabels(workload, kind) {
@@ -630,6 +872,95 @@ const podTemplateLabelsCheck = resourceValidator({
   },
 });
 
+const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * k8s.container-runtime-env — passes when every Running Pod of a Deployment actually
+ * sees the expected environment variable value at runtime (via kubectl exec + printenv).
+ *
+ * This differs from k8s.container-env, which only checks the declarative spec. Use this
+ * when the learner must restart the workload for an envFrom/env change to take effect.
+ *
+ * Feedback deliberately omits the observed value to avoid leaking Secret data.
+ */
+const containerRuntimeEnv = {
+  type: "k8s.container-runtime-env",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["name", "namespace", "container", "env", "value"], problems);
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(
+      p.container,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "container",
+      problems,
+    );
+    check(
+      p.env,
+      {
+        type: "string",
+        required: true,
+        pattern: ENV_KEY_RE,
+        maxLength: 120,
+      },
+      "env",
+      problems,
+    );
+    check(p.value, { type: "string", required: true, maxLength: 300 }, "value", problems);
+  },
+  async run(p, ctx) {
+    const deplRef = { kind: "Deployment", name: p.name, namespace: p.namespace };
+    const deployment = await ctx.query.get(deplRef);
+    if (!deployment)
+      return {
+        passed: false,
+        feedback: `Deployment "${p.name}" was not found in namespace "${p.namespace}".`,
+      };
+
+    const matchLabels = deployment.spec?.selector?.matchLabels ?? {};
+    const labelSelector = Object.entries(matchLabels)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(",");
+
+    const pods = await ctx.query.list({ kind: "Pod", namespace: p.namespace, labelSelector });
+    const running = pods.filter(
+      (pod) => !pod.metadata.deletionTimestamp && pod.status?.phase === "Running",
+    );
+
+    if (running.length === 0)
+      return {
+        passed: false,
+        feedback: `No Running Pod for Deployment "${p.name}" found in namespace "${p.namespace}".`,
+      };
+
+    for (const pod of running) {
+      const result = await ctx.query.exec({
+        podName: pod.metadata.name,
+        namespace: p.namespace,
+        container: p.container,
+        key: p.env,
+      });
+      const actual = result.exitCode === 0 ? result.stdout.trim() : null;
+      if (actual !== p.value) {
+        return {
+          passed: false,
+          feedback: `Container "${p.container}" does not see ${p.env}=${p.value}. Update the ConfigMap and restart the Deployment so pods pick up the new value.`,
+        };
+      }
+    }
+    return {
+      passed: true,
+      feedback: `Container "${p.container}" sees ${p.env}=${p.value} at runtime.`,
+    };
+  },
+};
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -648,8 +979,15 @@ export const kubernetesValidators = Object.freeze([
   containerProbe,
   containerEnv,
   configMapMounted,
+  configMapData,
+  secretType,
+  secretKeys,
+  containerEnvFrom,
+  secretMounted,
+  containerSecurityContext,
   serviceSelects,
   deploymentStrategy,
   deploymentNotPaused,
   podTemplateLabelsCheck,
+  containerRuntimeEnv,
 ]);

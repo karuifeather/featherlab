@@ -1,0 +1,45 @@
+schemaVersion: 1
+id: k8s-0044
+type: task
+title: Mount a Secret as a Volume
+summary: Mount a Secret into a container as a volume; understand that each key becomes a file at the mount path.
+track: kubernetes
+level: 2
+order: 10
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [secrets, volumes, volume-mounts, kubectl]
+prerequisites: [k8s-0043]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0044`"
+  - "Deployment `api` is fully rolled out with 1 replica"
+  - "Container `api` has Secret `api-keys` mounted as a volume"
+
+hints:
+  - "Mounting a Secret requires two steps in the Deployment spec: (1) declare the volume under `spec.template.spec.volumes`, (2) add a `volumeMount` in the container referencing that volume."
+  - "Under `volumes`, use: `name: api-keys-vol`, `secret.secretName: api-keys`"
+  - "Under the container's `volumeMounts`, add: `name: api-keys-vol`, `mountPath: /etc/secrets/api-keys`, `readOnly: true`"
+
+lifecycle:
+  namespaces: [fl-k8s-0044]
+  setup:
+    manifests: [setup/api-keys.yaml, setup/api.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api rolled out with 1 replica
+    params: { name: api, namespace: fl-k8s-0044, replicas: 1 }
+  - id: secret-mounted
+    type: k8s.secret-mounted
+    label: Container api mounts Secret api-keys
+    params:
+      { kind: Deployment, name: api, namespace: fl-k8s-0044, container: api, secret: api-keys }

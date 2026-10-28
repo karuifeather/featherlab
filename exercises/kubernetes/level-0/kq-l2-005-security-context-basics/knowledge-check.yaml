@@ -1,0 +1,117 @@
+schemaVersion: 1
+id: kq-k8s-l2-005
+activityType: knowledge-check
+title: Security Context Basics
+summary: Test your understanding of runAsNonRoot, allowPrivilegeEscalation, readOnlyRootFilesystem, and where security contexts apply.
+track: kubernetes
+level: 2
+order: 48.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [security-context, run-as-non-root, allow-privilege-escalation, read-only-root-filesystem]
+relatedLabs: [k8s-0048, k8s-0049]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does setting `securityContext.allowPrivilegeEscalation: false` on a container prevent?"
+    options:
+      - id: a
+        text: "The container from running as the root user (UID 0)"
+      - id: b
+        text: "A container process from gaining more privileges than its parent process (e.g., via setuid/setgid binaries)"
+      - id: c
+        text: "The container from reading files owned by root"
+      - id: d
+        text: "The container from using any Linux capabilities"
+    correctAnswer: b
+    explanation: "`allowPrivilegeEscalation: false` sets the `no_new_privs` flag on the container process. This prevents processes inside the container from gaining additional privileges through mechanisms like setuid/setgid binaries or file capabilities. It does not prevent the container from running as root."
+    wrongExplanations:
+      a: "Preventing root execution requires `runAsNonRoot: true` or setting `runAsUser` to a non-zero UID. `allowPrivilegeEscalation` does not restrict the user."
+      c: "`allowPrivilegeEscalation` controls privilege gain, not file read access. File access is controlled by Unix permissions and capabilities."
+      d: "Linux capabilities are controlled by `capabilities.drop` and `capabilities.add`. `allowPrivilegeEscalation` only prevents acquiring NEW privileges beyond what the container started with."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container"
+
+  - id: q2
+    type: single-choice
+    prompt: "A Deployment uses the `nginx:1.27` image, which is configured to start as root (UID 0). The Pod spec sets `runAsNonRoot: true`. What happens when the Pod is scheduled?"
+    options:
+      - id: a
+        text: "The container starts normally — Kubernetes overrides the image's USER instruction"
+      - id: b
+        text: "The container starts but is immediately killed because nginx fails without root"
+      - id: c
+        text: "The Pod fails to start with a CreateContainerConfigError because the image requires UID 0"
+      - id: d
+        text: "The container runs as the built-in `nobody` user automatically"
+    correctAnswer: c
+    explanation: "When `runAsNonRoot: true` is set, the kubelet checks the effective UID of the container's entry point before starting it. If the image runs as UID 0, the container is rejected with `CreateContainerConfigError`. The container never starts."
+    wrongExplanations:
+      a: "Kubernetes does NOT override the image's USER instruction when `runAsNonRoot` is true. It enforces the constraint and refuses to start the container."
+      b: "The container does not start at all. The error is `CreateContainerConfigError`, reported before the container process is launched."
+      d: "Kubernetes does not automatically switch the user to `nobody`. If you want to run as a specific non-root user, you must set `runAsUser` explicitly, or the image must specify a non-root USER."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod"
+
+  - id: q3
+    type: single-choice
+    prompt: "Where can you set `runAsNonRoot: true` to apply it as a default for ALL containers in a Pod, including init containers?"
+    options:
+      - id: a
+        text: "spec.securityContext (pod-level security context)"
+      - id: b
+        text: "spec.template.securityContext"
+      - id: c
+        text: "spec.containers[].command"
+      - id: d
+        text: "metadata.annotations"
+    correctAnswer: a
+    explanation: "`spec.securityContext` is the pod-level security context. Settings placed here apply as defaults to all containers in the Pod (including init containers). Individual containers can override pod-level settings with their own `securityContext`."
+    wrongExplanations:
+      b: "`spec.template.securityContext` is used inside a Deployment or StatefulSet manifest (where `spec.template` is the Pod template). In a Pod manifest itself, the field is `spec.securityContext`. In a Deployment, `spec.template.spec.securityContext` is the pod-level context."
+      c: "`spec.containers[].command` sets the container's command (entrypoint). It cannot configure security settings."
+      d: "`metadata.annotations` are key-value metadata. Some admission controllers read annotations for policy, but native Kubernetes security contexts are not configured via annotations."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod"
+
+  - id: q4
+    type: single-choice
+    prompt: "A container has `readOnlyRootFilesystem: true` and its application tries to write a log file to `/tmp/app.log`. What happens?"
+    options:
+      - id: a
+        text: "The write succeeds because `/tmp` is always exempt from the read-only restriction"
+      - id: b
+        text: "The write fails — the entire root filesystem is read-only; to write files, add an emptyDir volume mounted at `/tmp`"
+      - id: c
+        text: "The kubelet automatically creates a writable `/tmp` directory for the container"
+      - id: d
+        text: "The Pod is evicted when the write attempt is detected"
+    correctAnswer: b
+    explanation: "`readOnlyRootFilesystem: true` makes the entire container root filesystem read-only. There are no exempt directories — `/tmp` is also read-only. For paths that need to be writable (logs, caches, temp files), mount an `emptyDir` volume at that path."
+    wrongExplanations:
+      a: "`/tmp` has no special exemption in Kubernetes. `readOnlyRootFilesystem: true` covers the entire filesystem including `/tmp`."
+      c: "The kubelet does not automatically create writable directories. If the application needs writable paths, you must explicitly mount volumes."
+      d: "A write failure results in an error to the application process (e.g., `EROFS: read-only file system`). The Pod is not evicted; it keeps running."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container"
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which security context fields are valid at the Pod level (`spec.securityContext`) and are inherited as defaults by all containers? (select all that apply)"
+    options:
+      - id: a
+        text: "runAsUser"
+      - id: b
+        text: "runAsNonRoot"
+      - id: c
+        text: "runAsGroup"
+      - id: d
+        text: "fsGroup"
+      - id: e
+        text: "allowPrivilegeEscalation"
+      - id: f
+        text: "readOnlyRootFilesystem"
+    correctAnswers: [a, b, c, d]
+    explanation: "`runAsUser`, `runAsNonRoot`, `runAsGroup`, and `fsGroup` are all valid pod-level security context fields. They set defaults for all containers. `fsGroup` specifically controls the GID for volume ownership. Containers can override these individually."
+    wrongExplanations:
+      e: "`allowPrivilegeEscalation` is a container-level only field. It cannot be set at the Pod level because it controls per-process privilege behavior specific to each container."
+      f: "`readOnlyRootFilesystem` is a container-level only field. Each container has its own root filesystem, so the setting cannot be applied at the Pod level."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod"

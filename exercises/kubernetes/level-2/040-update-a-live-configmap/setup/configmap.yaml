@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-config
+  namespace: fl-k8s-0040
+data:
+  FEATURE_FLAG: "disabled"

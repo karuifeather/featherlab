@@ -19,12 +19,17 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
   const store = new Map();
   const calls = [];
   const key = (kind, namespace, name) => `${kind}/${namespace ?? ""}/${name}`;
+  const execEnvMap = new Map(); // key: `${podName}/${envKey}`, value: string | null (null = unset)
   const cluster = {
     calls,
     down: false,
     context,
     stuckNamespaces: new Set(),
     failNextApplyAfter: undefined, // number of successful creates/applies before one fails
+    /** Seed a runtime env var for a pod: `setEnvResult(podName, "KEY", "value")` or `null` for unset. */
+    setEnvResult(podName, envKey, value) {
+      execEnvMap.set(`${podName}/${envKey}`, value);
+    },
     put(resource) {
       const { kind, metadata } = resource;
       const copy = structuredClone(resource);
@@ -122,6 +127,16 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
         const namespace = flag("-n");
         store.delete(key(kind, namespace, name));
         return ok("deleted");
+      }
+      if (verb === "exec") {
+        const podName = args[2];
+        const ddIdx = args.indexOf("--");
+        // args after -- are: printenv KEY
+        const envKey = ddIdx >= 0 ? args[ddIdx + 2] : undefined;
+        const mapKey = `${podName}/${envKey}`;
+        const value = execEnvMap.get(mapKey); // undefined = not seeded, null = explicitly unset
+        if (value != null) return ok(`${value}\n`);
+        return { stdout: "", stderr: "command terminated with exit code 1", exitCode: 1 };
       }
       return fail(`unsupported fake kubectl invocation: ${args.join(" ")}`);
     },

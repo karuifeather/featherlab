@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0042
+type: task
+title: Read a Secret Value
+summary: Inspect a Secret's keys, then wire an environment variable to that Secret using secretKeyRef.
+track: kubernetes
+level: 2
+order: 8
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [secrets, env-vars, secret-key-ref, kubectl]
+prerequisites: [k8s-0041]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0042`"
+  - "Deployment `app` is fully rolled out with 1 replica"
+  - "Container `app` reads env var `API_KEY` from Secret `app-secret`, key `api-key`"
+
+hints:
+  - "Inspect the Secret's keys (not values) with: `kubectl get secret app-secret -n fl-k8s-0042 -o jsonpath='{.data}' | tr ',' '\n'`"
+  - "To decode a value for inspection (base64 is encoding, not encryption — anyone with access can decode it): `kubectl get secret app-secret -n fl-k8s-0042 -o jsonpath='{.data.api-key}' | base64 -d`"
+  - "In the Deployment's container spec, add an `env` entry: `name: API_KEY`, `valueFrom.secretKeyRef.name: app-secret`, `valueFrom.secretKeyRef.key: api-key`"
+
+lifecycle:
+  namespaces: [fl-k8s-0042]
+  setup:
+    manifests: [setup/app-secret.yaml, setup/app.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 replica
+    params: { name: app, namespace: fl-k8s-0042, replicas: 1 }
+  - id: env-api-key
+    type: k8s.container-env
+    label: Container app reads API_KEY from Secret app-secret
+    params:
+      {
+        kind: Deployment,
+        name: app,
+        namespace: fl-k8s-0042,
+        container: app,
+        env: API_KEY,
+        secretKeyRef: { name: app-secret, key: api-key },
+      }

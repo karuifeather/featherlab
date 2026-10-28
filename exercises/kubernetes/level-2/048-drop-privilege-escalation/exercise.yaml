@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0048
+type: task
+title: Drop Privilege Escalation
+summary: Harden a Deployment by preventing its container from acquiring new privileges at runtime.
+track: kubernetes
+level: 2
+order: 14
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [security, security-context, deployments, kubectl]
+prerequisites: [k8s-0047]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0048`"
+  - "Deployment `api` rolls out with 1 available replica"
+  - "Container `api` has `allowPrivilegeEscalation: false` in its securityContext"
+
+hints:
+  - "`kubectl edit deployment api -n fl-k8s-0048`"
+  - "Add a `securityContext` block under the `api` container with `allowPrivilegeEscalation: false`"
+  - '`kubectl patch deployment api -n fl-k8s-0048 --type=merge -p ''{"spec":{"template":{"spec":{"containers":[{"name":"api","securityContext":{"allowPrivilegeEscalation":false}}]}}}}''`'
+
+lifecycle:
+  namespaces: [fl-k8s-0048]
+  setup:
+    manifests: [setup/api.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api rolled out with 1 available replica
+    params: { name: api, namespace: fl-k8s-0048, replicas: 1 }
+  - id: security-context
+    type: k8s.container-security-context
+    label: Container api has allowPrivilegeEscalation disabled
+    params:
+      {
+        kind: Deployment,
+        name: api,
+        namespace: fl-k8s-0048,
+        container: api,
+        allowPrivilegeEscalation: false,
+      }

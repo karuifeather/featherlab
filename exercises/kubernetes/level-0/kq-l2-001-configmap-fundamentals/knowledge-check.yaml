@@ -1,0 +1,128 @@
+schemaVersion: 1
+id: kq-k8s-l2-001
+activityType: knowledge-check
+title: ConfigMap Fundamentals
+summary: Test your understanding of creating ConfigMaps, consuming them in Pods, and when configuration changes take effect.
+track: kubernetes
+level: 2
+order: 35.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [configmaps, configuration, env-vars, volumes]
+relatedLabs: [k8s-0035, k8s-0036, k8s-0037, k8s-0038, k8s-0039, k8s-0040]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Which command creates a ConfigMap named `app-config` with two key=value pairs?"
+    options:
+      - id: a
+        text: "kubectl create configmap app-config --from-file=APP_ENV=production --from-file=LOG_LEVEL=info"
+      - id: b
+        text: "kubectl create configmap app-config --from-literal=APP_ENV=production --from-literal=LOG_LEVEL=info"
+      - id: c
+        text: "kubectl create configmap app-config --set APP_ENV=production --set LOG_LEVEL=info"
+      - id: d
+        text: "kubectl create configmap app-config --env APP_ENV=production --env LOG_LEVEL=info"
+    correctAnswer: b
+    explanation: "`--from-literal=KEY=VALUE` creates individual key=value entries in the ConfigMap. Multiple `--from-literal` flags can be chained to create multiple keys in one command."
+    wrongExplanations:
+      a: "`--from-file` reads a file from disk and stores its entire contents as a single value. It is not used for inline key=value literals."
+      c: "`--set` is not a valid flag for `kubectl create configmap`. It is used by Helm charts, not kubectl."
+      d: "`--env` is not a valid flag for `kubectl create configmap`. The correct flag for inline values is `--from-literal`."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#create-configmaps-using-kubectl-create-configmap"
+
+  - id: q2
+    type: single-choice
+    prompt: "After you update a value in a ConfigMap, when do Pods that reference it via `envFrom` see the new value?"
+    options:
+      - id: a
+        text: Immediately, as soon as the ConfigMap is updated
+      - id: b
+        text: After the next kubelet sync cycle, within about 1-2 minutes
+      - id: c
+        text: Only after the Pod is restarted or the Deployment is rolled out (e.g., kubectl rollout restart)
+      - id: d
+        text: Never — environment variables from a ConfigMap are immutable once a Pod is started
+    correctAnswer: c
+    explanation: "Environment variables injected via `envFrom` (or `env[].valueFrom.configMapKeyRef`) are set at container startup time. Updating the ConfigMap after the container is running does NOT update those environment variables. The Pod must be restarted to pick up the new values."
+    wrongExplanations:
+      a: "ConfigMap changes do not propagate to env vars in running containers. The container process reads its environment once at start."
+      b: "The kubelet sync cycle applies to volume-mounted ConfigMaps, not to environment variables. Env vars only update on Pod restart."
+      d: "Environment variables CAN be updated — but only by restarting the Pod. They are not permanently immutable; they just are not live-reloaded."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically"
+
+  - id: q3
+    type: single-choice
+    prompt: "What is the key difference between `--from-env-file` and `--from-file` when creating a ConfigMap?"
+    options:
+      - id: a
+        text: "`--from-env-file` base64-encodes the values; `--from-file` stores them as plain text"
+      - id: b
+        text: "`--from-env-file` creates one key per KEY=VALUE line in the file; `--from-file` creates one key whose value is the entire file contents"
+      - id: c
+        text: "`--from-env-file` imports variables from the current shell environment; `--from-file` reads from disk"
+      - id: d
+        text: "`--from-env-file` and `--from-file` are identical; the flag names are aliases"
+    correctAnswer: b
+    explanation: "`--from-file=path/to/file` creates a single ConfigMap key named after the file, with the entire file content as its value. `--from-env-file=path/to/file` parses the file line by line, expecting KEY=VALUE format, and creates one ConfigMap key per line."
+    wrongExplanations:
+      a: "Neither flag base64-encodes values. Base64 encoding is specific to Secrets, not ConfigMaps."
+      c: "`--from-env-file` reads from a file on disk, not from the running shell environment. To capture shell variables, you would write them to a file first."
+      d: "They produce very different results. `--from-file` always creates one key; `--from-env-file` creates multiple keys."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#create-configmaps-from-files"
+
+  - id: q4
+    type: single-choice
+    prompt: "Which volume spec correctly mounts ConfigMap `app-config` into a Pod?"
+    options:
+      - id: a
+        text: |
+          volumes:
+            - name: config-vol
+              secret:
+                secretName: app-config
+      - id: b
+        text: |
+          volumes:
+            - name: config-vol
+              configMap:
+                name: app-config
+      - id: c
+        text: |
+          volumes:
+            - name: config-vol
+              configMap:
+                secretName: app-config
+      - id: d
+        text: |
+          volumes:
+            - name: config-vol
+              configmap:
+                configMapName: app-config
+    correctAnswer: b
+    explanation: "ConfigMap volumes use `configMap.name` to reference the ConfigMap. The field name is `configMap` (camelCase) and within it the key is `name`."
+    wrongExplanations:
+      a: "A `secret` volume spec references a Secret, not a ConfigMap. The field is `secret.secretName` for Secrets."
+      c: "`configMap` volumes use `name`, not `secretName`. The `secretName` field belongs to the `secret` volume type."
+      d: "The field name in YAML is `configMap` (camelCase with capital M), not `configmap`. The key inside it is `name`, not `configMapName`."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#populate-a-volume-with-data-stored-in-a-configmap"
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which of the following are valid ways to consume a ConfigMap in a Pod? (select all that apply)"
+    options:
+      - id: a
+        text: "env[].valueFrom.configMapKeyRef — inject a single key as an environment variable"
+      - id: b
+        text: "envFrom[].configMapRef — inject all keys from the ConfigMap as environment variables"
+      - id: c
+        text: "spec.volumes[].configMap + spec.containers[].volumeMounts — mount ConfigMap keys as files"
+      - id: d
+        text: "spec.imagePullSecrets[].name — reference the ConfigMap for image pull credentials"
+    correctAnswers: [a, b, c]
+    explanation: "ConfigMaps can be consumed three ways: (1) individual key injection with `env[].valueFrom.configMapKeyRef`, (2) bulk injection with `envFrom[].configMapRef`, or (3) volume mount with `spec.volumes[].configMap`. All three are standard patterns."
+    wrongExplanations:
+      d: "`spec.imagePullSecrets` only accepts references to Secrets of type `kubernetes.io/dockerconfigjson`. ConfigMaps cannot be used for image pull credentials."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/"

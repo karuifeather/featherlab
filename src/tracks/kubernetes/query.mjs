@@ -14,6 +14,8 @@ const NOT_FOUND = /\(NotFound\)|not found/i;
  *
  * Contract:
  *  - `get` resolves to the resource object, or `null` when it does not exist.
+ *  - `exec` resolves to `{exitCode, stdout}` for exit codes 0 or 1; other exit codes
+ *    (container not found, pod not running, transport error) reject with EnvironmentError.
  *  - Anything else that goes wrong (cluster down, timeout, garbage output) rejects with
  *    EnvironmentError so it is reported as "could not check", never as a wrong answer.
  */
@@ -51,6 +53,37 @@ export class KubernetesQuery {
         return parseJson(result.stdout).items ?? [];
       },
     );
+  }
+
+  /**
+   * Run `printenv KEY` inside a named container and return `{exitCode, stdout}`.
+   * Exit 0 means the variable is set; exit 1 means it is not set. Both are valid
+   * learner states. Any other exit code is an EnvironmentError.
+   *
+   * `--request-timeout` is placed BEFORE `--` so kubectl owns it, not the pod command.
+   */
+  exec({ podName, namespace, container, key }) {
+    return this.#memo(["exec", podName, namespace, container, key], async () => {
+      const argv = [
+        "kubectl",
+        "exec",
+        podName,
+        "-n",
+        namespace,
+        "-c",
+        container,
+        REQUEST_TIMEOUT, // must come before -- or kubectl passes it to the container command
+        "--",
+        "printenv",
+        key,
+      ];
+      const result = await this.#runner.run(argv, { signal: this.#signal, timeoutMs: 15_000 });
+      if (result.exitCode === 0 || result.exitCode === 1) return result;
+      throw new EnvironmentError("Could not exec into pod.", {
+        reason: "unavailable",
+        details: { stderr: result.stderr.slice(0, 500) },
+      });
+    });
   }
 
   #memo(key, load) {

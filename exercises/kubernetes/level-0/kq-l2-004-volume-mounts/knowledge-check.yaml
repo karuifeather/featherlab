@@ -1,0 +1,130 @@
+schemaVersion: 1
+id: kq-k8s-l2-004
+activityType: knowledge-check
+title: "Volume Mounts: ConfigMaps and Secrets"
+summary: Test your understanding of how ConfigMap and Secret volumes map keys to files, file permissions, and read-only behaviour.
+track: kubernetes
+level: 2
+order: 44.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [volumes, configmaps, secrets, volume-mounts, file-permissions]
+relatedLabs: [k8s-0039, k8s-0044]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "When you mount a ConfigMap as a volume without specifying `items:`, how are the ConfigMap keys mapped inside the container?"
+    options:
+      - id: a
+        text: "All keys are merged into a single file named after the ConfigMap"
+      - id: b
+        text: "Each key becomes a separate file, with the key name as the filename and the key's value as the file contents"
+      - id: c
+        text: "Only the first key in the ConfigMap is mounted; the rest are ignored"
+      - id: d
+        text: "Each key becomes a subdirectory, with the value written to a file named `value` inside it"
+    correctAnswer: b
+    explanation: "Without an `items:` list, Kubernetes maps every key in the ConfigMap to a file at the volume mount path. The filename equals the key name and the file's contents equal the key's value. For example, a ConfigMap with keys `app.conf` and `log.conf` would produce two files at the mount point."
+    wrongExplanations:
+      a: "Keys are NOT merged into one file. Each key becomes its own file, preserving the key name."
+      c: "All keys are mounted, not just the first one. To restrict which keys appear, use the `items:` field."
+      d: "Keys become files, not subdirectories. Only the `items[].path` field can create subdirectory structures."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#populate-a-volume-with-data-stored-in-a-configmap"
+
+  - id: q2
+    type: single-choice
+    prompt: "A Secret named `db-creds` is mounted at `/etc/creds`. The Secret has a key named `api-key`. What path does the container use to read that value?"
+    options:
+      - id: a
+        text: "/etc/creds"
+      - id: b
+        text: "/etc/creds/api-key"
+      - id: c
+        text: "/etc/creds/secret/api-key"
+      - id: d
+        text: "/etc/creds.api-key"
+    correctAnswer: b
+    explanation: "Each key in a Secret volume becomes a file at `<mountPath>/<keyName>`. With a mount path of `/etc/creds` and a key named `api-key`, the file is at `/etc/creds/api-key`. The file's contents are the plain-text (already base64-decoded) value."
+    wrongExplanations:
+      a: "`/etc/creds` is the directory (mount path), not the file. Reading the directory would list its contents, not return a value."
+      c: "There is no `secret/` subdirectory inserted automatically. The path is `<mountPath>/<keyName>` directly."
+      d: "The mount path and key are not joined with a dot. The path separator is `/`, not `.`."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod"
+
+  - id: q3
+    type: single-choice
+    prompt: "Which volume spec correctly mounts Secret `app-secrets` into a Pod?"
+    options:
+      - id: a
+        text: |
+          volumes:
+            - name: secrets-vol
+              configMap:
+                name: app-secrets
+      - id: b
+        text: |
+          volumes:
+            - name: secrets-vol
+              secret:
+                secretName: app-secrets
+      - id: c
+        text: |
+          volumes:
+            - name: secrets-vol
+              secret:
+                name: app-secrets
+      - id: d
+        text: |
+          volumes:
+            - name: secrets-vol
+              secretVolume:
+                secretName: app-secrets
+    correctAnswer: b
+    explanation: "Secret volumes use `secret.secretName` to reference the Secret. The field name is `secret` (for the volume type) and the child key is `secretName`. This is different from ConfigMap volumes, which use `configMap.name`."
+    wrongExplanations:
+      a: "`configMap.name` references a ConfigMap, not a Secret. Using this spec for a Secret would either fail or mount the wrong resource type."
+      c: "For Secret volumes, the field is `secretName`, not `name`. Using `name` instead of `secretName` is a common mistake."
+      d: "`secretVolume` is not a valid volume type. The correct field name is `secret`."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod"
+
+  - id: q4
+    type: single-choice
+    prompt: "A container has `securityContext.readOnlyRootFilesystem: true` and also mounts a ConfigMap at `/etc/config`. Can the container write to `/etc/config`?"
+    options:
+      - id: a
+        text: "Yes — volume mount paths are always writable regardless of readOnlyRootFilesystem"
+      - id: b
+        text: "Yes — ConfigMap volumes are not part of the root filesystem and bypass the read-only setting"
+      - id: c
+        text: "No — volume-mounted ConfigMap files are read-only by default, and readOnlyRootFilesystem makes the root filesystem read-only too"
+      - id: d
+        text: "It depends on the `defaultMode` permission bits set on the ConfigMap volume"
+    correctAnswer: c
+    explanation: "Volume-mounted ConfigMap files are read-only by default (the kubelet creates symlinked files that cannot be modified). Additionally, `readOnlyRootFilesystem: true` marks the entire root filesystem as read-only. Together, writing to `/etc/config` will fail. Use an `emptyDir` volume for paths where the application needs to write files."
+    wrongExplanations:
+      a: "This is incorrect. ConfigMap volume files are read-only by default. Even without `readOnlyRootFilesystem`, you cannot write to a ConfigMap-backed file."
+      b: "Volume mounts ARE part of the root filesystem namespace. `readOnlyRootFilesystem` makes the entire container filesystem read-only, including mounted paths."
+      d: "`defaultMode` controls file permission bits (e.g., 0644 vs 0400) but does not make files writable. ConfigMap-backed files cannot be written regardless of mode bits."
+    docRef: "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which of the following statements about Secret volume mounts are true? (select all that apply)"
+    options:
+      - id: a
+        text: "Each key in the Secret becomes a separate file at the mount path"
+      - id: b
+        text: "The default file permission mode for Secret volume files is 0644"
+      - id: c
+        text: "The `defaultMode` field on the volume spec can change the permission bits for all mounted files"
+      - id: d
+        text: "When the Secret is updated, the mounted files are eventually updated by the kubelet (within the sync period)"
+      - id: e
+        text: "Secret files are AES-encrypted on disk inside the container"
+    correctAnswers: [a, b, c, d]
+    explanation: "All four statements are true: each key becomes a file (a), the default mode is 0644 (b), `defaultMode` can change permissions (c), and files do update automatically when the Secret changes (d), within the kubelet sync period."
+    wrongExplanations:
+      e: "Secret files are NOT AES-encrypted inside the container. The kubelet decodes the base64 values and writes them as plain-text files. Encryption at rest (in etcd) requires EncryptionConfiguration and does not persist into the container filesystem."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod"

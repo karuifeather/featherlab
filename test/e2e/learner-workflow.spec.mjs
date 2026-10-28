@@ -66,7 +66,7 @@ test("launcher offers the Kubernetes track, in curriculum order across three lev
   await expect(page.locator(".level-label")).toHaveText(["Level 0", "Level 1", "Level 2"]);
   await levelHeaders.nth(1).click(); // expand Level 1
   await levelHeaders.nth(2).click(); // expand Level 2
-  await expect(lessons()).toHaveCount(34);
+  await expect(lessons()).toHaveCount(53);
   // Backend order, not id order: k8s-0011..k8s-0014 come before k8s-0002.
   await expect(lessons().nth(0)).toContainText("Your first Pod");
   await expect(lessons().nth(1)).toContainText("Inspect a Pod");
@@ -74,7 +74,7 @@ test("launcher offers the Kubernetes track, in curriculum order across three lev
   await expect(lessons().nth(9)).toContainText("Foundations Challenge");
   await expect(lessons().nth(10)).toContainText("Meet the ReplicaSet");
   await expect(lessons().nth(17)).toContainText("RollingUpdate vs Recreate");
-  await expect(lessons().nth(33)).toContainText("Workload Recovery Mastery");
+  await expect(lessons().nth(52)).toContainText("Workload Recovery Mastery");
 });
 
 test("locked exercises explain which prerequisite unlocks them", async () => {

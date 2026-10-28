@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0035
+type: task
+title: Inject a Setting With env.value
+summary: A Deployment is missing a required environment variable. Set it directly on the container spec.
+track: kubernetes
+level: 2
+order: 1
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [deployments, environment-variables, kubectl, configmaps]
+prerequisites: [k8s-0034]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0035`"
+  - "Deployment `app` rolls out with 1 available replica"
+  - "Container `app` has environment variable `APP_ENV` set to `production`"
+
+hints:
+  - "**`kubectl set env deployment/app APP_ENV=production -n fl-k8s-0035`** adds an env var in one command."
+  - "You can also edit the Deployment directly: **`kubectl edit deployment app -n fl-k8s-0035`**. Find `spec.template.spec.containers[0]` and add an `env:` block."
+  - "After the change, follow the rollout: **`kubectl rollout status deployment/app -n fl-k8s-0035`**."
+
+lifecycle:
+  namespaces: [fl-k8s-0035]
+  setup:
+    manifests: [setup/app.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 available replica
+    params: { name: app, namespace: fl-k8s-0035, replicas: 1 }
+  - id: env-value
+    type: k8s.container-env
+    label: Container app sets APP_ENV=production
+    weight: 2
+    params:
+      kind: Deployment
+      name: app
+      namespace: fl-k8s-0035
+      container: app
+      env: APP_ENV
+      value: "production"

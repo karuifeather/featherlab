@@ -1,0 +1,20 @@
+# Deployment with no probes — the learner will add a readiness probe with specific timing settings.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slow-start
+  namespace: fl-k8s-0052
+  labels: { app: slow-start }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: slow-start }
+  template:
+    metadata:
+      labels: { app: slow-start }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: app
+          image: nginx:1.27
+          ports: [{ containerPort: 80 }]

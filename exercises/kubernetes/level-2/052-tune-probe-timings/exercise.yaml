@@ -1,0 +1,57 @@
+schemaVersion: 1
+id: k8s-0052
+type: task
+title: Tune Probe Timings
+summary: Add a readiness probe with explicit timing settings so a slow-starting container is not kicked before it is ready.
+track: kubernetes
+level: 2
+order: 18
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [probes, readiness, timings, deployments, health-checks]
+prerequisites: [k8s-0051]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0052`"
+  - "The `app` container of Deployment `slow-start` has an HTTP readiness probe on path `/` and port `80`"
+  - "The probe uses `initialDelaySeconds: 5`, `periodSeconds: 15`, and `failureThreshold: 6`"
+  - "Deployment `slow-start` finishes rolling out with 1 available replica"
+
+hints:
+  - "Add a `readinessProbe` to the `app` container spec. The handler is `httpGet` with `path: /` and `port: 80`."
+  - "Set `initialDelaySeconds: 5` to give nginx 5 seconds to start before the first check."
+  - "`periodSeconds: 15` means Kubernetes checks every 15 seconds. `failureThreshold: 6` means six consecutive failures are required before the Pod is removed from endpoints."
+
+lifecycle:
+  namespaces: [fl-k8s-0052]
+  setup:
+    manifests: [setup/slow-start.yaml]
+
+checks:
+  - id: probe
+    type: k8s.container-probe
+    label: Container app has an httpGet readiness probe on / port 80 with required timing
+    params:
+      kind: Deployment
+      name: slow-start
+      namespace: fl-k8s-0052
+      container: app
+      probe: readiness
+      handler: httpGet
+      path: /
+      port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 15
+      failureThreshold: 6
+  - id: rollout
+    type: k8s.rollout-complete
+    label: slow-start rolled out with 1 available replica
+    weight: 2
+    params: { name: slow-start, namespace: fl-k8s-0052, replicas: 1 }

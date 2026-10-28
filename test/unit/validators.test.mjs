@@ -17,6 +17,77 @@ async function grade(cluster, type, params) {
 
 const pod = { kind: "Pod", name: "web", namespace: "fl-k8s-0001" };
 
+const configMap = {
+  apiVersion: "v1",
+  kind: "ConfigMap",
+  metadata: { name: "app-config", namespace: "fl-k8s-0001" },
+  data: { ENV: "production", LOG_LEVEL: "info" },
+};
+
+const secret = {
+  apiVersion: "v1",
+  kind: "Secret",
+  metadata: { name: "app-secret", namespace: "fl-k8s-0001" },
+  type: "Opaque",
+  data: { username: "dXNlcg==", password: "cGFzc3dvcmQ=" },
+};
+
+function podWithContainer(overrides = {}) {
+  return {
+    apiVersion: "v1",
+    kind: "Pod",
+    metadata: { name: "web", namespace: "fl-k8s-0001" },
+    spec: { containers: [{ name: "c", image: "nginx:1.27", ...overrides }] },
+    status: { phase: "Running", conditions: [{ type: "Ready", status: "True" }] },
+  };
+}
+
+const podWithSecretEnv = podWithContainer({
+  env: [{ name: "DB_PASS", valueFrom: { secretKeyRef: { name: "app-secret", key: "password" } } }],
+});
+
+const podWithEnvFrom = podWithContainer({
+  envFrom: [{ configMapRef: { name: "app-config" } }, { secretRef: { name: "app-secret" } }],
+});
+
+const podWithSecretMount = {
+  apiVersion: "v1",
+  kind: "Pod",
+  metadata: { name: "web", namespace: "fl-k8s-0001" },
+  spec: {
+    containers: [
+      {
+        name: "c",
+        image: "nginx:1.27",
+        volumeMounts: [{ name: "secret-vol", mountPath: "/etc/secrets" }],
+      },
+    ],
+    volumes: [{ name: "secret-vol", secret: { secretName: "app-secret" } }],
+  },
+  status: { phase: "Running", conditions: [{ type: "Ready", status: "True" }] },
+};
+
+const podWithSecCtx = podWithContainer({
+  securityContext: {
+    allowPrivilegeEscalation: false,
+    readOnlyRootFilesystem: true,
+    runAsNonRoot: true,
+    runAsUser: 1000,
+    capabilities: { drop: ["ALL"] },
+  },
+});
+
+const podWithPodLevelSecCtx = {
+  apiVersion: "v1",
+  kind: "Pod",
+  metadata: { name: "web", namespace: "fl-k8s-0001" },
+  spec: {
+    securityContext: { runAsNonRoot: true, runAsUser: 1000 },
+    containers: [{ name: "c", image: "nginx:1.27" }],
+  },
+  status: { phase: "Running", conditions: [{ type: "Ready", status: "True" }] },
+};
+
 const cases = [
   ["resource-exists passes", [readyPod()], "k8s.resource-exists", pod, true],
   ["resource-exists fails when missing", [], "k8s.resource-exists", pod, false],
@@ -139,6 +210,158 @@ const cases = [
     "k8s.annotations",
     { kind: "Deployment", name: "api", namespace: "fl-k8s-0002", annotations: { owner: "me" } },
     false,
+  ],
+  // configmap-data
+  [
+    "configmap-data passes",
+    [configMap],
+    "k8s.configmap-data",
+    { name: "app-config", namespace: "fl-k8s-0001", data: { ENV: "production" } },
+    true,
+  ],
+  [
+    "configmap-data fails on wrong value",
+    [configMap],
+    "k8s.configmap-data",
+    { name: "app-config", namespace: "fl-k8s-0001", data: { ENV: "staging" } },
+    false,
+  ],
+  // secret-type
+  [
+    "secret-type passes",
+    [secret],
+    "k8s.secret-type",
+    { name: "app-secret", namespace: "fl-k8s-0001", secretType: "Opaque" },
+    true,
+  ],
+  [
+    "secret-type fails on wrong type",
+    [secret],
+    "k8s.secret-type",
+    { name: "app-secret", namespace: "fl-k8s-0001", secretType: "kubernetes.io/tls" },
+    false,
+  ],
+  // secret-keys
+  [
+    "secret-keys passes",
+    [secret],
+    "k8s.secret-keys",
+    { name: "app-secret", namespace: "fl-k8s-0001", keys: ["username", "password"] },
+    true,
+  ],
+  [
+    "secret-keys fails when key missing",
+    [secret],
+    "k8s.secret-keys",
+    { name: "app-secret", namespace: "fl-k8s-0001", keys: ["username", "token"] },
+    false,
+  ],
+  // container-env with secretKeyRef
+  [
+    "container-env passes with secretKeyRef",
+    [podWithSecretEnv],
+    "k8s.container-env",
+    {
+      ...pod,
+      container: "c",
+      env: "DB_PASS",
+      secretKeyRef: { name: "app-secret", key: "password" },
+    },
+    true,
+  ],
+  [
+    "container-env fails with wrong secretKeyRef key",
+    [podWithSecretEnv],
+    "k8s.container-env",
+    { ...pod, container: "c", env: "DB_PASS", secretKeyRef: { name: "app-secret", key: "wrong" } },
+    false,
+  ],
+  // container-env-from
+  [
+    "container-env-from passes with configMapRef",
+    [podWithEnvFrom],
+    "k8s.container-env-from",
+    { ...pod, container: "c", configMapRef: "app-config" },
+    true,
+  ],
+  [
+    "container-env-from passes with secretRef",
+    [podWithEnvFrom],
+    "k8s.container-env-from",
+    { ...pod, container: "c", secretRef: "app-secret" },
+    true,
+  ],
+  [
+    "container-env-from fails when not set",
+    [readyPod()],
+    "k8s.container-env-from",
+    { ...pod, container: "c", configMapRef: "app-config" },
+    false,
+  ],
+  // secret-mounted
+  [
+    "secret-mounted passes",
+    [podWithSecretMount],
+    "k8s.secret-mounted",
+    { ...pod, container: "c", secret: "app-secret" },
+    true,
+  ],
+  [
+    "secret-mounted fails when not mounted",
+    [readyPod()],
+    "k8s.secret-mounted",
+    { ...pod, container: "c", secret: "app-secret" },
+    false,
+  ],
+  // container-security-context
+  [
+    "container-security-context passes boolean fields",
+    [podWithSecCtx],
+    "k8s.container-security-context",
+    { ...pod, container: "c", allowPrivilegeEscalation: false, readOnlyRootFilesystem: true },
+    true,
+  ],
+  [
+    "container-security-context fails when field not set",
+    [readyPod()],
+    "k8s.container-security-context",
+    { ...pod, container: "c", allowPrivilegeEscalation: false },
+    false,
+  ],
+  [
+    "container-security-context passes capDrop",
+    [podWithSecCtx],
+    "k8s.container-security-context",
+    { ...pod, container: "c", capDrop: ["ALL"] },
+    true,
+  ],
+  [
+    "container-security-context fails missing capDrop",
+    [readyPod()],
+    "k8s.container-security-context",
+    { ...pod, container: "c", capDrop: ["ALL"] },
+    false,
+  ],
+  [
+    "container-security-context passes runAsUser",
+    [podWithSecCtx],
+    "k8s.container-security-context",
+    { ...pod, container: "c", runAsUser: 1000 },
+    true,
+  ],
+  [
+    "container-security-context passes pod-level runAsNonRoot",
+    [podWithPodLevelSecCtx],
+    "k8s.container-security-context",
+    { ...pod, container: "c", runAsNonRoot: true },
+    true,
+  ],
+  [
+    "container-security-context passes pod-level runAsUser",
+    [podWithPodLevelSecCtx],
+    "k8s.container-security-context",
+    { ...pod, container: "c", runAsUser: 1000 },
+    true,
   ],
 ];
 

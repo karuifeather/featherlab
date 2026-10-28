@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0051
+type: task
+title: Add a Liveness Probe
+summary: The api Deployment already checks readiness, but nothing restarts it if it locks up. Add a liveness probe.
+track: kubernetes
+level: 2
+order: 17
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [probes, liveness, deployments, health-checks]
+prerequisites: [k8s-0050]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0051`"
+  - "The `api` container of Deployment `api` has a TCP liveness probe on port `80`"
+  - "Deployment `api` finishes rolling out with 1 available replica"
+
+hints:
+  - "Add a `livenessProbe` field alongside the existing `readinessProbe` in the `api` container spec."
+  - "A TCP probe only needs `tcpSocket.port` — no path required."
+  - "`kubectl edit deployment api -n fl-k8s-0051` lets you add the probe in your editor. The `livenessProbe` key goes at the same indentation level as `readinessProbe`."
+
+lifecycle:
+  namespaces: [fl-k8s-0051]
+  setup:
+    manifests: [setup/api.yaml]
+
+checks:
+  - id: probe
+    type: k8s.container-probe
+    label: Container api has a tcpSocket liveness probe on port 80
+    params:
+      kind: Deployment
+      name: api
+      namespace: fl-k8s-0051
+      container: api
+      probe: liveness
+      handler: tcpSocket
+      port: 80
+  - id: rollout
+    type: k8s.rollout-complete
+    label: api rolled out with 1 available replica
+    weight: 2
+    params: { name: api, namespace: fl-k8s-0051, replicas: 1 }

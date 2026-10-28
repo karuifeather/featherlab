@@ -5,11 +5,11 @@ title: Why Isn't It Ready?
 summary: The Pods are Running, yet the Service has nothing to route to. Find and fix the readiness problem.
 track: kubernetes
 level: 2
-order: 2
+order: 21
 difficulty: intermediate
 estimatedMinutes: 12
 tags: [troubleshooting, probes, deployments, services, events]
-prerequisites: [k8s-0004]
+prerequisites: [k8s-0004, k8s-0051]
 
 environment:
   profile: kind-default

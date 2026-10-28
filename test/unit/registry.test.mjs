@@ -65,11 +65,34 @@ test("the prerequisite graph is the designed curriculum, not one linear chain", 
     // Pre-existing Level 1 labs still gated only behind the challenge.
     "k8s-0003": ["k8s-0018"],
     "k8s-0006": ["k8s-0018"],
-    // Level 2: the M5.1 recovery labs.
+    // Level 2: M5.4 Circuit A — ConfigMaps.
+    "k8s-0035": ["k8s-0034"],
+    "k8s-0036": ["k8s-0035"],
+    "k8s-0037": ["k8s-0036"],
+    "k8s-0038": ["k8s-0037"],
+    "k8s-0039": ["k8s-0038"],
+    "k8s-0040": ["k8s-0039"],
+    // Level 2: M5.4 Circuit B — Secrets.
+    "k8s-0041": ["k8s-0040"],
+    "k8s-0042": ["k8s-0041"],
+    "k8s-0043": ["k8s-0042"],
+    "k8s-0044": ["k8s-0043"],
+    "k8s-0045": ["k8s-0044"],
+    // Level 2: M5.4 Circuit C — Multi-container & Security.
+    "k8s-0046": ["k8s-0045"],
+    "k8s-0047": ["k8s-0046"],
+    "k8s-0048": ["k8s-0047"],
+    "k8s-0049": ["k8s-0048"],
+    // Level 2: M5.4 Circuit D — Health Probes.
+    "k8s-0050": ["k8s-0049"],
+    "k8s-0051": ["k8s-0050"],
+    "k8s-0052": ["k8s-0051"],
+    "k8s-0053": ["k8s-0052"],
+    // Pre-existing Level 2 recovery labs (now after M5.4 content).
     "k8s-0004": ["k8s-0018"],
-    "k8s-0005": ["k8s-0004"],
+    "k8s-0005": ["k8s-0004", "k8s-0051"],
     "k8s-0007": ["k8s-0003"],
-    "k8s-0008": ["k8s-0004"],
+    "k8s-0008": ["k8s-0004", "k8s-0039"],
     "k8s-0009": ["k8s-0005", "k8s-0008"],
     "k8s-0010": ["k8s-0003", "k8s-0006", "k8s-0007", "k8s-0009"],
   });

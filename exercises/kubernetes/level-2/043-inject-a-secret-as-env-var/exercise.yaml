@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0043
+type: task
+title: Inject a Secret as an Env Var
+summary: Wire two Secret keys to container environment variables using secretKeyRef; understand how secretKeyRef differs from configMapKeyRef.
+track: kubernetes
+level: 2
+order: 9
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [secrets, env-vars, secret-key-ref, tls, kubectl]
+prerequisites: [k8s-0042]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0043`"
+  - "Deployment `web` is fully rolled out with 1 replica"
+  - "Container `web` reads env var `TLS_CERT` from Secret `tls-credentials`, key `cert-file`"
+  - "Container `web` reads env var `TLS_KEY` from Secret `tls-credentials`, key `key-file`"
+
+hints:
+  - "Check what keys are in the Secret: `kubectl get secret tls-credentials -n fl-k8s-0043 -o jsonpath='{.data}' | tr ',' '\n'`"
+  - "Edit the Deployment: `kubectl edit deployment web -n fl-k8s-0043`. Add two `env` entries in the container spec, each with `valueFrom.secretKeyRef`."
+  - "Each entry follows the same pattern: `name: <ENV_VAR>`, `valueFrom.secretKeyRef.name: tls-credentials`, `valueFrom.secretKeyRef.key: <key-name>`"
+
+lifecycle:
+  namespaces: [fl-k8s-0043]
+  setup:
+    manifests: [setup/tls-credentials.yaml, setup/web.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment web rolled out with 1 replica
+    params: { name: web, namespace: fl-k8s-0043, replicas: 1 }
+  - id: env-tls-cert
+    type: k8s.container-env
+    label: Container web reads TLS_CERT from Secret tls-credentials
+    params:
+      {
+        kind: Deployment,
+        name: web,
+        namespace: fl-k8s-0043,
+        container: web,
+        env: TLS_CERT,
+        secretKeyRef: { name: tls-credentials, key: cert-file },
+      }
+  - id: env-tls-key
+    type: k8s.container-env
+    label: Container web reads TLS_KEY from Secret tls-credentials
+    params:
+      {
+        kind: Deployment,
+        name: web,
+        namespace: fl-k8s-0043,
+        container: web,
+        env: TLS_KEY,
+        secretKeyRef: { name: tls-credentials, key: key-file },
+      }

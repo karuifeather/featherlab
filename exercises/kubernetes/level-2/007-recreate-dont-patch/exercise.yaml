@@ -5,7 +5,7 @@ title: Recreate, Don't Patch
 summary: A running Pod needs a configuration change Kubernetes will not apply in place. Replace it safely.
 track: kubernetes
 level: 2
-order: 3
+order: 22
 difficulty: intermediate
 estimatedMinutes: 12
 tags: [pods, immutability, labels, services, kubectl]

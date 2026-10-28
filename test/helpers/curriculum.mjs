@@ -43,7 +43,38 @@ export const CURRICULUM = Object.freeze({
     "k8s-0003", // Namespace Matters
     "k8s-0006", // Resource Boundaries
   ],
-  2: ["k8s-0004", "k8s-0005", "k8s-0007", "k8s-0008", "k8s-0009", "k8s-0010"],
+  2: [
+    // Circuit A — ConfigMaps
+    "k8s-0035", // Inject a Setting With env.value
+    "k8s-0036", // Create and Read a ConfigMap
+    "k8s-0037", // Config as Environment Variables
+    "k8s-0038", // Load All Keys With envFrom
+    "k8s-0039", // Mount a ConfigMap as a Volume
+    "k8s-0040", // Update a Live ConfigMap
+    // Circuit B — Secrets
+    "k8s-0041", // Create a Secret
+    "k8s-0042", // Read a Secret Value
+    "k8s-0043", // Inject a Secret as an Env Var
+    "k8s-0044", // Mount a Secret as a Volume
+    "k8s-0045", // Image-Pull Secret Reference
+    // Circuit C — Multi-container Patterns & Security
+    "k8s-0046", // Spot the Sidecar
+    "k8s-0047", // Add a Sidecar Container
+    "k8s-0048", // Drop Privilege Escalation
+    "k8s-0049", // Read-Only Root Filesystem
+    // Circuit D — Health Probes
+    "k8s-0050", // Add a Readiness Probe
+    "k8s-0051", // Add a Liveness Probe
+    "k8s-0052", // Tune Probe Timings
+    "k8s-0053", // Fix a Broken Probe
+    // Pre-existing Level 2 labs (workload debugging, now after M5.4 content)
+    "k8s-0004", // Wrong Image
+    "k8s-0005", // Why Not Ready?
+    "k8s-0007", // Recreate, Don't Patch
+    "k8s-0008", // Crashing Container
+    "k8s-0009", // Two Broken Workloads
+    "k8s-0010", // Workload Recovery Mastery
+  ],
 });
 
 export const CURRICULUM_ORDER = Object.freeze(Object.values(CURRICULUM).flat());

@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0049
+type: task
+title: Read-Only Root Filesystem
+summary: Harden a container by preventing any process inside it from writing to the root filesystem.
+track: kubernetes
+level: 2
+order: 15
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [security, security-context, deployments, kubectl]
+prerequisites: [k8s-0048]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0049`"
+  - "Deployment `hardened` rolls out with 1 available replica"
+  - "Container `app` has `readOnlyRootFilesystem: true` in its securityContext"
+
+hints:
+  - "`kubectl edit deployment hardened -n fl-k8s-0049`"
+  - "Add a `securityContext` block under the `app` container with `readOnlyRootFilesystem: true`"
+  - '`kubectl patch deployment hardened -n fl-k8s-0049 --type=merge -p ''{"spec":{"template":{"spec":{"containers":[{"name":"app","securityContext":{"readOnlyRootFilesystem":true}}]}}}}''`'
+
+lifecycle:
+  namespaces: [fl-k8s-0049]
+  setup:
+    manifests: [setup/hardened.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment hardened rolled out with 1 available replica
+    params: { name: hardened, namespace: fl-k8s-0049, replicas: 1 }
+  - id: security-context
+    type: k8s.container-security-context
+    label: Container app has readOnlyRootFilesystem enabled
+    params:
+      {
+        kind: Deployment,
+        name: hardened,
+        namespace: fl-k8s-0049,
+        container: app,
+        readOnlyRootFilesystem: true,
+      }

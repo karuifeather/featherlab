@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0053
+type: task
+title: Fix a Broken Probe
+summary: A Deployment never becomes ready because its readiness probe targets the wrong port. Diagnose and fix it.
+track: kubernetes
+level: 2
+order: 19
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [troubleshooting, probes, readiness, deployments, health-checks]
+prerequisites: [k8s-0052]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0053`"
+  - "The `api` container of Deployment `api` has an HTTP readiness probe on port `80`"
+  - "Deployment `api` finishes rolling out with 1 available replica"
+
+hints:
+  - "`kubectl describe deployment api -n fl-k8s-0053` shows the probe configuration under the container spec. Check the port."
+  - "`kubectl get pods -n fl-k8s-0053` shows the Pod is `Running` but `0/1` READY — the readiness probe is failing."
+  - "`kubectl describe pod <pod-name> -n fl-k8s-0053` shows probe failure events at the bottom. The message tells you what the probe tried to contact."
+
+lifecycle:
+  namespaces: [fl-k8s-0053]
+  setup:
+    manifests: [setup/api.yaml]
+
+checks:
+  - id: probe
+    type: k8s.container-probe
+    label: Container api has an httpGet readiness probe on port 80
+    params:
+      kind: Deployment
+      name: api
+      namespace: fl-k8s-0053
+      container: api
+      probe: readiness
+      handler: httpGet
+      port: 80
+  - id: rollout
+    type: k8s.rollout-complete
+    label: api rolled out with 1 available replica
+    weight: 2
+    params: { name: api, namespace: fl-k8s-0053, replicas: 1 }

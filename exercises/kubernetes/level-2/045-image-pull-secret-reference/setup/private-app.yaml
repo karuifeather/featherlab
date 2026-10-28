@@ -1,0 +1,22 @@
+# The Deployment uses a public image so the rollout succeeds regardless of pull credentials.
+# The exercise verifies that the registry-creds Secret is created and referenced correctly.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: private-app
+  namespace: fl-k8s-0045
+  labels: { app: private-app }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: private-app }
+  template:
+    metadata:
+      labels: { app: private-app }
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: private-app
+          image: nginx:1.27
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 80 }]

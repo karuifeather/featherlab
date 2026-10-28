@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l2-006
+activityType: knowledge-check
+title: Health Probes
+summary: Test your understanding of readiness, liveness, and startup probes — what they do, what happens when they fail, and how to configure them.
+track: kubernetes
+level: 2
+order: 52.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [probes, health-checks, readiness, liveness, startup, http-get]
+relatedLabs: [k8s-0050, k8s-0051, k8s-0052, k8s-0053]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the primary difference between a readiness probe and a liveness probe?"
+    options:
+      - id: a
+        text: "A failing liveness probe removes the Pod from Service endpoints; a failing readiness probe restarts the container"
+      - id: b
+        text: "A failing readiness probe removes the Pod from Service endpoints (no traffic); a failing liveness probe restarts the container"
+      - id: c
+        text: "Liveness probes control traffic routing; readiness probes monitor memory usage"
+      - id: d
+        text: "They are identical — both restart the container when they fail"
+    correctAnswer: b
+    explanation: "Readiness and liveness probes have distinct actions on failure. A failing readiness probe marks the Pod as not-ready, removing it from Service endpoint lists so it receives no traffic. A failing liveness probe tells Kubernetes the container is stuck and needs to be restarted. The Pod remains scheduled on its node in both cases."
+    wrongExplanations:
+      a: "This reverses the correct behavior. Readiness → traffic routing (not restart); Liveness → container restart (not traffic routing)."
+      c: "Liveness probes do not control traffic routing — that is readiness probes. Neither probe directly monitors memory; that is the job of resource limits and the kubelet's eviction manager."
+      d: "Only liveness probes trigger container restarts. A failing readiness probe only affects Service endpoint membership."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"
+
+  - id: q2
+    type: single-choice
+    prompt: "A Pod's readiness probe is failing but its liveness probe is passing. What does Kubernetes do?"
+    options:
+      - id: a
+        text: "Restarts the container because one of its probes is failing"
+      - id: b
+        text: "Marks the Pod as NotReady and removes it from Service endpoints, but does NOT restart the container"
+      - id: c
+        text: "Evicts the Pod from its node and reschedules it elsewhere"
+      - id: d
+        text: "Scales down the Deployment by one replica to compensate"
+    correctAnswer: b
+    explanation: "When only the readiness probe fails (and liveness passes), Kubernetes marks the Pod as NotReady. The Pod is removed from Service endpoints and stops receiving traffic. The container keeps running. This allows a temporarily overloaded or initializing application to shed traffic without being restarted."
+    wrongExplanations:
+      a: "Only a failing liveness probe triggers a container restart. A failing readiness probe only affects Service endpoint membership."
+      c: "Pod eviction is triggered by resource pressure (e.g., memory limits exceeded) or node conditions, not by probe failures."
+      d: "Deployment scaling is controlled by HorizontalPodAutoscaler or explicit kubectl scale commands. Probe failures do not trigger scaling."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes"
+
+  - id: q3
+    type: single-choice
+    prompt: "What does `initialDelaySeconds` on a readiness probe configure?"
+    options:
+      - id: a
+        text: "The interval in seconds between each probe execution"
+      - id: b
+        text: "The maximum time in seconds the probe is allowed to run before it is considered failed"
+      - id: c
+        text: "How long Kubernetes waits after the container starts before running the first probe"
+      - id: d
+        text: "The number of consecutive successes required before the probe is considered passing"
+    correctAnswer: c
+    explanation: "`initialDelaySeconds` sets a grace period between when the container starts and when the first probe check fires. This is important for applications that need time to initialize before they can respond to health check requests. Without it, the probe might fail during startup before the app is ready."
+    wrongExplanations:
+      a: "The interval between probes is controlled by `periodSeconds`, not `initialDelaySeconds`."
+      b: "The per-probe timeout is controlled by `timeoutSeconds`, not `initialDelaySeconds`."
+      d: "The consecutive success threshold before marking a probe as passing is controlled by `successThreshold`, not `initialDelaySeconds`."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#configure-probes"
+
+  - id: q4
+    type: single-choice
+    prompt: "You add a `readinessProbe.httpGet { path: /healthz, port: 8080 }` to your Deployment but the Pods consistently show `0/1 Ready`. What is the most likely cause?"
+    options:
+      - id: a
+        text: "You also need to define a liveness probe; a readiness probe alone is not sufficient"
+      - id: b
+        text: "The application is not listening on port 8080, or is returning a non-2xx HTTP status at /healthz"
+      - id: c
+        text: "The `initialDelaySeconds` value is too low and needs to be increased"
+      - id: d
+        text: "A NetworkPolicy is blocking the kubelet's probe traffic to port 8080"
+    correctAnswer: b
+    explanation: "An HTTP readiness probe sends a GET request to the specified path and port. If the application is not listening on that port, or the endpoint returns a status code outside 200-399, the probe fails. `0/1 Ready` means the probe is consistently failing. The first thing to check is whether the application is actually serving on port 8080 at the path /healthz."
+    wrongExplanations:
+      a: "Readiness probes work independently of liveness probes. You do not need both."
+      c: "While a too-low `initialDelaySeconds` can cause early failures, a consistent `0/1 Ready` even after the app starts suggests the endpoint is unreachable or returning errors, not just a startup timing issue."
+      d: "NetworkPolicy applies to Pod-to-Pod traffic, not to kubelet probe traffic. The kubelet runs on the node and probes containers directly, bypassing NetworkPolicy."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes"
+
+  - id: q5
+    type: single-choice
+    prompt: "When would you use a startup probe instead of (or in addition to) a liveness probe?"
+    options:
+      - id: a
+        text: "For all applications, because startup probes are the modern replacement for liveness probes"
+      - id: b
+        text: "When an application takes a long time to initialize — the startup probe pauses liveness checks during startup, preventing premature restarts"
+      - id: c
+        text: "Only for stateless applications that can be safely restarted at any time"
+      - id: d
+        text: "When you want to replace both readiness and liveness probes with a single probe"
+    correctAnswer: b
+    explanation: "A startup probe is used alongside a liveness probe for applications with slow startup times. While the startup probe is active, liveness and readiness probes are paused. Once the startup probe succeeds, normal liveness and readiness probes take over. This prevents the liveness probe from restarting a container that is still initializing."
+    wrongExplanations:
+      a: "Startup probes are not a replacement for liveness probes. They serve a complementary role during the initialization phase only."
+      c: "Startup probes are most valuable for applications with slow or variable startup times, including stateful applications like databases. Statelessness is irrelevant to the choice."
+      d: "Startup probes do not replace readiness or liveness probes. They work alongside them. Once the startup probe passes, liveness and readiness probes both become active."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes"

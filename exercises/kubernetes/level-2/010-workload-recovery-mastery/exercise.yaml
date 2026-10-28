@@ -5,7 +5,7 @@ title: Workload Recovery Mastery
 summary: Launch day for the inventory service. Repair, scale, build and retire workloads across two namespaces.
 track: kubernetes
 level: 2
-order: 6
+order: 25
 difficulty: advanced
 estimatedMinutes: 30
 tags: [mastery, troubleshooting, deployments, probes, resources, namespaces, services]

@@ -1,0 +1,50 @@
+schemaVersion: 1
+id: k8s-0046
+type: task
+title: Spot the Sidecar
+summary: A Deployment is running two containers. Identify the sidecar and label the Pod template to prove you found it.
+track: kubernetes
+level: 2
+order: 12
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [multi-container, sidecars, pods, kubectl]
+prerequisites: [k8s-0045]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0046`"
+  - "Deployment `app` rolls out with 1 available replica"
+  - "Pod template has label `sidecar-identified=true`"
+
+hints:
+  - "`kubectl get deployment app -n fl-k8s-0046 -o jsonpath='{.spec.template.spec.containers[*].name}'`"
+  - "`kubectl logs deployment/app -n fl-k8s-0046 -c log-agent`"
+  - '`kubectl patch deployment app -n fl-k8s-0046 --type=merge -p ''{"spec":{"template":{"metadata":{"labels":{"sidecar-identified":"true"}}}}}''`'
+
+lifecycle:
+  namespaces: [fl-k8s-0046]
+  setup:
+    manifests: [setup/app.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 available replica
+    params: { name: app, namespace: fl-k8s-0046, replicas: 1 }
+  - id: sidecar-label
+    type: k8s.pod-template-labels
+    label: Pod template has label sidecar-identified=true
+    params:
+      {
+        kind: Deployment,
+        name: app,
+        namespace: fl-k8s-0046,
+        labels: { sidecar-identified: "true" },
+      }

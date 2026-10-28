@@ -1,0 +1,47 @@
+schemaVersion: 1
+id: k8s-0036
+type: task
+title: Create and Read a ConfigMap
+summary: Create a ConfigMap from literals and inspect its contents.
+track: kubernetes
+level: 2
+order: 2
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [configmaps, kubectl, configuration]
+prerequisites: [k8s-0035]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0036`"
+  - "ConfigMap `app-config` exists in `fl-k8s-0036`"
+  - "`app-config` contains key `APP_ENV` with value `production`"
+  - "`app-config` contains key `LOG_LEVEL` with value `info`"
+
+hints:
+  - "**`kubectl create configmap app-config --from-literal=APP_ENV=production --from-literal=LOG_LEVEL=info -n fl-k8s-0036`** creates the ConfigMap in one command."
+  - "Inspect it with **`kubectl get configmap app-config -n fl-k8s-0036 -o yaml`** to see all keys and values."
+  - "**`kubectl describe configmap app-config -n fl-k8s-0036`** is another way to read ConfigMap data."
+
+lifecycle:
+  namespaces: [fl-k8s-0036]
+
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: ConfigMap app-config exists
+    params: { kind: ConfigMap, name: app-config, namespace: fl-k8s-0036 }
+  - id: data
+    type: k8s.configmap-data
+    label: app-config has APP_ENV=production and LOG_LEVEL=info
+    weight: 2
+    params:
+      name: app-config
+      namespace: fl-k8s-0036
+      data: { APP_ENV: "production", LOG_LEVEL: "info" }

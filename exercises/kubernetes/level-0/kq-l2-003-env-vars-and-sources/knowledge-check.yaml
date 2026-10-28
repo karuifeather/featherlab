@@ -1,0 +1,136 @@
+schemaVersion: 1
+id: kq-k8s-l2-003
+activityType: knowledge-check
+title: Environment Variables and Config Sources
+summary: Test your understanding of env vs envFrom, override precedence, and when Pods see configuration changes.
+track: kubernetes
+level: 2
+order: 43.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [env-vars, configmaps, secrets, env-from, configuration]
+relatedLabs: [k8s-0037, k8s-0038, k8s-0043]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the key difference between `env[].valueFrom.configMapKeyRef` and `envFrom[].configMapRef`?"
+    options:
+      - id: a
+        text: "They are functionally identical — both import all keys from the ConfigMap"
+      - id: b
+        text: "`configMapKeyRef` injects one specific key as an env var; `configMapRef` injects ALL keys from the ConfigMap as env vars"
+      - id: c
+        text: "`envFrom.configMapRef` mounts the ConfigMap as a volume; `env.configMapKeyRef` injects it as an env var"
+      - id: d
+        text: "`configMapRef` is a newer replacement for `configMapKeyRef` and should always be preferred"
+    correctAnswer: b
+    explanation: "`env[].valueFrom.configMapKeyRef` maps exactly one key from a ConfigMap to one named env var. `envFrom[].configMapRef` imports every key in the ConfigMap as a separate env var, using each key as the env var name. Use `configMapKeyRef` when you need a specific key with a specific env var name; use `configMapRef` for bulk import."
+    wrongExplanations:
+      a: "`configMapKeyRef` selects a single key. `configMapRef` via `envFrom` imports all keys. They produce different results."
+      c: "`envFrom` and `env` both set environment variables. Neither mounts a volume. Volume mounts use `spec.volumes` and `spec.containers[].volumeMounts`."
+      d: "Neither is deprecated or preferred over the other — they serve different use cases. Use whichever matches your need."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#define-container-environment-variables-using-configmap-data"
+
+  - id: q2
+    type: single-choice
+    prompt: "A container spec has both `envFrom[].configMapRef` (which sets `LOG_LEVEL=info`) and an explicit `env[]` entry setting `LOG_LEVEL=debug`. Which value does the running container see?"
+    options:
+      - id: a
+        text: "`info` — values from `envFrom` take priority over explicit `env[]` entries"
+      - id: b
+        text: "`debug` — explicitly-set `env[]` entries override values imported via `envFrom` for the same key"
+      - id: c
+        text: "An error is thrown because the same key cannot be set by both `envFrom` and `env[]`"
+      - id: d
+        text: "The last definition wins, and the order is determined by the order in the spec"
+    correctAnswer: b
+    explanation: "When a key is defined in both `envFrom` and `env[]`, the explicit `env[]` entry takes precedence. This gives you a way to override specific values from a bulk-imported ConfigMap without replacing the whole ConfigMap reference."
+    wrongExplanations:
+      a: "`envFrom` values do NOT override explicit `env[]` entries. The explicit `env[]` values win."
+      c: "Kubernetes does not throw an error when the same env var name comes from both `envFrom` and `env[]`. The explicit `env[]` value silently wins."
+      d: "The override order is defined by Kubernetes spec behavior, not YAML order: explicit `env[]` always wins over `envFrom`."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables"
+
+  - id: q3
+    type: single-choice
+    prompt: "After you update a value in a ConfigMap that is mounted as a volume, when do the files inside the running container reflect the change?"
+    options:
+      - id: a
+        text: "Immediately, within seconds of the ConfigMap being updated"
+      - id: b
+        text: "Eventually, after the kubelet sync period (typically 1-2 minutes) — but the application must re-read the file to see the new content"
+      - id: c
+        text: "Never — volume-mounted ConfigMap files are set at Pod creation time and never updated"
+      - id: d
+        text: "Only after `kubectl rollout restart` is run on the Deployment"
+    correctAnswer: b
+    explanation: "Volume-mounted ConfigMap files ARE updated automatically by the kubelet, typically within one to two minutes (controlled by `configSyncPeriod`). However, the files being updated does not cause the application to re-read them — the application must have logic to detect and reload configuration changes."
+    wrongExplanations:
+      a: "The update is not instantaneous. The kubelet periodically syncs ConfigMap volumes, and propagation can take up to a couple of minutes."
+      c: "This is incorrect. Unlike environment variables (which are fixed at container start), volume-mounted ConfigMap files DO update automatically when the ConfigMap changes."
+      d: "Rolling restart is needed for env var changes (not volume-mounted files). Volume-mounted files update without a restart."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically"
+
+  - id: q4
+    type: single-choice
+    prompt: "Which env configuration correctly maps the key `api-key` from Secret `app-secret` to the environment variable `API_KEY`?"
+    options:
+      - id: a
+        text: |
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: api-key
+      - id: b
+        text: |
+          env:
+            - name: API_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: app-secret
+                  key: api-key
+      - id: c
+        text: |
+          envFrom:
+            - secretRef:
+                name: app-secret
+                key: api-key
+      - id: d
+        text: |
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretRef:
+                  name: app-secret
+                  key: api-key
+    correctAnswer: a
+    explanation: "To inject a single key from a Secret as an env var, use `env[].valueFrom.secretKeyRef` with `name` (Secret name) and `key` (the key within the Secret). The env var name is set by `env[].name`."
+    wrongExplanations:
+      b: "`configMapKeyRef` references a ConfigMap, not a Secret. Using it with a Secret name would either fail or reference the wrong resource type."
+      c: "`envFrom` does not support a `key` field — it always imports ALL keys from the source. For a single key, use `env[].valueFrom.secretKeyRef`."
+      d: "`secretRef` is used inside `envFrom[]`, not inside `env[].valueFrom`. Inside `env[].valueFrom`, the correct field name is `secretKeyRef`."
+    docRef: "https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables"
+
+  - id: q5
+    type: single-choice
+    prompt: "What does the `prefix` field in an `envFrom[]` entry do?"
+    options:
+      - id: a
+        text: "Restricts which keys from the ConfigMap or Secret are imported, acting as a filter"
+      - id: b
+        text: "Adds a string prefix to the names of all env vars imported from that source"
+      - id: c
+        text: "Sets the namespace where the referenced ConfigMap or Secret lives"
+      - id: d
+        text: "It is a required field — `envFrom` entries fail validation without it"
+    correctAnswer: b
+    explanation: "The `prefix` field in `envFrom[]` prepends a string to every env var name imported from that source. For example, with `prefix: MYAPP_`, a ConfigMap key `LOG_LEVEL` becomes `MYAPP_LOG_LEVEL` in the container. This is useful when combining multiple ConfigMaps to avoid key name collisions."
+    wrongExplanations:
+      a: "`prefix` does not filter keys. All keys from the source are imported. There is no built-in filtering mechanism in `envFrom`."
+      c: "The namespace of the referenced ConfigMap or Secret is always the same as the Pod's namespace. There is no cross-namespace reference option in `envFrom`."
+      d: "`prefix` is entirely optional. Most `envFrom` entries omit it."
+    docRef: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables"

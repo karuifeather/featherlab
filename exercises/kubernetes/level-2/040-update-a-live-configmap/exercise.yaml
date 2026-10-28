@@ -1,0 +1,59 @@
+schemaVersion: 1
+id: k8s-0040
+type: task
+title: Update a Live ConfigMap
+summary: Change a ConfigMap value and restart the Deployment so pods pick up the new configuration.
+track: kubernetes
+level: 2
+order: 6
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [configmaps, deployments, rollout, kubectl, configuration]
+prerequisites: [k8s-0039]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0040`"
+  - "ConfigMap `runtime-config` has `FEATURE_FLAG=enabled`"
+  - "Container `app` in Deployment `app` sees `FEATURE_FLAG=enabled` at runtime (restart the Deployment after editing the ConfigMap)"
+  - "Deployment `app` rolls out with 1 available replica"
+
+hints:
+  - "Edit the ConfigMap: **`kubectl edit configmap runtime-config -n fl-k8s-0040`** and change `FEATURE_FLAG` from `disabled` to `enabled`."
+  - "Pods that load env vars via `envFrom` do NOT reload automatically when the ConfigMap changes. Restart the Deployment: **`kubectl rollout restart deployment/app -n fl-k8s-0040`**."
+  - "Confirm both steps: **`kubectl get configmap runtime-config -n fl-k8s-0040 -o yaml`** for the data, and **`kubectl rollout status deployment/app -n fl-k8s-0040`** for the rollout."
+
+lifecycle:
+  namespaces: [fl-k8s-0040]
+  setup:
+    manifests: [setup/configmap.yaml, setup/deployment.yaml]
+
+checks:
+  - id: configmap-updated
+    type: k8s.configmap-data
+    label: ConfigMap runtime-config has FEATURE_FLAG=enabled
+    weight: 2
+    params:
+      name: runtime-config
+      namespace: fl-k8s-0040
+      data: { FEATURE_FLAG: "enabled" }
+  - id: runtime-env
+    type: k8s.container-runtime-env
+    label: Container app sees FEATURE_FLAG=enabled at runtime
+    weight: 2
+    params:
+      name: app
+      namespace: fl-k8s-0040
+      container: app
+      env: FEATURE_FLAG
+      value: "enabled"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 available replica
+    params: { name: app, namespace: fl-k8s-0040, replicas: 1 }

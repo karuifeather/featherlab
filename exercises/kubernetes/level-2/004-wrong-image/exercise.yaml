@@ -5,7 +5,7 @@ title: The Wrong Image
 summary: A release never came up. Diagnose the failing Pods and repair the Deployment.
 track: kubernetes
 level: 2
-order: 1
+order: 20
 difficulty: intermediate
 estimatedMinutes: 10
 tags: [troubleshooting, deployments, images, events, kubectl]
