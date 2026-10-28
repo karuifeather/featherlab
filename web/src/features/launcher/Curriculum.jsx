@@ -9,16 +9,26 @@ export function Curriculum({ exercises, currentId, onOpen }) {
   const titles = new Map(exercises.map((e) => [e.exerciseId, e.title]));
   const levels = [...Map.groupBy(exercises, (e) => e.level)].sort(([a], [b]) => a - b);
 
-  // Find which level contains the current exercise (for default expansion).
+  // Find which level contains the current exercise.
   const activeLevel =
     currentId != null
       ? (levels.find(([, items]) => items.some((e) => e.exerciseId === currentId))?.[0] ?? null)
       : null;
 
-  // Collapse every level except the active one; collapse nothing when there is no active level.
+  // Frontier: lowest level with at least one actionable (available) exercise.
+  // For first-timers this is Level 0; for returning learners it's their progress frontier.
+  const frontierLevel = (() => {
+    for (const [level, items] of levels) {
+      if (items.some((e) => e.state === "available")) return level;
+    }
+    return levels[levels.length - 1]?.[0] ?? null;
+  })();
+
+  // Collapse all levels except the default-open one.
+  const initialOpenLevel = activeLevel ?? frontierLevel ?? levels[0]?.[0] ?? null;
   const [collapsedLevels, setCollapsedLevels] = useState(() =>
-    activeLevel != null
-      ? new Set(levels.map(([l]) => l).filter((l) => l !== activeLevel))
+    initialOpenLevel != null
+      ? new Set(levels.map(([l]) => l).filter((l) => l !== initialOpenLevel))
       : new Set(),
   );
 

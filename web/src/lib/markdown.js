@@ -13,7 +13,16 @@ export function parseInline(text) {
   for (const match of text.matchAll(pattern)) {
     if (match.index > last) parts.push({ type: "text", text: text.slice(last, match.index) });
     if (match[1] !== undefined) {
-      parts.push({ type: "link", text: match[1], href: match[2] });
+      let href = null;
+      try {
+        const u = new URL(match[2]);
+        if (u.protocol === "https:" && !u.username && !u.password) href = match[2];
+      } catch {} // eslint-disable-line no-empty
+      if (href) {
+        parts.push({ type: "link", text: match[1], href });
+      } else {
+        parts.push({ type: "text", text: match[0] });
+      }
     } else if (match[3] !== undefined) {
       parts.push({ type: "code", text: match[3] });
     } else {
@@ -25,9 +34,49 @@ export function parseInline(text) {
   return parts;
 }
 
-/** Split a pipe table row into trimmed cell strings, stripping leading/trailing `|`. */
+/** True if line contains a pipe outside inline code spans. */
+function hasPipe(line) {
+  let inCode = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === "`") inCode = !inCode;
+    else if (!inCode && line[i] === "|") return true;
+  }
+  return false;
+}
+
+/** Split a pipe table row into trimmed cell strings. Handles escaped pipes (\|) and pipes
+ *  inside inline code spans. */
 function splitCells(row) {
-  return row
+  let start = 0;
+  let end = row.length;
+  if (row[0] === "|") start = 1;
+  if (row.length > 1 && row[end - 1] === "|" && row[end - 2] !== "\\") end -= 1;
+
+  const cells = [];
+  let current = "";
+  let inCode = false;
+  for (let i = start; i < end; i++) {
+    const ch = row[i];
+    if (ch === "`") {
+      inCode = !inCode;
+      current += ch;
+    } else if (!inCode && ch === "\\" && i + 1 < end && row[i + 1] === "|") {
+      current += "|";
+      i++;
+    } else if (!inCode && ch === "|") {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+/** Count cells in a separator row (| --- | --- |) for column-count validation. */
+function parseSeparatorCells(line) {
+  return line
     .replace(/^\||\|$/g, "")
     .split("|")
     .map((c) => c.trim());
@@ -63,18 +112,27 @@ export function parseMarkdown(source) {
       flush();
       const m = line.match(/^(#{1,3})\s+(.*)/);
       blocks.push({ type: "heading", level: m[1].length, inline: parseInline(m[2]) });
-      // Pipe table: header row followed by a separator row.
-    } else if (line.includes("|") && i + 1 < lines.length && isSeparator(lines[i + 1])) {
-      flush();
+      // Pipe table: header row followed by a separator row with matching column count.
+    } else if (hasPipe(line) && i + 1 < lines.length && isSeparator(lines[i + 1])) {
       const headers = splitCells(line).map(parseInline);
-      i += 2; // skip separator
-      const rows = [];
-      while (i < lines.length && lines[i].includes("|")) {
-        rows.push(splitCells(lines[i]).map(parseInline));
-        i++;
+      const sepCells = parseSeparatorCells(lines[i + 1]);
+      if (headers.length === 0 || headers.length !== sepCells.length) {
+        // Column count mismatch — not a valid table; treat header line as paragraph text.
+        if (list) flush();
+        paragraph.push(line.trim());
+      } else {
+        flush();
+        i += 2; // skip separator
+        const rows = [];
+        while (i < lines.length && hasPipe(lines[i])) {
+          const cells = splitCells(lines[i]).map(parseInline);
+          while (cells.length < headers.length) cells.push([]);
+          rows.push(cells.slice(0, headers.length));
+          i++;
+        }
+        i--; // outer loop will increment
+        blocks.push({ type: "table", headers, rows });
       }
-      i--; // outer loop will increment
-      blocks.push({ type: "table", headers, rows });
       // Bullet list.
     } else if (/^\s*[-*]\s+/.test(line)) {
       if (paragraph.length) flush();
