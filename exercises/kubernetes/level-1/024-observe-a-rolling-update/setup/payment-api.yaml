@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-api
+  namespace: fl-k8s-0024
+  labels:
+    app: payment-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-api
+  template:
+    metadata:
+      labels:
+        app: payment-api
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: app
+          image: nginx:1.27

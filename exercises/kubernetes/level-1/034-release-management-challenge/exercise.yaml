@@ -1,0 +1,56 @@
+schemaVersion: 1
+id: k8s-0034
+type: task
+title: Release Management Challenge
+summary: "Diagnose a paused, broken Deployment: identify the correct revision to restore, roll back to it, and resume the rollout."
+track: kubernetes
+level: 1
+order: 16
+difficulty: advanced
+estimatedMinutes: 20
+tags: [deployments, rollback, pause, resume, revision-history, troubleshooting, kubectl]
+prerequisites: [k8s-0033]
+environment:
+  profile: kind-default
+content:
+  description: description.md
+  solution: solution.md
+requirements:
+  - "Namespace: `fl-k8s-0034`"
+  - "Deployment `platform` is not paused"
+  - "Deployment `platform` runs image `nginx:1.27-alpine` on container `app`"
+  - "Deployment `platform` has 2 available replicas with a completed rollout"
+hints:
+  - "Start by understanding the full state: `kubectl get deployment platform -n fl-k8s-0034 -o yaml | grep -E 'paused|image'` and `kubectl rollout history deployment/platform -n fl-k8s-0034`."
+  - "Resume the Deployment before rolling back: `kubectl rollout resume deployment/platform -n fl-k8s-0034`."
+  - "Roll back to revision 2 (the last good image): `kubectl rollout undo deployment/platform -n fl-k8s-0034 --to-revision=2`. Then watch: `kubectl rollout status deployment/platform -n fl-k8s-0034`."
+lifecycle:
+  namespaces: [fl-k8s-0034]
+  setup:
+    steps:
+      - apply: setup/platform-rev1.yaml
+        waitRollout: { name: platform, namespace: fl-k8s-0034 }
+      - apply: setup/platform-rev2.yaml
+        waitRollout: { name: platform, namespace: fl-k8s-0034 }
+      - apply: setup/platform-rev3-broken-paused.yaml
+checks:
+  - id: not-paused
+    type: k8s.deployment-not-paused
+    label: Deployment platform is not paused
+    params: { name: platform, namespace: fl-k8s-0034 }
+  - id: image
+    type: k8s.container-image
+    label: Container app runs nginx:1.27-alpine
+    params:
+      {
+        kind: Deployment,
+        name: platform,
+        namespace: fl-k8s-0034,
+        image: "nginx:1.27-alpine",
+        container: app,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment platform has 2 available replicas
+    weight: 2
+    params: { name: platform, namespace: fl-k8s-0034, replicas: 2 }

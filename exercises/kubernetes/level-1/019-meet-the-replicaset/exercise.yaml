@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: k8s-0019
+type: task
+title: Meet the ReplicaSet
+summary: Inspect a running Deployment and its ReplicaSet, then add a required label to the Pod template.
+track: kubernetes
+level: 1
+order: 1
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [deployments, replicasets, pod-templates, labels, kubectl]
+prerequisites: [k8s-0018]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0019`"
+  - "Deployment `catalog` has 2 available replicas and a completed rollout"
+  - "The Pod template carries the label `tier=backend`"
+
+hints:
+  - "Use `kubectl get replicasets -n fl-k8s-0019` to see the ReplicaSets the Deployment manages. Compare the `kubectl describe deployment catalog -n fl-k8s-0019` output with the Pod labels shown by `kubectl get pods -n fl-k8s-0019 --show-labels`."
+  - 'A Deployment''s Pod template is under `spec.template.metadata.labels`. To change it, use `kubectl edit deployment catalog -n fl-k8s-0019` or patch it: `kubectl patch deployment catalog -n fl-k8s-0019 --type=merge -p ''{"spec":{"template":{"metadata":{"labels":{"tier":"backend"}}}}}''`.'
+  - "Adding a label to the Pod template changes the template hash, which creates a new ReplicaSet. Check `kubectl rollout status deployment/catalog -n fl-k8s-0019` to confirm the rollout completes."
+
+lifecycle:
+  namespaces: [fl-k8s-0019]
+  setup:
+    manifests: [setup/catalog.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment catalog has 2 available replicas
+    weight: 2
+    params: { name: catalog, namespace: fl-k8s-0019, replicas: 2 }
+  - id: tier-label
+    type: k8s.pod-template-labels
+    label: Pod template carries tier=backend
+    params:
+      kind: Deployment
+      name: catalog
+      namespace: fl-k8s-0019
+      labels: { tier: backend }

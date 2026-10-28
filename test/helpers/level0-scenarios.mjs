@@ -945,4 +945,440 @@ spec:
       },
     ],
   },
+
+  // ── Level 1: Deployment Lifecycle & Rollout Fluency (M5.3) ─────────────────
+
+  "k8s-0019": {
+    initial: [["deployment", "catalog", "fl-k8s-0019"]],
+    async solve(k) {
+      k.run(
+        "patch",
+        "deployment",
+        "catalog",
+        "-n",
+        "fl-k8s-0019",
+        "--type=merge",
+        "-p",
+        '{"spec":{"template":{"metadata":{"labels":{"tier":"backend"}}}}}',
+      );
+      await k.rollout("catalog", "fl-k8s-0019");
+    },
+    variants: [
+      {
+        name: "tier=backend added to Deployment metadata labels, not pod template",
+        async run(k) {
+          k.run("label", "deployment", "catalog", "tier=backend", "-n", "fl-k8s-0019");
+          await k.rollout("catalog", "fl-k8s-0019");
+        },
+        failing: ["tier-label"],
+      },
+    ],
+  },
+
+  "k8s-0020": {
+    initial: [["deployment", "frontend", "fl-k8s-0020"]],
+    async solve(k) {
+      k.run(
+        "patch",
+        "deployment",
+        "frontend",
+        "-n",
+        "fl-k8s-0020",
+        "--type=merge",
+        "-p",
+        '{"spec":{"template":{"metadata":{"labels":{"env":"staging"}}}}}',
+      );
+      await k.rollout("frontend", "fl-k8s-0020");
+    },
+    variants: [
+      {
+        name: "env=staging labeled on Deployment metadata, not pod template",
+        async run(k) {
+          k.run(
+            "label",
+            "deployment",
+            "frontend",
+            "env=staging",
+            "--overwrite",
+            "-n",
+            "fl-k8s-0020",
+          );
+          await k.rollout("frontend", "fl-k8s-0020");
+        },
+        failing: ["env-label"],
+      },
+    ],
+  },
+
+  "k8s-0021": {
+    initial: [["deployment", "orders", "fl-k8s-0021"]],
+    async solve(k) {
+      k.run("scale", "deployment", "orders", "--replicas=4", "-n", "fl-k8s-0021");
+      k.run(
+        "annotate",
+        "deployment",
+        "orders",
+        "featherlab.dev/scale-reason=high-availability",
+        "-n",
+        "fl-k8s-0021",
+      );
+      await k.rollout("orders", "fl-k8s-0021");
+    },
+    variants: [
+      {
+        name: "scaled to 4 but scale-reason annotation not added",
+        async run(k) {
+          k.run("scale", "deployment", "orders", "--replicas=4", "-n", "fl-k8s-0021");
+          await k.rollout("orders", "fl-k8s-0021");
+        },
+        failing: ["scale-annotation"],
+      },
+    ],
+  },
+
+  "k8s-0022": {
+    initial: [],
+    async solve(k) {
+      k.apply(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-server\n  namespace: fl-k8s-0022\n  labels:\n    app: api-server\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: api-server\n  template:\n    metadata:\n      labels:\n        app: api-server\n        version: v1\n    spec:\n      terminationGracePeriodSeconds: 2\n      containers:\n        - name: api\n          image: nginx:1.27\n",
+      );
+      await k.rollout("api-server", "fl-k8s-0022");
+    },
+    variants: [
+      {
+        name: "container left as default name (nginx) instead of renamed to api",
+        async run(k) {
+          k.apply(
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-server\n  namespace: fl-k8s-0022\n  labels:\n    app: api-server\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: api-server\n  template:\n    metadata:\n      labels:\n        app: api-server\n        version: v1\n    spec:\n      terminationGracePeriodSeconds: 2\n      containers:\n        - name: nginx\n          image: nginx:1.27\n",
+          );
+          await k.rollout("api-server", "fl-k8s-0022");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0023": {
+    initial: [["deployment", "storefront", "fl-k8s-0023"]],
+    async solve(k) {
+      k.run("set", "image", "deployment/storefront", "web=nginx:1.27-alpine", "-n", "fl-k8s-0023");
+      await k.rollout("storefront", "fl-k8s-0023");
+    },
+    variants: [
+      {
+        name: "image updated to wrong tag (1.26 instead of 1.27-alpine)",
+        async run(k) {
+          k.run("set", "image", "deployment/storefront", "web=nginx:1.26", "-n", "fl-k8s-0023");
+          await k.rollout("storefront", "fl-k8s-0023");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0024": {
+    initial: [["deployment", "payment-api", "fl-k8s-0024"]],
+    async solve(k) {
+      k.run("set", "image", "deployment/payment-api", "app=nginx:1.27-alpine", "-n", "fl-k8s-0024");
+      await k.rollout("payment-api", "fl-k8s-0024");
+    },
+    variants: [
+      {
+        name: "image updated to wrong tag (1.26 instead of 1.27-alpine)",
+        async run(k) {
+          k.run("set", "image", "deployment/payment-api", "app=nginx:1.26", "-n", "fl-k8s-0024");
+          await k.rollout("payment-api", "fl-k8s-0024");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0025": {
+    initial: [["deployment", "notification-svc", "fl-k8s-0025"]],
+    async solve(k) {
+      k.run(
+        "set",
+        "image",
+        "deployment/notification-svc",
+        "web=nginx:1.27-alpine",
+        "-n",
+        "fl-k8s-0025",
+      );
+      await k.rollout("notification-svc", "fl-k8s-0025");
+    },
+    variants: [
+      {
+        name: "image updated to wrong tag (1.26 instead of 1.27-alpine)",
+        async run(k) {
+          k.run(
+            "set",
+            "image",
+            "deployment/notification-svc",
+            "web=nginx:1.26",
+            "-n",
+            "fl-k8s-0025",
+          );
+          await k.rollout("notification-svc", "fl-k8s-0025");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0026": {
+    initial: [["deployment", "billing", "fl-k8s-0026"]],
+    async solve(k) {
+      k.run(
+        "patch",
+        "deployment",
+        "billing",
+        "-n",
+        "fl-k8s-0026",
+        "--type=merge",
+        "-p",
+        '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}',
+      );
+      await k.rollout("billing", "fl-k8s-0026");
+    },
+    variants: [
+      {
+        name: "changed to RollingUpdate but maxUnavailable=1 instead of 0",
+        async run(k) {
+          k.run(
+            "patch",
+            "deployment",
+            "billing",
+            "-n",
+            "fl-k8s-0026",
+            "--type=merge",
+            "-p",
+            '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":1}}}}',
+          );
+          await k.rollout("billing", "fl-k8s-0026");
+        },
+        failing: ["strategy"],
+      },
+    ],
+  },
+
+  "k8s-0027": {
+    initial: [["deployment", "inventory", "fl-k8s-0027"]],
+    async solve(k) {
+      k.run(
+        "patch",
+        "deployment",
+        "inventory",
+        "-n",
+        "fl-k8s-0027",
+        "--type=merge",
+        "-p",
+        '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":1}}}}',
+      );
+      await k.rollout("inventory", "fl-k8s-0027");
+    },
+    variants: [
+      {
+        name: "maxSurge=1 set but maxUnavailable=0 instead of 1",
+        async run(k) {
+          k.run(
+            "patch",
+            "deployment",
+            "inventory",
+            "-n",
+            "fl-k8s-0027",
+            "--type=merge",
+            "-p",
+            '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}',
+          );
+          await k.rollout("inventory", "fl-k8s-0027");
+        },
+        failing: ["strategy"],
+      },
+    ],
+  },
+
+  "k8s-0028": {
+    initial: [["deployment", "reports", "fl-k8s-0028"]],
+    async solve(k) {
+      k.run("set", "image", "deployment/reports", "app=nginx:1.27-alpine", "-n", "fl-k8s-0028");
+      k.run(
+        "annotate",
+        "deployment",
+        "reports",
+        "kubernetes.io/change-cause=upgrade to nginx 1.27-alpine",
+        "--overwrite",
+        "-n",
+        "fl-k8s-0028",
+      );
+      await k.rollout("reports", "fl-k8s-0028");
+    },
+    variants: [
+      {
+        name: "image updated but change-cause annotation has wrong value",
+        async run(k) {
+          k.run("set", "image", "deployment/reports", "app=nginx:1.27-alpine", "-n", "fl-k8s-0028");
+          k.run(
+            "annotate",
+            "deployment",
+            "reports",
+            "kubernetes.io/change-cause=upgraded nginx",
+            "--overwrite",
+            "-n",
+            "fl-k8s-0028",
+          );
+          await k.rollout("reports", "fl-k8s-0028");
+        },
+        failing: ["change-cause"],
+      },
+    ],
+  },
+
+  "k8s-0029": {
+    initial: [["deployment", "search", "fl-k8s-0029"]],
+    async solve(k) {
+      k.run("set", "image", "deployment/search", "app=nginx:1.27-alpine", "-n", "fl-k8s-0029");
+      k.run("scale", "deployment", "search", "--replicas=3", "-n", "fl-k8s-0029");
+      k.run("rollout", "resume", "deployment/search", "-n", "fl-k8s-0029");
+      await k.rollout("search", "fl-k8s-0029");
+    },
+    variants: [
+      {
+        name: "resumed and scaled to 3 but image not updated to nginx:1.27-alpine",
+        async run(k) {
+          k.run("scale", "deployment", "search", "--replicas=3", "-n", "fl-k8s-0029");
+          k.run("rollout", "resume", "deployment/search", "-n", "fl-k8s-0029");
+          await k.rollout("search", "fl-k8s-0029");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0030": {
+    initial: [["deployment", "gateway", "fl-k8s-0030"]],
+    async solve(k) {
+      k.run("rollout", "undo", "deployment/gateway", "-n", "fl-k8s-0030");
+      await k.rollout("gateway", "fl-k8s-0030");
+    },
+    variants: [
+      {
+        name: "image corrected but to wrong tag (nginx:1.26 not nginx:1.27)",
+        async run(k) {
+          k.run("set", "image", "deployment/gateway", "proxy=nginx:1.26", "-n", "fl-k8s-0030");
+          await k.rollout("gateway", "fl-k8s-0030");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0031": {
+    initial: [["deployment", "catalog-api", "fl-k8s-0031"]],
+    async solve(k) {
+      k.run("rollout", "undo", "deployment/catalog-api", "--to-revision=2", "-n", "fl-k8s-0031");
+      await k.rollout("catalog-api", "fl-k8s-0031");
+    },
+    variants: [
+      {
+        name: "rolled back to revision 1 (nginx:1.27) instead of revision 2 (nginx:1.27-alpine)",
+        async run(k) {
+          k.run(
+            "rollout",
+            "undo",
+            "deployment/catalog-api",
+            "--to-revision=1",
+            "-n",
+            "fl-k8s-0031",
+          );
+          await k.rollout("catalog-api", "fl-k8s-0031");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0032": {
+    initial: [["deployment", "auth", "fl-k8s-0032"]],
+    async solve(k) {
+      k.run("set", "image", "deployment/auth", "server=nginx:1.27", "-n", "fl-k8s-0032");
+      await k.rollout("auth", "fl-k8s-0032");
+    },
+    variants: [
+      {
+        name: "image corrected but to wrong tag (nginx:1.26 not nginx:1.27)",
+        async run(k) {
+          k.run("set", "image", "deployment/auth", "server=nginx:1.26", "-n", "fl-k8s-0032");
+          await k.rollout("auth", "fl-k8s-0032");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0033": {
+    initial: [["configmap", "legacy-manifest", "fl-k8s-0033"]],
+    async solve(k) {
+      k.apply(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: legacy-worker\n  namespace: fl-k8s-0033\n  labels:\n    app: legacy-worker\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: legacy-worker\n  template:\n    metadata:\n      labels:\n        app: legacy-worker\n    spec:\n      terminationGracePeriodSeconds: 2\n      containers:\n        - name: worker\n          image: nginx:1.27\n",
+      );
+      await k.rollout("legacy-worker", "fl-k8s-0033");
+    },
+    variants: [
+      {
+        name: "Deployment created but container named app instead of worker",
+        async run(k) {
+          k.apply(
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: legacy-worker\n  namespace: fl-k8s-0033\n  labels:\n    app: legacy-worker\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: legacy-worker\n  template:\n    metadata:\n      labels:\n        app: legacy-worker\n    spec:\n      terminationGracePeriodSeconds: 2\n      containers:\n        - name: app\n          image: nginx:1.27\n",
+          );
+          await k.rollout("legacy-worker", "fl-k8s-0033");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
+
+  "k8s-0034": {
+    initial: [["deployment", "platform", "fl-k8s-0034"]],
+    async solve(k) {
+      k.run("rollout", "resume", "deployment/platform", "-n", "fl-k8s-0034");
+      await k.until("platform: revision 3 created after resume", () => {
+        const rev = k.run(
+          "get",
+          "deployment",
+          "platform",
+          "-n",
+          "fl-k8s-0034",
+          "-o",
+          "jsonpath={.metadata.annotations.deployment\\.kubernetes\\.io/revision}",
+        );
+        return rev.trim() === "3";
+      });
+      k.run("rollout", "undo", "deployment/platform", "-n", "fl-k8s-0034");
+      await k.rollout("platform", "fl-k8s-0034");
+    },
+    variants: [
+      {
+        name: "resumed and rolled back to revision 1 (nginx:1.27) instead of revision 2 (nginx:1.27-alpine)",
+        async run(k) {
+          k.run("rollout", "resume", "deployment/platform", "-n", "fl-k8s-0034");
+          await k.until("platform: revision 3 created after resume", () => {
+            const rev = k.run(
+              "get",
+              "deployment",
+              "platform",
+              "-n",
+              "fl-k8s-0034",
+              "-o",
+              "jsonpath={.metadata.annotations.deployment\\.kubernetes\\.io/revision}",
+            );
+            return rev.trim() === "3";
+          });
+          k.run("rollout", "undo", "deployment/platform", "--to-revision=1", "-n", "fl-k8s-0034");
+          await k.rollout("platform", "fl-k8s-0034");
+        },
+        failing: ["image"],
+      },
+    ],
+  },
 };

@@ -1,0 +1,132 @@
+schemaVersion: 1
+id: kq-k8s-l1-002
+activityType: knowledge-check
+title: Manifest and Command Fluency
+summary: Check your understanding of manifest generation, image updates, rolling updates, and change preview workflows.
+track: kubernetes
+level: 1
+order: 7.5
+difficulty: intermediate
+estimatedMinutes: 6
+tags: [deployments, manifests, dry-run, diff, set-image, rolling-update, kubectl]
+relatedLabs: [k8s-0022, k8s-0023, k8s-0024, k8s-0025]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl create deployment ... --dry-run=client -o yaml` do?"
+    options:
+      - id: a
+        text: Creates the Deployment and prints the server-assigned YAML
+      - id: b
+        text: Generates a Deployment manifest locally without contacting the API server
+      - id: c
+        text: Validates the manifest against the API server without creating the resource
+      - id: d
+        text: Creates the Deployment and immediately deletes it
+    correctAnswer: b
+    explanation: "`--dry-run=client` generates the resource manifest entirely on the client side. Nothing is sent to the API server, so no resource is created. Piping to `-o yaml` gives you a well-formed YAML skeleton you can edit and apply."
+    wrongExplanations:
+      a: "A resource is not created with `--dry-run=client`. The YAML is generated locally, not returned from the server."
+      c: "Server-side validation without creation is what `--dry-run=server` does, not `--dry-run=client`."
+      d: "`--dry-run=client` never contacts the cluster at all, so nothing is created or deleted."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_deployment/"
+
+  - id: q2
+    type: single-choice
+    prompt: "You run `kubectl diff -f app.yaml` and the command exits with code 1. What does this mean?"
+    options:
+      - id: a
+        text: The manifest contains a syntax error that kubectl could not parse
+      - id: b
+        text: The diff command failed because the resource does not exist in the cluster
+      - id: c
+        text: Differences were found between the manifest and the cluster state — this is expected and not an error
+      - id: d
+        text: The API server rejected the manifest due to a policy violation
+    correctAnswer: c
+    explanation: "`kubectl diff` follows the Unix convention of exit code 1 for `differences found` and exit code 0 for `no differences`. An exit code of 1 simply means your manifest differs from what is currently in the cluster — exactly what you want to see before applying a change."
+    wrongExplanations:
+      a: "A parse error would result in an error message, not exit code 1 from the diff logic."
+      b: "`kubectl diff` against a non-existent resource would show the resource as entirely new (all lines prefixed with +), and still exits 1 because there are differences."
+      d: "A policy rejection produces a specific error message and a non-zero exit code, but it is not the normal meaning of exit code 1 from `kubectl diff`."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_diff/"
+
+  - id: q3
+    type: single-choice
+    prompt: "When is `kubectl set image` preferable to editing a manifest file and running `kubectl apply`?"
+    options:
+      - id: a
+        text: When you want to change multiple fields in the Deployment spec at once
+      - id: b
+        text: When you need a quick, targeted image-only update without managing a local manifest file
+      - id: c
+        text: When you want to preview the change before it takes effect
+      - id: d
+        text: When you need to update a ConfigMap that the Deployment references
+    correctAnswer: b
+    explanation: "`kubectl set image` is optimised for the single-field case: update one container image with one command, no file needed. For multi-field changes or when you want a file to serve as the source of truth, editing a manifest and running `kubectl apply` is the better workflow."
+    wrongExplanations:
+      a: "`kubectl set image` only changes container images. For multiple fields, edit the manifest and apply."
+      c: "`kubectl set image` applies the change immediately. To preview, use `kubectl diff` after editing a manifest file."
+      d: "`kubectl set image` only modifies container image fields on Pods/Deployments/etc. It cannot update ConfigMaps."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_set/kubectl_set_image/"
+
+  - id: q4
+    type: single-choice
+    prompt: "A Deployment named `api` already exists in the cluster. You run `kubectl apply -f api.yaml`. What happens?"
+    options:
+      - id: a
+        text: The command fails with an error because the resource already exists
+      - id: b
+        text: The existing Deployment is deleted and recreated from the manifest
+      - id: c
+        text: The existing Deployment is updated to match the manifest using a three-way merge
+      - id: d
+        text: The command is a no-op; it only creates new resources and ignores existing ones
+    correctAnswer: c
+    explanation: "`kubectl apply` is idempotent. If the resource exists, it performs a three-way merge between the last-applied configuration, the live cluster state, and the new manifest. Only changed fields are updated. This is why `apply` is safe to run repeatedly — it converges the cluster state toward the desired state."
+    wrongExplanations:
+      a: "Failing on an existing resource is the behavior of `kubectl create`, not `kubectl apply`."
+      b: "Deleting and recreating would cause downtime. `apply` patches the existing resource in place."
+      d: "`kubectl apply` updates existing resources — that is its primary use case. `kubectl create` would error on an existing resource."
+    docRef: "https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#kubectl-apply"
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which kubectl commands preview a manifest change without modifying the cluster? (select all that apply)"
+    options:
+      - id: a
+        text: kubectl apply --dry-run=server -f file.yaml
+      - id: b
+        text: kubectl diff -f file.yaml
+      - id: c
+        text: kubectl rollout status deployment/my-deploy
+      - id: d
+        text: kubectl apply --dry-run=client -f file.yaml
+    correctAnswers: [a, b, d]
+    explanation: "All three dry-run variants preview changes without writing to the cluster. `--dry-run=client` validates locally with no API call. `--dry-run=server` sends the request to the API server for full admission validation but does not persist anything. `kubectl diff` uses server-side dry run under the hood and shows a diff of what would change."
+    wrongExplanations:
+      c: "`kubectl rollout status` monitors an in-progress or completed rollout — it reads live cluster state but does not preview a pending change."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_diff/"
+
+  - id: q6
+    type: single-choice
+    prompt: "In the command `kubectl set image deployment/api web=nginx:1.27-alpine`, what does `web` refer to?"
+    options:
+      - id: a
+        text: The Deployment name
+      - id: b
+        text: The namespace where the Deployment lives
+      - id: c
+        text: The name of the container inside the Pod template (`spec.template.spec.containers[*].name`)
+      - id: d
+        text: The label selector used to find the Pods
+    correctAnswer: c
+    explanation: "The format is `<container-name>=<new-image>`. `web` must exactly match the `name` field of one of the containers in `spec.template.spec.containers`. If the name is wrong, kubectl reports that the container was not found and no change is made."
+    wrongExplanations:
+      a: "The Deployment name comes before the space, after `deployment/` — here it is `api`."
+      b: "The namespace is specified with `-n <namespace>`, not inside the image argument."
+      d: "Label selectors are used by Services and by the Deployment itself to track Pods, but they are not used here. The container name is a direct field reference."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_set/kubectl_set_image/"

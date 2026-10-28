@@ -1,0 +1,46 @@
+schemaVersion: 1
+id: k8s-0032
+type: task
+title: "Restart, Update, or Roll Back?"
+summary: Diagnose a broken Deployment and choose the correct recovery action when no prior revision is available.
+track: kubernetes
+level: 1
+order: 14
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [deployments, troubleshooting, rollback, set-image, kubectl]
+prerequisites: [k8s-0031]
+environment:
+  profile: kind-default
+content:
+  description: description.md
+  solution: solution.md
+requirements:
+  - "Namespace: `fl-k8s-0032`"
+  - "Deployment `auth` runs image `nginx:1.27` on container `server`"
+  - "Deployment `auth` has 2 available replicas with a completed rollout"
+hints:
+  - "Check the rollout history: `kubectl rollout history deployment/auth -n fl-k8s-0032`. If `revisionHistoryLimit: 0`, rollback is not possible."
+  - "Check Pod status: `kubectl get pods -n fl-k8s-0032`. If Pods are in `ImagePullBackOff`, the image tag is wrong — a restart won't fix an image pull error."
+  - "Fix forward: `kubectl set image deployment/auth server=nginx:1.27 -n fl-k8s-0032`. Then verify: `kubectl rollout status deployment/auth -n fl-k8s-0032`."
+lifecycle:
+  namespaces: [fl-k8s-0032]
+  setup:
+    manifests: [setup/auth.yaml]
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container server runs nginx:1.27
+    params:
+      {
+        kind: Deployment,
+        name: auth,
+        namespace: fl-k8s-0032,
+        image: "nginx:1.27",
+        container: server,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment auth has 2 available replicas
+    weight: 2
+    params: { name: auth, namespace: fl-k8s-0032, replicas: 2 }

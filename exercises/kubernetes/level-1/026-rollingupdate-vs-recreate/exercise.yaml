@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0026
+type: task
+title: RollingUpdate vs Recreate
+summary: Switch a Deployment from the Recreate strategy to RollingUpdate with zero-downtime parameters.
+track: kubernetes
+level: 1
+order: 8
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, rollout-strategy, rolling-update, recreate, kubectl]
+prerequisites: [k8s-0025]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0026`"
+  - "Deployment `billing` uses strategy `RollingUpdate` with `maxSurge: 1` and `maxUnavailable: 0`"
+  - "Deployment `billing` has 3 available replicas with a completed rollout"
+
+hints:
+  - "Run `kubectl get deployment billing -n fl-k8s-0026 -o yaml | grep -A5 strategy` to see the current strategy."
+  - 'Patch the strategy in one command: `kubectl patch deployment billing -n fl-k8s-0026 --type=merge -p ''{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'' `'
+  - "Or use `kubectl edit deployment billing -n fl-k8s-0026` to edit the strategy inline. After saving, run `kubectl rollout status deployment/billing -n fl-k8s-0026`."
+
+lifecycle:
+  namespaces: [fl-k8s-0026]
+  setup:
+    manifests: [setup/billing.yaml]
+
+checks:
+  - id: strategy
+    type: k8s.deployment-strategy
+    label: Deployment billing uses RollingUpdate with maxSurge=1 and maxUnavailable=0
+    weight: 2
+    params:
+      {
+        name: billing,
+        namespace: fl-k8s-0026,
+        strategy: RollingUpdate,
+        maxSurge: "1",
+        maxUnavailable: "0",
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment billing has 3 available replicas
+    params: { name: billing, namespace: fl-k8s-0026, replicas: 3 }

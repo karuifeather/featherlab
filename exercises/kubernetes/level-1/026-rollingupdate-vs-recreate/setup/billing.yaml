@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing
+  namespace: fl-k8s-0026
+  labels:
+    app: billing
+spec:
+  replicas: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: billing
+  template:
+    metadata:
+      labels:
+        app: billing
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: app
+          image: nginx:1.27

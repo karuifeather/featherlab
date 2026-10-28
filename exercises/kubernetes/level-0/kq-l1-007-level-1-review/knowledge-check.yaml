@@ -1,0 +1,154 @@
+schemaVersion: 1
+id: kq-k8s-l1-006
+activityType: knowledge-check
+title: Level 1 Review
+summary: Comprehensive review of deployment lifecycle, rollout strategies, history, and recovery techniques.
+track: kubernetes
+level: 1
+order: 17.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [deployments, rollout, strategy, history, review]
+relatedLabs:
+  [
+    k8s-0019,
+    k8s-0020,
+    k8s-0021,
+    k8s-0022,
+    k8s-0023,
+    k8s-0024,
+    k8s-0025,
+    k8s-0026,
+    k8s-0027,
+    k8s-0028,
+    k8s-0029,
+    k8s-0030,
+    k8s-0031,
+    k8s-0032,
+    k8s-0033,
+    k8s-0034,
+  ]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Which single command shows both the current container image AND the update strategy of a Deployment named `api` in namespace `prod`?"
+    options:
+      - id: a
+        text: "`kubectl get deployment api -n prod -o wide`"
+      - id: b
+        text: "`kubectl rollout history deployment/api -n prod`"
+      - id: c
+        text: "`kubectl get deployment api -n prod -o yaml`"
+      - id: d
+        text: "`kubectl get pods -n prod -o wide`"
+    correctAnswer: c
+    explanation: "`kubectl get deployment api -n prod -o yaml` outputs the full Deployment spec, including `spec.template.spec.containers[].image` and `spec.strategy`. It is the single structured view that exposes both fields with complete detail."
+    wrongExplanations:
+      a: "`-o wide` adds node and IP columns for Deployments but does not expose the update strategy."
+      b: "`kubectl rollout history` shows revision numbers and change-cause annotations only — not the current image or strategy."
+      d: "`kubectl get pods -o wide` shows Pod-level image information but not the Deployment strategy."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"
+
+  - id: q2
+    type: single-choice
+    prompt: "What does the `spec.revisionHistoryLimit` field on a Deployment control?"
+    options:
+      - id: a
+        text: The maximum number of Pods that can be unavailable during a rolling update
+      - id: b
+        text: How long (in seconds) old ReplicaSets are retained before deletion
+      - id: c
+        text: The number of old ReplicaSets kept so that rollbacks to prior revisions remain possible
+      - id: d
+        text: The maximum number of times a failed rollout can be automatically retried
+    correctAnswer: c
+    explanation: "`revisionHistoryLimit` (default: 10) controls how many old, scaled-down ReplicaSets the Deployment retains. Each retained ReplicaSet corresponds to a rollback target. Setting it to 0 deletes all old ReplicaSets immediately, making rollback impossible."
+    wrongExplanations:
+      a: "The maximum unavailable Pods during a rolling update is controlled by `spec.strategy.rollingUpdate.maxUnavailable`."
+      b: "There is no time-based cleanup of ReplicaSets; only count-based (`revisionHistoryLimit`) cleanup is supported."
+      d: "Kubernetes does not auto-retry failed rollouts. `revisionHistoryLimit` is purely about history retention for rollback."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#clean-up-policy"
+
+  - id: q3
+    type: single-choice
+    prompt: "A Deployment's Pods are healthy and running the correct image, but they need to pick up an updated ConfigMap value. Which command is the right tool?"
+    options:
+      - id: a
+        text: "`kubectl rollout undo deployment/app`"
+      - id: b
+        text: "`kubectl rollout restart deployment/app`"
+      - id: c
+        text: "`kubectl rollout resume deployment/app`"
+      - id: d
+        text: "`kubectl set image deployment/app app=nginx:latest`"
+    correctAnswer: b
+    explanation: "`kubectl rollout restart` triggers a rolling replacement of all Pods without changing the container image or spec. It does this by setting a `kubectl.kubernetes.io/restartedAt` annotation on the Pod template, which causes a new rollout. New Pods start fresh and pick up any external changes such as ConfigMap values. `rollout undo` reverts to a previous template revision, which is not what you want here."
+    wrongExplanations:
+      a: "`rollout undo` reverts the Pod template to a prior revision — it would undo the current (healthy) image, which is the opposite of what is needed."
+      c: "`rollout resume` only applies when the Deployment is paused. A running Deployment cannot be 'resumed'."
+      d: "Setting `nginx:latest` would change the image to a floating tag, which is unrelated to picking up ConfigMap changes and introduces an anti-pattern."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_restart/"
+    tryCommand: "kubectl rollout restart deployment/app -n my-ns"
+
+  - id: q4
+    type: single-choice
+    prompt: "Which command previews what `kubectl apply -f deployment.yaml` would change in the cluster, without modifying anything?"
+    options:
+      - id: a
+        text: "`kubectl apply -f deployment.yaml --dry-run=client`"
+      - id: b
+        text: "`kubectl diff -f deployment.yaml`"
+      - id: c
+        text: "`kubectl get -f deployment.yaml -o yaml`"
+      - id: d
+        text: "`kubectl validate -f deployment.yaml`"
+    correctAnswer: b
+    explanation: "`kubectl diff -f deployment.yaml` performs a server-side dry run and prints the exact diff between the live cluster state and what the file would produce — additions, removals, and field changes. `--dry-run=client` tells you IF the apply would succeed but not WHAT would change."
+    wrongExplanations:
+      a: "`--dry-run=client` validates the manifest locally and reports whether the apply would be accepted, but it does not show a diff of what fields would change in the live resource."
+      c: "`kubectl get -f` retrieves the current live resource; it does not compare it to the local file."
+      d: "`kubectl validate` is not a standard kubectl subcommand. Validation is performed automatically by `apply` and `diff`."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_diff/"
+
+  - id: q5
+    type: single-choice
+    prompt: "A Deployment uses strategy `Recreate`. An image update is applied. What happens to the existing Pods?"
+    options:
+      - id: a
+        text: Old Pods are gradually replaced one by one as new Pods become Ready
+      - id: b
+        text: Half the old Pods are terminated, new Pods start, then the remaining old Pods are terminated
+      - id: c
+        text: All existing Pods are terminated first; new Pods start only after the old ones are gone
+      - id: d
+        text: New Pods start first; old Pods are terminated only after all new Pods are Ready
+    correctAnswer: c
+    explanation: "The `Recreate` strategy terminates ALL existing Pods before creating any new ones. This guarantees that only one version runs at a time but causes a brief period of downtime while the new Pods are starting. It is useful when two versions of the app cannot run simultaneously."
+    wrongExplanations:
+      a: "Gradual one-by-one replacement describes the `RollingUpdate` strategy, not `Recreate`."
+      b: "Terminating in batches is a variant of rolling update behavior; `Recreate` terminates everything at once."
+      d: "Starting new Pods before terminating old ones is the `RollingUpdate` behavior with `maxSurge > 0`; `Recreate` does the opposite."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#recreate-deployment"
+
+  - id: q6
+    type: single-choice
+    prompt: "You need to apply three changes to a Deployment (new image, updated env var, and scaled replicas) and have all three appear as a single revision in rollout history. What is the correct sequence?"
+    options:
+      - id: a
+        text: Apply each change with a separate `kubectl set` command; Kubernetes batches them automatically
+      - id: b
+        text: "Pause the Deployment, apply all three changes, then resume — all changes become one revision"
+      - id: c
+        text: Use `kubectl apply --record` on each change to tag them with the same cause annotation
+      - id: d
+        text: "Scale to 0 replicas, apply changes, scale back up — zero replicas prevents new revisions"
+    correctAnswer: b
+    explanation: "Pausing a Deployment (`kubectl rollout pause`) prevents new ReplicaSets from being created while changes accumulate. Each `kubectl set` or `kubectl patch` while paused updates the spec but does NOT trigger a rollout. Resuming (`kubectl rollout resume`) triggers one rollout that encapsulates all the batched changes as a single revision."
+    wrongExplanations:
+      a: "Kubernetes does NOT batch sequential `kubectl set` commands. Each command that changes `spec.template` triggers a separate rollout and creates a new revision."
+      c: "`--record` (deprecated) only adds a change-cause annotation; it does not affect how many revisions are created."
+      d: "Scaling to 0 does not prevent new revisions from being recorded. Each template change still creates a new ReplicaSet entry in the history."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#pausing-and-resuming-a-deployment"
+    tryCommand: "kubectl rollout pause deployment/app -n my-ns"

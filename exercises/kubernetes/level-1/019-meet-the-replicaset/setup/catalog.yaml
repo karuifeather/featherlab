@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: fl-k8s-0019
+  labels:
+    app: catalog
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalog
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: web
+          image: nginx:1.27

@@ -22,7 +22,27 @@ const LIFECYCLE_SPEC = {
     },
     setup: {
       type: "object",
-      properties: { manifests: { type: "array", items: relativePathSpec } },
+      properties: {
+        manifests: { type: "array", items: relativePathSpec },
+        steps: {
+          type: "array",
+          items: {
+            type: "object",
+            open: true,
+            properties: {
+              apply: { ...relativePathSpec, required: true },
+              waitRollout: {
+                type: "object",
+                open: true,
+                properties: {
+                  name: { type: "string", required: true, pattern: DNS_SUBDOMAIN },
+                  namespace: { type: "string", required: true, pattern: DNS_LABEL },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
 };
@@ -163,7 +183,27 @@ export function compileLifecycle(raw, { exerciseId, reader, problems }) {
     if (seen.has(key)) problems.add("setup.manifests", `${key} is defined more than once`);
     seen.add(key);
   }
-  return { namespaces, resources, claims: namespaces.map((n) => `Namespace/${n}`) };
+  const setupSteps = [];
+  const rawSteps = Array.isArray(raw.setup?.steps) ? raw.setup.steps : [];
+  rawSteps.forEach((step, i) => {
+    if (typeof step?.apply !== "string") return;
+    const stepResources = loadManifest(
+      step.apply,
+      reader,
+      namespaces,
+      problems,
+      `setup.steps[${i}].apply`,
+    );
+    const waitRollout =
+      step.waitRollout &&
+      typeof step.waitRollout.name === "string" &&
+      typeof step.waitRollout.namespace === "string"
+        ? { name: step.waitRollout.name, namespace: step.waitRollout.namespace }
+        : undefined;
+    setupSteps.push({ resources: stepResources, waitRollout });
+  });
+
+  return { namespaces, resources, setupSteps, claims: namespaces.map((n) => `Namespace/${n}`) };
 }
 
 /** Walk checks, including the nested `params.checks` of combinators. */
@@ -396,6 +436,41 @@ export function createDriver({
     return result;
   }
 
+  /** Poll until a Deployment's rollout is complete; for use in multi-revision setup steps. */
+  async function waitForRollout(name, namespace, signal, timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    let last;
+    while (Date.now() < deadline) {
+      last = await kubectl(
+        ["rollout", "status", `deployment/${name}`, "-n", namespace, "--timeout=10s"],
+        { signal, timeoutMs: 15_000 },
+      );
+      if (last.exitCode === 0) return last;
+      await sleep(pollMs, undefined, { signal });
+    }
+    throw new EnvironmentError(
+      `Setup rollout for "${name}" in "${namespace}" did not complete within ${Math.round(timeoutMs / 1000)}s. Reset the exercise to try again.`,
+      { reason: "timeout" },
+    );
+  }
+
+  /** Plan for applying ordered setup step manifests and optionally waiting for rollouts. */
+  const setupStepsPlan = (exercise, signal) =>
+    (exercise.lifecycle.setupSteps ?? []).flatMap((step, stepIdx) => {
+      const applySteps = step.resources.map((resource, resIdx) => ({
+        name: `apply setup step ${stepIdx + 1} resource ${resIdx + 1}`,
+        run: () => kubectl(["apply", "-f", "-"], { signal, stdin: JSON.stringify(resource) }),
+      }));
+      if (!step.waitRollout) return applySteps;
+      return [
+        ...applySteps,
+        {
+          name: `wait rollout ${step.waitRollout.name} (step ${stepIdx + 1})`,
+          run: () => waitForRollout(step.waitRollout.name, step.waitRollout.namespace, signal),
+        },
+      ];
+    });
+
   const createPlan = (exercise, signal) => [
     ...exercise.lifecycle.namespaces.map((name) => ({
       name: `create Namespace/${name}`,
@@ -411,6 +486,7 @@ export function createDriver({
       name: `create ${refKey({ kind: resource.kind, name: resource.metadata.name, namespace: resource.metadata.namespace })}`,
       run: () => createObject(withManagedLabels(resource, exercise.id), signal),
     })),
+    ...setupStepsPlan(exercise, signal),
   ];
 
   return {

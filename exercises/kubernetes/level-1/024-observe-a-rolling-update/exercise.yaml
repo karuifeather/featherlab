@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0024
+type: task
+title: Observe a Rolling Update
+summary: Update a Deployment's image and use rollout status to confirm the update completes without downtime.
+track: kubernetes
+level: 1
+order: 6
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [deployments, rolling-update, rollout-status, replicasets, kubectl]
+prerequisites: [k8s-0023]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0024`"
+  - "Deployment `payment-api` runs image `nginx:1.27-alpine` on container `app`"
+  - "Deployment `payment-api` has 3 available replicas with a completed rollout"
+
+hints:
+  - "Run `kubectl set image deployment/payment-api app=nginx:1.27-alpine -n fl-k8s-0024`, then immediately run `kubectl get replicasets -n fl-k8s-0024 -w` in a second terminal to watch old and new ReplicaSets scale."
+  - "Use `kubectl rollout status deployment/payment-api -n fl-k8s-0024` to stream progress. It exits 0 when the rollout is done."
+  - "After the rollout, `kubectl get replicasets -n fl-k8s-0024` should show two ReplicaSets: the old one at 0 replicas and the new one at 3."
+
+lifecycle:
+  namespaces: [fl-k8s-0024]
+  setup:
+    manifests: [setup/payment-api.yaml]
+
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container app runs nginx:1.27-alpine
+    params:
+      {
+        kind: Deployment,
+        name: payment-api,
+        namespace: fl-k8s-0024,
+        image: "nginx:1.27-alpine",
+        container: app,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment payment-api has 3 available replicas
+    weight: 2
+    params: { name: payment-api, namespace: fl-k8s-0024, replicas: 3 }

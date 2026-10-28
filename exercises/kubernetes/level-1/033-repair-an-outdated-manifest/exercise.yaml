@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0033
+type: task
+title: Repair an Outdated Manifest
+summary: Extract a Deployment manifest from a ConfigMap, fix a removed API version, and apply the corrected manifest.
+track: kubernetes
+level: 1
+order: 15
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [deployments, api-versions, configmap, manifest-repair, kubectl]
+prerequisites: [k8s-0032]
+environment:
+  profile: kind-default
+content:
+  description: description.md
+  solution: solution.md
+requirements:
+  - "Namespace: `fl-k8s-0033`"
+  - "A Deployment named `legacy-worker` runs in `fl-k8s-0033`"
+  - "Container `worker` runs image `nginx:1.27`"
+  - "Deployment `legacy-worker` has 1 available replica with a completed rollout"
+hints:
+  - "Extract the manifest: `kubectl get configmap legacy-manifest -n fl-k8s-0033 -o jsonpath='{.data.deployment\\.yaml}' > /tmp/legacy.yaml`."
+  - "Edit `/tmp/legacy.yaml`: change `apiVersion: apps/v1beta1` to `apiVersion: apps/v1`. Also add the required `spec.selector.matchLabels` field matching the Pod template labels."
+  - "Apply: `kubectl apply -f /tmp/legacy.yaml`. If you see 'selector is required', you forgot to add `spec.selector.matchLabels: {app: legacy-worker}`."
+lifecycle:
+  namespaces: [fl-k8s-0033]
+  setup:
+    manifests: [setup/configmap.yaml]
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Deployment legacy-worker exists in fl-k8s-0033
+    params: { kind: Deployment, name: legacy-worker, namespace: fl-k8s-0033 }
+  - id: image
+    type: k8s.container-image
+    label: Container worker runs nginx:1.27
+    params:
+      {
+        kind: Deployment,
+        name: legacy-worker,
+        namespace: fl-k8s-0033,
+        image: "nginx:1.27",
+        container: worker,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment legacy-worker has 1 available replica
+    weight: 2
+    params: { name: legacy-worker, namespace: fl-k8s-0033, replicas: 1 }

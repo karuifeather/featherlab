@@ -465,6 +465,328 @@ const SCENARIOS = {
       ],
     },
   },
+
+  // ── Level 1: Deployment Lifecycle & Rollout Fluency (M5.3) ─────────────────
+  // k8s-0030, k8s-0031, k8s-0034 excluded: setup.steps incompatible with fake cluster
+  // (partial manifest shallow-merge loses spec.replicas; waitRollout unsupported)
+
+  "k8s-0019": {
+    solve(c) {
+      edit(c, "Deployment", "catalog", "fl-k8s-0019", (d) => {
+        d.spec.template.metadata.labels.tier = "backend";
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "tier=backend added to Deployment's own labels instead of pod template",
+      run(c) {
+        edit(c, "Deployment", "catalog", "fl-k8s-0019", (d) => {
+          d.metadata.labels.tier = "backend";
+          rolledOut(d);
+        });
+      },
+      failing: ["tier-label"],
+    },
+  },
+  "k8s-0020": {
+    solve(c) {
+      edit(c, "Deployment", "frontend", "fl-k8s-0020", (d) => {
+        d.spec.template.metadata.labels.env = "staging";
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "env=staging added to Deployment's own labels instead of pod template",
+      run(c) {
+        edit(c, "Deployment", "frontend", "fl-k8s-0020", (d) => {
+          d.metadata.labels.env = "staging";
+          rolledOut(d);
+        });
+      },
+      failing: ["env-label"],
+    },
+  },
+  "k8s-0021": {
+    solve(c) {
+      edit(c, "Deployment", "orders", "fl-k8s-0021", (d) => {
+        d.spec.replicas = 4;
+        d.metadata.annotations = {
+          ...d.metadata.annotations,
+          "featherlab.dev/scale-reason": "high-availability",
+        };
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "scaled to 4 but annotation not added",
+      run(c) {
+        edit(c, "Deployment", "orders", "fl-k8s-0021", (d) => {
+          d.spec.replicas = 4;
+          rolledOut(d);
+        });
+      },
+      failing: ["scale-annotation"],
+    },
+  },
+  "k8s-0022": {
+    solve(c) {
+      c.put(
+        rolledOut({
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          metadata: { name: "api-server", namespace: "fl-k8s-0022", labels: { app: "api-server" } },
+          spec: {
+            replicas: 2,
+            selector: { matchLabels: { app: "api-server" } },
+            template: {
+              metadata: { labels: { app: "api-server", version: "v1" } },
+              spec: { containers: [{ name: "api", image: "nginx:1.27" }] },
+            },
+          },
+        }),
+      );
+    },
+    partial: {
+      what: "Deployment created but container named nginx (default) instead of api",
+      run(c) {
+        c.put(
+          rolledOut({
+            apiVersion: "apps/v1",
+            kind: "Deployment",
+            metadata: {
+              name: "api-server",
+              namespace: "fl-k8s-0022",
+              labels: { app: "api-server" },
+            },
+            spec: {
+              replicas: 2,
+              selector: { matchLabels: { app: "api-server" } },
+              template: {
+                metadata: { labels: { app: "api-server", version: "v1" } },
+                spec: { containers: [{ name: "nginx", image: "nginx:1.27" }] },
+              },
+            },
+          }),
+        );
+      },
+      failing: ["image"],
+    },
+  },
+  "k8s-0023": {
+    solve(c) {
+      edit(c, "Deployment", "storefront", "fl-k8s-0023", (d) => {
+        container(d, "web").image = "nginx:1.27-alpine";
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "image updated but rollout not complete",
+      run(c) {
+        edit(c, "Deployment", "storefront", "fl-k8s-0023", (d) => {
+          container(d, "web").image = "nginx:1.27-alpine";
+          rolledOut(d).status.updatedReplicas = 1;
+        });
+      },
+      failing: ["rollout"],
+    },
+  },
+  "k8s-0024": {
+    solve(c) {
+      edit(c, "Deployment", "payment-api", "fl-k8s-0024", (d) => {
+        container(d, "app").image = "nginx:1.27-alpine";
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "image updated but rollout not complete",
+      run(c) {
+        edit(c, "Deployment", "payment-api", "fl-k8s-0024", (d) => {
+          container(d, "app").image = "nginx:1.27-alpine";
+          rolledOut(d).status.updatedReplicas = 2;
+        });
+      },
+      failing: ["rollout"],
+    },
+  },
+  "k8s-0025": {
+    solve(c) {
+      edit(c, "Deployment", "notification-svc", "fl-k8s-0025", (d) => {
+        container(d, "web").image = "nginx:1.27-alpine";
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "image updated but rollout not complete",
+      run(c) {
+        edit(c, "Deployment", "notification-svc", "fl-k8s-0025", (d) => {
+          container(d, "web").image = "nginx:1.27-alpine";
+          rolledOut(d).status.updatedReplicas = 1;
+        });
+      },
+      failing: ["rollout"],
+    },
+  },
+  "k8s-0026": {
+    solve(c) {
+      edit(c, "Deployment", "billing", "fl-k8s-0026", (d) => {
+        d.spec.strategy = {
+          type: "RollingUpdate",
+          rollingUpdate: { maxSurge: 1, maxUnavailable: 0 },
+        };
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "strategy changed to RollingUpdate but wrong maxUnavailable (1 instead of 0)",
+      run(c) {
+        edit(c, "Deployment", "billing", "fl-k8s-0026", (d) => {
+          d.spec.strategy = {
+            type: "RollingUpdate",
+            rollingUpdate: { maxSurge: 1, maxUnavailable: 1 },
+          };
+          rolledOut(d);
+        });
+      },
+      failing: ["strategy"],
+    },
+  },
+  "k8s-0027": {
+    solve(c) {
+      edit(c, "Deployment", "inventory", "fl-k8s-0027", (d) => {
+        d.spec.strategy = {
+          type: "RollingUpdate",
+          rollingUpdate: { maxSurge: 1, maxUnavailable: 1 },
+        };
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "maxSurge correct but maxUnavailable wrong (0 instead of 1)",
+      run(c) {
+        edit(c, "Deployment", "inventory", "fl-k8s-0027", (d) => {
+          d.spec.strategy = {
+            type: "RollingUpdate",
+            rollingUpdate: { maxSurge: 1, maxUnavailable: 0 },
+          };
+          rolledOut(d);
+        });
+      },
+      failing: ["strategy"],
+    },
+  },
+  "k8s-0028": {
+    solve(c) {
+      edit(c, "Deployment", "reports", "fl-k8s-0028", (d) => {
+        container(d, "app").image = "nginx:1.27-alpine";
+        d.metadata.annotations = {
+          ...d.metadata.annotations,
+          "kubernetes.io/change-cause": "upgrade to nginx 1.27-alpine",
+        };
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "image updated but change-cause annotation has wrong value",
+      run(c) {
+        edit(c, "Deployment", "reports", "fl-k8s-0028", (d) => {
+          container(d, "app").image = "nginx:1.27-alpine";
+          d.metadata.annotations = {
+            ...d.metadata.annotations,
+            "kubernetes.io/change-cause": "upgrade nginx",
+          };
+          rolledOut(d);
+        });
+      },
+      failing: ["change-cause"],
+    },
+  },
+  "k8s-0029": {
+    solve(c) {
+      edit(c, "Deployment", "search", "fl-k8s-0029", (d) => {
+        delete d.spec.paused;
+        container(d, "app").image = "nginx:1.27-alpine";
+        d.spec.replicas = 3;
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "deployment resumed and scaled but image not updated",
+      run(c) {
+        edit(c, "Deployment", "search", "fl-k8s-0029", (d) => {
+          delete d.spec.paused;
+          d.spec.replicas = 3;
+          rolledOut(d);
+        });
+      },
+      failing: ["image"],
+    },
+  },
+  "k8s-0032": {
+    solve(c) {
+      edit(c, "Deployment", "auth", "fl-k8s-0032", (d) => {
+        container(d, "server").image = "nginx:1.27";
+        rolledOut(d);
+      });
+    },
+    partial: {
+      what: "image fixed but rollout not complete",
+      run(c) {
+        edit(c, "Deployment", "auth", "fl-k8s-0032", (d) => {
+          container(d, "server").image = "nginx:1.27";
+          rolledOut(d).status.updatedReplicas = 1;
+        });
+      },
+      failing: ["rollout"],
+    },
+  },
+  "k8s-0033": {
+    solve(c) {
+      c.put(
+        rolledOut({
+          apiVersion: "apps/v1",
+          kind: "Deployment",
+          metadata: {
+            name: "legacy-worker",
+            namespace: "fl-k8s-0033",
+            labels: { app: "legacy-worker" },
+          },
+          spec: {
+            replicas: 1,
+            selector: { matchLabels: { app: "legacy-worker" } },
+            template: {
+              metadata: { labels: { app: "legacy-worker" } },
+              spec: { containers: [{ name: "worker", image: "nginx:1.27" }] },
+            },
+          },
+        }),
+      );
+    },
+    partial: {
+      what: "Deployment created with wrong container name (app instead of worker)",
+      run(c) {
+        c.put(
+          rolledOut({
+            apiVersion: "apps/v1",
+            kind: "Deployment",
+            metadata: {
+              name: "legacy-worker",
+              namespace: "fl-k8s-0033",
+              labels: { app: "legacy-worker" },
+            },
+            spec: {
+              replicas: 1,
+              selector: { matchLabels: { app: "legacy-worker" } },
+              template: {
+                metadata: { labels: { app: "legacy-worker" } },
+                spec: { containers: [{ name: "app", image: "nginx:1.27" }] },
+              },
+            },
+          }),
+        );
+      },
+      failing: ["image"],
+    },
+  },
 };
 
 const failing = (result) =>

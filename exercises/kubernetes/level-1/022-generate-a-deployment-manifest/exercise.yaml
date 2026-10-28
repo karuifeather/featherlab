@@ -1,0 +1,64 @@
+schemaVersion: 1
+id: k8s-0022
+type: task
+title: Generate a Deployment Manifest
+summary: Generate a Deployment YAML, add required fields, and apply it to create a working workload.
+track: kubernetes
+level: 1
+order: 4
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, manifests, dry-run, kubectl-apply, kubectl-create]
+prerequisites: [k8s-0021]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0022`"
+  - "A Deployment named `api-server` runs in `fl-k8s-0022`"
+  - "The container is named `api` and runs image `nginx:1.27`"
+  - "The Deployment has 2 available replicas with a completed rollout"
+  - "The Pod template carries labels `app=api-server` and `version=v1`"
+
+hints:
+  - "`kubectl create deployment api-server --image=nginx:1.27 --replicas=2 --dry-run=client -o yaml > api.yaml` generates a starter YAML. The container name defaults to the image name — you will need to edit it."
+  - "Open `api.yaml` in an editor. Find the container `name` field under `spec.template.spec.containers` and change it to `api`. Add `version: v1` under `spec.template.metadata.labels`."
+  - "Apply with `kubectl apply -f api.yaml -n fl-k8s-0022` and confirm with `kubectl rollout status deployment/api-server -n fl-k8s-0022`."
+
+lifecycle:
+  namespaces: [fl-k8s-0022]
+
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Deployment api-server exists in fl-k8s-0022
+    params: { kind: Deployment, name: api-server, namespace: fl-k8s-0022 }
+  - id: image
+    type: k8s.container-image
+    label: Container api runs nginx:1.27
+    params:
+      {
+        kind: Deployment,
+        name: api-server,
+        namespace: fl-k8s-0022,
+        image: "nginx:1.27",
+        container: api,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api-server has 2 available replicas
+    weight: 2
+    params: { name: api-server, namespace: fl-k8s-0022, replicas: 2 }
+  - id: pod-labels
+    type: k8s.pod-template-labels
+    label: Pod template carries app=api-server and version=v1
+    params:
+      kind: Deployment
+      name: api-server
+      namespace: fl-k8s-0022
+      labels: { app: api-server, version: v1 }

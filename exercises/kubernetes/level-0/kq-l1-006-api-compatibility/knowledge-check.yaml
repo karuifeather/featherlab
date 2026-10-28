@@ -1,0 +1,118 @@
+schemaVersion: 1
+id: kq-k8s-l1-005
+activityType: knowledge-check
+title: API Compatibility and Manifests
+summary: Test your understanding of API version evolution, manifest validation techniques, and extracting data from cluster resources.
+track: kubernetes
+level: 1
+order: 15.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [api-versions, manifests, diff, dry-run, configmap]
+relatedLabs: [k8s-0033]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the most significant change required when migrating a Deployment manifest from `apps/v1beta1` to `apps/v1`?"
+    options:
+      - id: a
+        text: The `replicas` field must be explicitly set (it was optional in v1beta1)
+      - id: b
+        text: "`spec.selector.matchLabels` becomes required — it must match the Pod template labels"
+      - id: c
+        text: The `template.spec.containers` array must be renamed to `template.spec.initContainers`
+      - id: d
+        text: The `metadata.namespace` field must be removed from the manifest
+    correctAnswer: b
+    explanation: "`apps/v1` requires an explicit `spec.selector.matchLabels` field that matches `spec.template.metadata.labels`. In `v1beta1` the selector was inferred automatically from the Pod template labels. Without it, the API server returns an error: 'selector is required'."
+    wrongExplanations:
+      a: "`spec.replicas` has a default of 1 in both versions and has always been optional."
+      c: "`initContainers` is a separate field for init containers, unrelated to this migration."
+      d: "The namespace field in metadata is recommended and does not need to be removed."
+    docRef: "https://kubernetes.io/docs/reference/using-api/deprecation-guide/#deployment-v116"
+
+  - id: q2
+    type: single-choice
+    prompt: "Which command shows all API versions and resource types that the connected cluster supports?"
+    options:
+      - id: a
+        text: "`kubectl version --client`"
+      - id: b
+        text: "`kubectl cluster-info`"
+      - id: c
+        text: "`kubectl api-resources`"
+      - id: d
+        text: "`kubectl get apigroups`"
+    correctAnswer: c
+    explanation: "`kubectl api-resources` lists every resource kind the cluster supports along with its API group, version, and whether it is namespaced. Combined with `kubectl api-versions`, you can discover exactly which `apiVersion` strings are valid on the connected cluster."
+    wrongExplanations:
+      a: "`kubectl version --client` shows only the local kubectl binary version, not server-side API support."
+      b: "`kubectl cluster-info` shows the control plane and CoreDNS addresses, not the API resource catalog."
+      d: "`kubectl get apigroups` is not a valid kubectl command. The correct command is `kubectl api-versions` for group/version strings."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_api-resources/"
+    tryCommand: "kubectl api-resources --api-group=apps"
+
+  - id: q3
+    type: single-choice
+    prompt: "You run `kubectl diff -f deployment.yaml` and the output is non-empty. What does this mean?"
+    options:
+      - id: a
+        text: The manifest has a syntax error and cannot be applied
+      - id: b
+        text: The live cluster resource and the local file differ — the diff shows what would change
+      - id: c
+        text: The Deployment has drifted from its desired state and needs a rollout restart
+      - id: d
+        text: The file has never been applied to the cluster before
+    correctAnswer: b
+    explanation: "`kubectl diff` performs a server-side dry run and prints a unified diff between the live resource and what the file would produce. A non-empty diff means `kubectl apply` would make changes. It exits with code 1 when differences exist — that exit code is expected, not an error."
+    wrongExplanations:
+      a: "Syntax errors cause `kubectl diff` to exit with a different error, not produce a diff."
+      c: "`kubectl diff` compares the file to the live resource; it says nothing about Pod health or drift from desired state."
+      d: "A brand new resource would also appear as a non-empty diff (everything is 'added'), but the primary meaning is that changes exist."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_diff/"
+    tryCommand: "kubectl diff -f deployment.yaml"
+
+  - id: q4
+    type: single-choice
+    prompt: "What does `kubectl apply --dry-run=server` do that `--dry-run=client` cannot?"
+    options:
+      - id: a
+        text: It applies the changes permanently to the cluster without creating any Pods
+      - id: b
+        text: It sends the manifest to the API server for full admission and validation, catching errors that client-side validation misses
+      - id: c
+        text: It compares the manifest to the cluster's current state and prints a diff
+      - id: d
+        text: It stores the manifest in etcd without activating the resource
+    correctAnswer: b
+    explanation: "`--dry-run=server` submits the request to the API server with a dry-run flag. The server runs admission webhooks and full validation, which can catch errors like invalid field combinations, webhook rejections, or quota violations that `--dry-run=client` (which only validates locally) would miss."
+    wrongExplanations:
+      a: "`--dry-run=server` never applies any changes — it is purely a validation step."
+      c: "Diffing against the live state is what `kubectl diff` does, not `--dry-run=server`."
+      d: "Nothing is stored in etcd during a dry run. The server processes the request and discards it."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_apply/"
+    tryCommand: "kubectl apply -f deployment.yaml --dry-run=server"
+
+  - id: q5
+    type: single-choice
+    prompt: "A ConfigMap named `config` in namespace `prod` has a key `app.properties`. Which command extracts that key's value and saves it to `/tmp/app.properties`?"
+    options:
+      - id: a
+        text: "`kubectl get configmap config -n prod --key app.properties > /tmp/app.properties`"
+      - id: b
+        text: "`kubectl describe configmap config -n prod > /tmp/app.properties`"
+      - id: c
+        text: "`kubectl get configmap config -n prod -o jsonpath='{.data.app\\.properties}' > /tmp/app.properties`"
+      - id: d
+        text: "`kubectl get configmap config -n prod --export -o yaml > /tmp/app.properties`"
+    correctAnswer: c
+    explanation: "`-o jsonpath='{.data.<key>}'` extracts a specific key from a ConfigMap's `.data` map. Because the key name contains a dot, it must be escaped as `app\\.properties` in the jsonpath expression. Redirecting to a file saves the extracted value."
+    wrongExplanations:
+      a: "`kubectl get` has no `--key` flag. You select fields with `-o jsonpath` or `-o go-template`."
+      b: "`kubectl describe` produces a human-readable report with headers and surrounding metadata — it is not suitable for extracting a single key's raw value."
+      d: "The `--export` flag was removed in Kubernetes 1.18. Even when it existed, it exported the whole resource, not a single key."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/jsonpath/"
+    tryCommand: "kubectl get configmap config -n prod -o jsonpath='{.data.app\\.properties}'"

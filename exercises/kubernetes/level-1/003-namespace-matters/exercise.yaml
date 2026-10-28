@@ -5,7 +5,7 @@ title: Namespace Matters
 summary: A workload landed in the wrong namespace. Run it where it belongs without disturbing its neighbours.
 track: kubernetes
 level: 1
-order: 1
+order: 17
 difficulty: intermediate
 estimatedMinutes: 12
 tags: [namespaces, deployments, services, labels, kubectl]

@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0031
+type: task
+title: Restore the Correct Revision
+summary: Inspect rollout history, identify the last good revision among several, and restore it.
+track: kubernetes
+level: 1
+order: 13
+difficulty: intermediate
+estimatedMinutes: 18
+tags: [deployments, rollback, revision-history, kubectl]
+prerequisites: [k8s-0030]
+environment:
+  profile: kind-default
+content:
+  description: description.md
+  solution: solution.md
+requirements:
+  - "Namespace: `fl-k8s-0031`"
+  - "Deployment `catalog-api` runs image `nginx:1.27-alpine` on container `api`"
+  - "Deployment `catalog-api` has 2 available replicas with a completed rollout"
+hints:
+  - "`kubectl rollout history deployment/catalog-api -n fl-k8s-0031` lists all revisions. Use `--revision=N` to inspect a specific revision's image."
+  - "The broken revision used `nginx:1.27-alpne` (typo). The revision just before it used `nginx:1.27-alpine` (correct Alpine image)."
+  - "Restore a specific revision: `kubectl rollout undo deployment/catalog-api -n fl-k8s-0031 --to-revision=2`."
+lifecycle:
+  namespaces: [fl-k8s-0031]
+  setup:
+    steps:
+      - apply: setup/catalog-api-rev1.yaml
+        waitRollout: { name: catalog-api, namespace: fl-k8s-0031 }
+      - apply: setup/catalog-api-rev2.yaml
+        waitRollout: { name: catalog-api, namespace: fl-k8s-0031 }
+      - apply: setup/catalog-api-rev3.yaml
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container api runs nginx:1.27-alpine
+    params:
+      {
+        kind: Deployment,
+        name: catalog-api,
+        namespace: fl-k8s-0031,
+        image: "nginx:1.27-alpine",
+        container: api,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment catalog-api has 2 available replicas
+    weight: 2
+    params: { name: catalog-api, namespace: fl-k8s-0031, replicas: 2 }

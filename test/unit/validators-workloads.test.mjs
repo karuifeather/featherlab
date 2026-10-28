@@ -352,3 +352,242 @@ test("label-absent passes only for an existing object without the key", async ()
   assert.equal(missing.passed, false);
   assert.match(missing.feedback, /was not found/);
 });
+
+// ── k8s.deployment-strategy ──────────────────────────────────────────────────
+
+test("deployment-strategy passes when strategy type and rollingUpdate params match", async () => {
+  const ns = NS;
+  const withStrategy = (strategy) => ({
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "billing", namespace: ns },
+    spec: { replicas: 2, strategy, template: { spec: { containers: [] } } },
+    status: {
+      observedGeneration: 1,
+      replicas: 2,
+      updatedReplicas: 2,
+      availableReplicas: 2,
+      readyReplicas: 2,
+    },
+  });
+
+  // Recreate strategy passes with just strategy check
+  const recreate = withStrategy({ type: "Recreate" });
+  assert.equal(
+    (
+      await grade([recreate], "k8s.deployment-strategy", {
+        name: "billing",
+        namespace: ns,
+        strategy: "Recreate",
+      })
+    ).passed,
+    true,
+  );
+
+  // RollingUpdate passes with matching maxSurge and maxUnavailable
+  const rolling = withStrategy({
+    type: "RollingUpdate",
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 },
+  });
+  assert.equal(
+    (
+      await grade([rolling], "k8s.deployment-strategy", {
+        name: "billing",
+        namespace: ns,
+        strategy: "RollingUpdate",
+        maxSurge: "1",
+        maxUnavailable: "0",
+      })
+    ).passed,
+    true,
+  );
+
+  // Wrong strategy type fails
+  const wrongType = await grade([recreate], "k8s.deployment-strategy", {
+    name: "billing",
+    namespace: ns,
+    strategy: "RollingUpdate",
+  });
+  assert.equal(wrongType.passed, false);
+  assert.match(wrongType.feedback, /Recreate/);
+
+  // Correct strategy type, wrong maxSurge fails
+  const wrongSurge = await grade([rolling], "k8s.deployment-strategy", {
+    name: "billing",
+    namespace: ns,
+    strategy: "RollingUpdate",
+    maxSurge: "2",
+    maxUnavailable: "0",
+  });
+  assert.equal(wrongSurge.passed, false);
+  assert.match(wrongSurge.feedback, /maxSurge/);
+
+  // RollingUpdate passes when maxUnavailable is the only param checked
+  assert.equal(
+    (
+      await grade([rolling], "k8s.deployment-strategy", {
+        name: "billing",
+        namespace: ns,
+        strategy: "RollingUpdate",
+        maxUnavailable: "0",
+      })
+    ).passed,
+    true,
+  );
+
+  // Missing deployment returns not-found feedback
+  const absent = await grade([], "k8s.deployment-strategy", {
+    name: "billing",
+    namespace: ns,
+    strategy: "RollingUpdate",
+  });
+  assert.equal(absent.passed, false);
+  assert.match(absent.feedback, /not found/i);
+});
+
+// ── k8s.deployment-not-paused ────────────────────────────────────────────────
+
+test("deployment-not-paused passes when spec.paused is absent or false, fails when true", async () => {
+  const ns = NS;
+  const withPaused = (paused) => ({
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "search", namespace: ns },
+    spec: { replicas: 2, paused, template: { spec: { containers: [] } } },
+    status: {
+      observedGeneration: 1,
+      replicas: 2,
+      updatedReplicas: 2,
+      availableReplicas: 2,
+      readyReplicas: 2,
+    },
+  });
+
+  assert.equal(
+    (
+      await grade([withPaused(false)], "k8s.deployment-not-paused", {
+        name: "search",
+        namespace: ns,
+      })
+    ).passed,
+    true,
+    "paused: false",
+  );
+  assert.equal(
+    (
+      await grade([withPaused(undefined)], "k8s.deployment-not-paused", {
+        name: "search",
+        namespace: ns,
+      })
+    ).passed,
+    true,
+    "paused: undefined",
+  );
+
+  const paused = await grade([withPaused(true)], "k8s.deployment-not-paused", {
+    name: "search",
+    namespace: ns,
+  });
+  assert.equal(paused.passed, false, "paused: true");
+  assert.match(paused.feedback, /paused/i);
+  assert.match(paused.feedback, /resume/i);
+
+  // Absent deployment fails
+  const absent = await grade([], "k8s.deployment-not-paused", { name: "search", namespace: ns });
+  assert.equal(absent.passed, false);
+  assert.match(absent.feedback, /not found/i);
+});
+
+// ── k8s.pod-template-labels ───────────────────────────────────────────────────
+
+test("pod-template-labels checks spec.template.metadata.labels, not the object's own labels", async () => {
+  const ns = NS;
+  const withTemplateLabels = (templateLabels) => ({
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "catalog", namespace: ns, labels: { app: "catalog" } },
+    spec: {
+      replicas: 2,
+      selector: { matchLabels: { app: "catalog" } },
+      template: {
+        metadata: { labels: { app: "catalog", ...templateLabels } },
+        spec: { containers: [] },
+      },
+    },
+    status: {
+      observedGeneration: 1,
+      replicas: 2,
+      updatedReplicas: 2,
+      availableReplicas: 2,
+      readyReplicas: 2,
+    },
+  });
+
+  const p = { kind: "Deployment", name: "catalog", namespace: ns, labels: { tier: "backend" } };
+
+  // Template has the label — passes
+  assert.equal(
+    (await grade([withTemplateLabels({ tier: "backend" })], "k8s.pod-template-labels", p)).passed,
+    true,
+  );
+
+  // Template missing the label — fails even if object itself has it
+  const deployWithOwnLabel = {
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "catalog", namespace: ns, labels: { app: "catalog", tier: "backend" } },
+    spec: {
+      replicas: 2,
+      template: { metadata: { labels: { app: "catalog" } }, spec: { containers: [] } },
+    },
+    status: {
+      observedGeneration: 1,
+      replicas: 2,
+      updatedReplicas: 2,
+      availableReplicas: 2,
+      readyReplicas: 2,
+    },
+  };
+  const missingInTemplate = await grade([deployWithOwnLabel], "k8s.pod-template-labels", p);
+  assert.equal(missingInTemplate.passed, false);
+  assert.match(missingInTemplate.feedback, /missing labels/i);
+
+  // Wrong value for an existing key — fails
+  const wrongValue = await grade(
+    [withTemplateLabels({ tier: "frontend" })],
+    "k8s.pod-template-labels",
+    p,
+  );
+  assert.equal(wrongValue.passed, false);
+  assert.match(wrongValue.feedback, /tier=backend/);
+
+  // Multiple required labels: all present — passes
+  const multi = {
+    kind: "Deployment",
+    name: "catalog",
+    namespace: ns,
+    labels: { tier: "backend", env: "prod" },
+  };
+  assert.equal(
+    (
+      await grade(
+        [withTemplateLabels({ tier: "backend", env: "prod" })],
+        "k8s.pod-template-labels",
+        multi,
+      )
+    ).passed,
+    true,
+  );
+
+  // Multiple required labels: one missing — fails
+  assert.equal(
+    (await grade([withTemplateLabels({ tier: "backend" })], "k8s.pod-template-labels", multi))
+      .passed,
+    false,
+  );
+
+  // Absent deployment fails
+  const absent = await grade([], "k8s.pod-template-labels", p);
+  assert.equal(absent.passed, false);
+  assert.match(absent.feedback, /not found/i);
+});

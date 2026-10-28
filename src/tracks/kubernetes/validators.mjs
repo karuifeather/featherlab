@@ -535,6 +535,101 @@ const serviceSelects = {
   },
 };
 
+/**
+ * k8s.deployment-strategy — passes when a Deployment's update strategy matches the
+ * expected type, and optionally when maxSurge and maxUnavailable match.
+ * maxSurge / maxUnavailable values are compared as strings so both integers ("1") and
+ * percentages ("25%") round-trip correctly through the Kubernetes API.
+ */
+const deploymentStrategy = resourceValidator({
+  type: "k8s.deployment-strategy",
+  kinds: ["Deployment"],
+  params: {
+    strategy: {
+      type: "string",
+      required: true,
+      enum: ["RollingUpdate", "Recreate"],
+    },
+    maxSurge: { type: "string", minLength: 1, maxLength: 20 },
+    maxUnavailable: { type: "string", minLength: 1, maxLength: 20 },
+  },
+  evaluate(deployment, p, ref) {
+    const actual = deployment.spec?.strategy?.type;
+    if (actual !== p.strategy)
+      return {
+        passed: false,
+        feedback: `${describe(ref)} has strategy "${actual ?? "(none)"}"; expected "${p.strategy}".`,
+      };
+    if (p.strategy === "Recreate") {
+      return { passed: true, feedback: `${describe(ref)} uses the Recreate strategy.` };
+    }
+    const ru = deployment.spec?.strategy?.rollingUpdate ?? {};
+    if (p.maxSurge !== undefined) {
+      const actualSurge = String(ru.maxSurge ?? "");
+      if (actualSurge !== p.maxSurge)
+        return {
+          passed: false,
+          feedback: `${describe(ref)} has maxSurge "${actualSurge || "(not set)"}"; expected "${p.maxSurge}".`,
+        };
+    }
+    if (p.maxUnavailable !== undefined) {
+      const actualUnavail = String(ru.maxUnavailable ?? "");
+      if (actualUnavail !== p.maxUnavailable)
+        return {
+          passed: false,
+          feedback: `${describe(ref)} has maxUnavailable "${actualUnavail || "(not set)"}"; expected "${p.maxUnavailable}".`,
+        };
+    }
+    return { passed: true, feedback: `${describe(ref)} has the correct RollingUpdate strategy.` };
+  },
+});
+
+/**
+ * k8s.deployment-not-paused — passes when a Deployment's spec.paused is absent or false.
+ * Useful as a final guard on exercises where the learner must resume a paused rollout.
+ */
+const deploymentNotPaused = resourceValidator({
+  type: "k8s.deployment-not-paused",
+  kinds: ["Deployment"],
+  params: {},
+  evaluate(deployment, _p, ref) {
+    const paused = deployment.spec?.paused === true;
+    return {
+      passed: !paused,
+      feedback: paused
+        ? `${describe(ref)} is paused. Resume it with \`kubectl rollout resume deployment/${ref.name} -n ${ref.namespace}\`.`
+        : `${describe(ref)} is not paused.`,
+    };
+  },
+});
+
+/**
+ * k8s.pod-template-labels — passes when a workload's Pod template includes all expected
+ * labels. Checks spec.template.metadata.labels for Deployments/ReplicaSets/etc., not the
+ * workload's own metadata.labels. Use k8s.labels for the object's own labels.
+ */
+const podTemplateLabelsCheck = resourceValidator({
+  type: "k8s.pod-template-labels",
+  kinds: POD_SPEC_KINDS.filter((k) => k !== "Pod"),
+  params: { labels: STRING_MAP },
+  evaluate(resource, p, ref) {
+    const tmplLabels = resource.spec?.template?.metadata?.labels ?? {};
+    const missing = Object.entries(p.labels).filter(([k, v]) => tmplLabels[k] !== v);
+    if (missing.length > 0) {
+      const detail = missing.map(([k, v]) => `"${k}=${v}"`).join(", ");
+      return {
+        passed: false,
+        feedback: `${describe(ref)}'s Pod template is missing labels: ${detail}.`,
+        details: { expected: p.labels, actual: tmplLabels },
+      };
+    }
+    return {
+      passed: true,
+      feedback: `${describe(ref)}'s Pod template has the required labels.`,
+    };
+  },
+});
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -554,4 +649,7 @@ export const kubernetesValidators = Object.freeze([
   containerEnv,
   configMapMounted,
   serviceSelects,
+  deploymentStrategy,
+  deploymentNotPaused,
+  podTemplateLabelsCheck,
 ]);

@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: k8s-0030
+type: task
+title: Guided Rollback
+summary: Roll back a Deployment whose latest image tag is broken back to its last working revision.
+track: kubernetes
+level: 1
+order: 12
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [deployments, rollback, undo, revision-history, kubectl]
+prerequisites: [k8s-0029]
+environment:
+  profile: kind-default
+content:
+  description: description.md
+  solution: solution.md
+requirements:
+  - "Namespace: `fl-k8s-0030`"
+  - "Deployment `gateway` runs image `nginx:1.27` on container `proxy`"
+  - "Deployment `gateway` has 2 available replicas with a completed rollout"
+hints:
+  - "Run `kubectl rollout history deployment/gateway -n fl-k8s-0030` to list revisions. `kubectl rollout history deployment/gateway -n fl-k8s-0030 --revision=1` shows revision 1 details including the image."
+  - "`kubectl rollout undo deployment/gateway -n fl-k8s-0030` rolls back to the previous revision. You can also target a specific revision: `kubectl rollout undo deployment/gateway -n fl-k8s-0030 --to-revision=1`."
+  - "After the rollback, run `kubectl rollout status deployment/gateway -n fl-k8s-0030` to confirm all 2 replicas are available."
+lifecycle:
+  namespaces: [fl-k8s-0030]
+  setup:
+    steps:
+      - apply: setup/gateway-rev1.yaml
+        waitRollout: { name: gateway, namespace: fl-k8s-0030 }
+      - apply: setup/gateway-rev2.yaml
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container proxy runs nginx:1.27
+    params:
+      {
+        kind: Deployment,
+        name: gateway,
+        namespace: fl-k8s-0030,
+        image: "nginx:1.27",
+        container: proxy,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment gateway has 2 available replicas
+    weight: 2
+    params: { name: gateway, namespace: fl-k8s-0030, replicas: 2 }

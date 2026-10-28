@@ -1,0 +1,62 @@
+schemaVersion: 1
+id: k8s-0028
+type: task
+title: Release Metadata and Revision History
+summary: Update a Deployment image and annotate the change-cause so the rollout history stays traceable.
+track: kubernetes
+level: 1
+order: 10
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, annotations, change-cause, rollout-history, kubectl]
+prerequisites: [k8s-0027]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0028`"
+  - "Deployment `reports` runs image `nginx:1.27-alpine` on container `app`"
+  - "Deployment `reports` carries annotation `kubernetes.io/change-cause: upgrade to nginx 1.27-alpine`"
+  - "Deployment `reports` has 2 available replicas with a completed rollout"
+
+hints:
+  - "Update the image first: `kubectl set image deployment/reports app=nginx:1.27-alpine -n fl-k8s-0028`."
+  - "Annotate the Deployment: `kubectl annotate deployment reports -n fl-k8s-0028 kubernetes.io/change-cause='upgrade to nginx 1.27-alpine'`."
+  - "View the history: `kubectl rollout history deployment/reports -n fl-k8s-0028`. The latest revision's CHANGE-CAUSE column should show your annotation."
+
+lifecycle:
+  namespaces: [fl-k8s-0028]
+  setup:
+    manifests: [setup/reports.yaml]
+
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container app runs nginx:1.27-alpine
+    params:
+      {
+        kind: Deployment,
+        name: reports,
+        namespace: fl-k8s-0028,
+        image: "nginx:1.27-alpine",
+        container: app,
+      }
+  - id: change-cause
+    type: k8s.annotations
+    label: Deployment reports carries the change-cause annotation
+    params:
+      kind: Deployment
+      name: reports
+      namespace: fl-k8s-0028
+      annotations:
+        "kubernetes.io/change-cause": "upgrade to nginx 1.27-alpine"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment reports has 2 available replicas
+    weight: 2
+    params: { name: reports, namespace: fl-k8s-0028, replicas: 2 }

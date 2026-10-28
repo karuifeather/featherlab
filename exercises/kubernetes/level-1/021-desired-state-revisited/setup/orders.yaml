@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: fl-k8s-0021
+  labels:
+    app: orders
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: api
+          image: nginx:1.27

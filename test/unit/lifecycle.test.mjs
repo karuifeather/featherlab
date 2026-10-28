@@ -343,6 +343,37 @@ test("a partial setup failure reports progress and can simply be re-run", async 
   assert.ok(cluster.find("Pod", "two", "fl-demo-0001"));
 });
 
+test("a partial setup.steps failure reports progress and can be re-run", async () => {
+  const cluster = createFakeCluster();
+  cluster.failNextApplyAfter = 2; // namespace create + step-1 apply succeed; step-2 apply fails
+  const { service } = appFor(
+    exerciseFiles(
+      "001-two-steps",
+      {
+        lifecycle: {
+          namespaces: [nsOf("demo-0001")],
+          setup: { steps: [{ apply: "setup/s1.yaml" }, { apply: "setup/s2.yaml" }] },
+        },
+      },
+      { "setup/s1.yaml": pod("step-one"), "setup/s2.yaml": pod("step-two") },
+    ),
+    cluster,
+  );
+  await assert.rejects(service.activate("demo-0001"), (error) => {
+    assert.ok(error instanceof LifecycleError);
+    assert.equal(error.details.step, "apply setup step 2 resource 1");
+    assert.ok(error.details.completed.includes("apply setup step 1 resource 1"));
+    return true;
+  });
+  assert.ok(cluster.find("Pod", "step-one", "fl-demo-0001"));
+  assert.equal(cluster.find("Pod", "step-two", "fl-demo-0001"), undefined);
+
+  const { steps } = await service.activate("demo-0001");
+  assert.ok(steps.includes("delete Namespace/fl-demo-0001"), "partial state is torn down");
+  assert.ok(steps.includes("apply setup step 2 resource 1"));
+  assert.ok(cluster.find("Pod", "step-two", "fl-demo-0001"));
+});
+
 test("a timeout surfaces as EnvironmentError(timeout) and reports completed steps", async () => {
   const cluster = createFakeCluster();
   const original = cluster.run;

@@ -5,12 +5,12 @@ introduced one or two at a time, practised again in different situations, and on
 combined or broken on purpose. Difficulty comes from growing independence and from combining
 familiar concepts, never from mechanisms the learner has not met yet.
 
-| Level | Theme                                                                  | Exercises                     | Status                                         |
-| ----- | ---------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------- |
-| 0     | Understand and operate core resources                                  | 10                            | complete foundations course                    |
-| 1     | Configure and manage workloads                                         | 2 (k8s-0003, 0006)            | first labs; to be expanded in later milestones |
-| 2     | Diagnose and recover broken workloads                                  | 6 (k8s-0004, 0005, 0007–0010) | first labs; to be expanded                     |
-| 3+    | Scheduling, networking, storage, cluster administration, CKS hardening | none yet                      | planned                                        |
+| Level | Theme                                                                  | Exercises                      | Status                             |
+| ----- | ---------------------------------------------------------------------- | ------------------------------ | ---------------------------------- |
+| 0     | Understand and operate core resources                                  | 10                             | complete foundations course        |
+| 1     | Configure and manage workloads                                         | 18 (k8s-0019–0034, 0003, 0006) | M5.3 deployment lifecycle complete |
+| 2     | Diagnose and recover broken workloads                                  | 6 (k8s-0004, 0005, 0007–0010)  | first labs; to be expanded         |
+| 3+    | Scheduling, networking, storage, cluster administration, CKS hardening | none yet                       | planned                            |
 
 All scenarios, statements, setup manifests, hints, solutions and validators are original
 FeatherLab content. They are not endorsed by the CNCF and do not reproduce certification exam
@@ -146,10 +146,103 @@ A prerequisite may never sit at a higher level than its dependent (content valid
 it). Level 2's entry lab needs only the Level 0 foundations; its mastery lab also needs both
 Level 1 labs. No exercise was unsafe to relocate.
 
-Deliberately deferred to later levels: rollouts and rollback (`kubectl rollout undo`), Services
-in depth, Jobs and CronJobs, Secrets, multi-container patterns, scheduling (affinity, taints),
-storage, NetworkPolicy, RBAC, cluster administration (kubeadm, etcd, upgrades) and CKS
-hardening.
+## Level 1: Deployment Lifecycle & Rollout Fluency (M5.3)
+
+Sixteen task exercises and six knowledge checks organised into six circuits of increasing independence. All exercises are `intermediate` except the capstone (k8s-0034, `advanced`). Pre-existing Level 1 labs k8s-0003 and k8s-0006 are placed after the sequence (order 17–18) and still require only the Level 0 challenge.
+
+### Circuit A — Understand Deployment Behaviour (labs 0019–0021, KQ1)
+
+| Order | ID       | Title                      | Difficulty   | Min | New concepts                                                   |
+| ----- | -------- | -------------------------- | ------------ | --- | -------------------------------------------------------------- |
+| 1     | k8s-0019 | Meet the ReplicaSet        | intermediate | 10  | Deployment → ReplicaSet → Pod, template labels, patch          |
+| 2     | k8s-0020 | Metadata and Pod Templates | intermediate | 10  | Object labels vs pod-template labels, independent label sets   |
+| 3     | k8s-0021 | Desired State Revisited    | intermediate | 10  | Scale without new revision, annotations vs pod-template labels |
+| 3.5   | KQ1      | Deployment Anatomy         | intermediate | 5   | knowledge check (6 questions)                                  |
+
+### Circuit B — Make Safe Changes (labs 0022–0025, KQ2)
+
+| Order | ID       | Title                          | Difficulty   | Min | New concepts                                        |
+| ----- | -------- | ------------------------------ | ------------ | --- | --------------------------------------------------- |
+| 4     | k8s-0022 | Generate a Deployment Manifest | intermediate | 12  | `--dry-run=client -o yaml`, manifest editing, apply |
+| 5     | k8s-0023 | Update an Image                | intermediate | 8   | `kubectl set image`, container name, rolling update |
+| 6     | k8s-0024 | Observe a Rolling Update       | intermediate | 10  | ReplicaSet pair during rollout, `rollout status`    |
+| 7     | k8s-0025 | Preview Before Applying        | intermediate | 12  | `kubectl diff`, dry-run=server, exit code semantics |
+| 7.5   | KQ2      | Manifest and Command Fluency   | intermediate | 6   | knowledge check (6 questions)                       |
+
+### Circuit C — Rollout Strategies and History (labs 0026–0029, KQ3)
+
+| Order | ID       | Title                                 | Difficulty   | Min | New concepts                                               |
+| ----- | -------- | ------------------------------------- | ------------ | --- | ---------------------------------------------------------- |
+| 8     | k8s-0026 | RollingUpdate vs Recreate             | intermediate | 12  | strategy types, `spec.strategy`, maxSurge, maxUnavailable  |
+| 9     | k8s-0027 | RollingUpdate Controls                | intermediate | 10  | integer vs percentage params, speed/availability trade-off |
+| 10    | k8s-0028 | Release Metadata and Revision History | intermediate | 12  | `kubernetes.io/change-cause`, `rollout history`            |
+| 11    | k8s-0029 | Pause and Resume                      | intermediate | 12  | `rollout pause/resume`, batching changes into one revision |
+| 11.5  | KQ3      | Rollout Strategies                    | intermediate | 6   | knowledge check (6 questions)                              |
+
+### Circuit D — Recovery (labs 0030–0032, KQ4)
+
+| Order | ID       | Title                          | Difficulty   | Min | New concepts                                                |
+| ----- | -------- | ------------------------------ | ------------ | --- | ----------------------------------------------------------- |
+| 12    | k8s-0030 | Guided Rollback                | intermediate | 15  | `rollout undo`, broken image, rollback to previous          |
+| 13    | k8s-0031 | Restore the Correct Revision   | intermediate | 18  | `--to-revision=N`, multi-revision history, revision inspect |
+| 14    | k8s-0032 | Restart, Update, or Roll Back? | intermediate | 15  | diagnosis first, `revisionHistoryLimit`, fix-forward        |
+| 14.5  | KQ4      | Rollback and Recovery          | intermediate | 6   | knowledge check (6 questions)                               |
+
+### Circuit E — API Compatibility (lab 0033, KQ5)
+
+| Order | ID       | Title                           | Difficulty   | Min | New concepts                                           |
+| ----- | -------- | ------------------------------- | ------------ | --- | ------------------------------------------------------ |
+| 15    | k8s-0033 | Repair an Outdated Manifest     | intermediate | 15  | `apps/v1beta1` removal, `spec.selector` required in v1 |
+| 15.5  | KQ5      | API Compatibility and Manifests | intermediate | 5   | knowledge check (5 questions)                          |
+
+### Circuit F — Level 1 Mastery (lab 0034, KQ6)
+
+| Order | ID       | Title                        | Difficulty   | Min | New concepts                                        |
+| ----- | -------- | ---------------------------- | ------------ | --- | --------------------------------------------------- |
+| 16    | k8s-0034 | Release Management Challenge | advanced     | 20  | capstone: paused + broken + multi-revision rollback |
+| 17.5  | KQ6      | Level 1 Review               | intermediate | 8   | knowledge check (6 questions)                       |
+
+### New validators (M5.3)
+
+Three validators were added to `src/tracks/kubernetes/validators.mjs`:
+
+| Validator                   | Checks                                                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `k8s.deployment-strategy`   | `spec.strategy.type` (RollingUpdate or Recreate), and optionally `maxSurge` and `maxUnavailable` (compared as strings to handle both integers and percentages) |
+| `k8s.deployment-not-paused` | `spec.paused` is absent or false; includes a resume hint in the feedback                                                                                       |
+| `k8s.pod-template-labels`   | `spec.template.metadata.labels` on workloads (Deployment, StatefulSet, etc.) — distinct from `k8s.labels` which checks the object's own `metadata.labels`      |
+
+### setup.steps lifecycle extension (M5.3)
+
+Rollback labs (0030, 0031, 0034) need multiple rollout revisions created at setup time. The `lifecycle.setup.steps` extension applies manifests in order and can wait for each rollout to complete:
+
+```yaml
+lifecycle:
+  namespaces: [fl-k8s-0031]
+  setup:
+    manifests: [setup/rev1.yaml]
+    steps:
+      - apply: setup/rev2.yaml
+        waitRollout: { name: catalog-api, namespace: fl-k8s-0031 }
+      - apply: setup/rev3.yaml # no waitRollout — broken image won't complete
+```
+
+This keeps the exercise reset idempotent: reset deletes and recreates the namespace, then setup replays all steps from scratch.
+
+### How guidance decreases across Level 1
+
+| Circuit       | What the learner gets                                         |
+| ------------- | ------------------------------------------------------------- |
+| A (0019–0021) | concept explained, commands named in description, docs link   |
+| B (0022–0025) | the goal and the workflow; specific command options in hints  |
+| C (0026–0029) | the target state and strategy; parameters only in hints       |
+| D (0030–0032) | symptoms and a diagnosis prompt; recovery method in hints     |
+| E (0033)      | the error class; fix procedure in hints                       |
+| F (0034)      | end state only; nothing named — combines all preceding skills |
+
+Deliberately deferred to later levels: Services in depth, Jobs and CronJobs, Secrets,
+multi-container patterns, scheduling (affinity, taints), storage, NetworkPolicy, RBAC,
+cluster administration (kubeadm, etcd, upgrades) and CKS hardening.
 
 ## Ownership, setup and reset
 
@@ -178,6 +271,22 @@ them. No exercise has resources outside its namespaces.
 | 0008 | fl-k8s-0008                      | ConfigMap `gateway-config` with a typo; Deployment `gateway` mounting it                  |
 | 0009 | fl-k8s-0009                      | `orders` with a mistyped Service selector; `payments` referencing a missing ConfigMap     |
 | 0010 | fl-k8s-0010, fl-k8s-0010-legacy  | `inventory-api` (bad tag, probe on a missing port) and Service; legacy Deployment         |
+| 0019 | fl-k8s-0019                      | Deployment `catalog` (2 replicas, `nginx:1.27`, no tier label)                            |
+| 0020 | fl-k8s-0020                      | Deployment `frontend` (2 replicas; `env=staging` on Deployment but not Pod template)      |
+| 0021 | fl-k8s-0021                      | Deployment `orders` (1 replica, `nginx:1.27`)                                             |
+| 0022 | fl-k8s-0022                      | empty (learner creates the Deployment)                                                    |
+| 0023 | fl-k8s-0023                      | Deployment `storefront` (2 replicas, `nginx:1.27`, container `web`)                       |
+| 0024 | fl-k8s-0024                      | Deployment `payment-api` (3 replicas, `nginx:1.27`, container `app`)                      |
+| 0025 | fl-k8s-0025                      | Deployment `notification-svc` (2 replicas, `nginx:1.27`, container `web`)                 |
+| 0026 | fl-k8s-0026                      | Deployment `billing` (3 replicas, strategy `Recreate`)                                    |
+| 0027 | fl-k8s-0027                      | Deployment `inventory` (4 replicas, default RollingUpdate)                                |
+| 0028 | fl-k8s-0028                      | Deployment `reports` (2 replicas, `nginx:1.27`, change-cause `initial deploy nginx:1.27`) |
+| 0029 | fl-k8s-0029                      | Deployment `search` (2 replicas, `nginx:1.27`, `spec.paused: true`)                       |
+| 0030 | fl-k8s-0030                      | Deployment `gateway` rev 1 (`nginx:1.27`), then rev 2 (`nginx:1.27-alpne`, broken typo)   |
+| 0031 | fl-k8s-0031                      | Deployment `catalog-api` rev 1 → rev 2 (alpine) → rev 3 (`nginx:1.27-alpne`, broken)      |
+| 0032 | fl-k8s-0032                      | Deployment `auth` (2 replicas, `nginx:1.27-alpne`, `revisionHistoryLimit: 0`)             |
+| 0033 | fl-k8s-0033                      | ConfigMap `legacy-manifest` with `apps/v1beta1` Deployment manifest as data key           |
+| 0034 | fl-k8s-0034                      | Deployment `platform` rev 1 → rev 2 (alpine) → rev 3 (broken + `spec.paused: true`)       |
 
 ## Validators and known limitations
 

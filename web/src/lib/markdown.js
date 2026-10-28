@@ -17,7 +17,9 @@ export function parseInline(text) {
       try {
         const u = new URL(match[2]);
         if (u.protocol === "https:" && !u.username && !u.password) href = match[2];
-      } catch {} // eslint-disable-line no-empty
+      } catch {
+        /* invalid URL — treat as plain text */
+      }
       if (href) {
         parts.push({ type: "link", text: match[1], href });
       } else {

@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0025
+type: task
+title: Preview Before Applying
+summary: Use kubectl diff to preview a manifest change before applying it to the cluster.
+track: kubernetes
+level: 1
+order: 7
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, diff, dry-run, kubectl-apply, manifests]
+prerequisites: [k8s-0024]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0025`"
+  - "Deployment `notification-svc` runs image `nginx:1.27-alpine` on container `web`"
+  - "Deployment `notification-svc` has 2 available replicas with a completed rollout"
+
+hints:
+  - "Get the current manifest: `kubectl get deployment notification-svc -n fl-k8s-0025 -o yaml > /tmp/notif.yaml`. Edit the image in the file, then run `kubectl diff -f /tmp/notif.yaml` to preview what would change."
+  - "`kubectl diff` exits 0 if there are no differences and **1** if there are differences (not an error). A diff output of `+nginx:1.27-alpine` and `-nginx:1.27` confirms the right change is staged."
+  - "Apply with `kubectl apply -f /tmp/notif.yaml`, then verify: `kubectl rollout status deployment/notification-svc -n fl-k8s-0025`."
+
+lifecycle:
+  namespaces: [fl-k8s-0025]
+  setup:
+    manifests: [setup/notification-svc.yaml]
+
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container web runs nginx:1.27-alpine
+    params:
+      {
+        kind: Deployment,
+        name: notification-svc,
+        namespace: fl-k8s-0025,
+        image: "nginx:1.27-alpine",
+        container: web,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment notification-svc has 2 available replicas
+    weight: 2
+    params: { name: notification-svc, namespace: fl-k8s-0025, replicas: 2 }

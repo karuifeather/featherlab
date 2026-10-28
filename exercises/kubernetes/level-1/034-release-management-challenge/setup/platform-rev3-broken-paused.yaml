@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform
+  namespace: fl-k8s-0034
+  labels:
+    app: platform
+  annotations:
+    kubernetes.io/change-cause: "attempted hotfix nginx:1.27-alpne"
+spec:
+  replicas: 2
+  paused: true
+  selector:
+    matchLabels:
+      app: platform
+  template:
+    metadata:
+      labels:
+        app: platform
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: app
+          image: nginx:1.27-alpne

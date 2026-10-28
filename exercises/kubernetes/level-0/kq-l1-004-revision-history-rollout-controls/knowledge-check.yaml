@@ -1,0 +1,133 @@
+schemaVersion: 1
+id: kq-k8s-l1-004
+activityType: knowledge-check
+title: Rollback and Recovery
+summary: Test your understanding of rollback mechanics, revision history, and how to choose the right recovery action.
+track: kubernetes
+level: 1
+order: 14.5
+difficulty: intermediate
+estimatedMinutes: 6
+tags: [deployments, rollback, revision-history, troubleshooting]
+relatedLabs: [k8s-0030, k8s-0031, k8s-0032]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl rollout undo deployment/api -n ns` revert to by default (no flags)?"
+    options:
+      - id: a
+        text: The very first revision ever recorded
+      - id: b
+        text: The revision just before the current one (REVISION-1)
+      - id: c
+        text: The revision with the lowest revision number still in history
+      - id: d
+        text: A randomly selected previous revision
+    correctAnswer: b
+    explanation: "`kubectl rollout undo` without `--to-revision` always rolls back to the immediately preceding revision. Kubernetes tracks this as REVISION-1 relative to the current revision. If the current revision is 4, you land on 3."
+    wrongExplanations:
+      a: "Jumping to the very first revision requires `--to-revision=1`. The bare `undo` only goes one step back."
+      c: "There is no logic to select the lowest revision number. `undo` targets the specific previous revision, which may not be the lowest."
+      d: "Rollback is deterministic, not random. It always targets the immediately preceding revision unless you specify `--to-revision`."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment"
+
+  - id: q2
+    type: single-choice
+    prompt: "What does `kubectl rollout undo deployment/api -n ns --to-revision=0` do?"
+    options:
+      - id: a
+        text: Reverts the Deployment to its initial empty state
+      - id: b
+        text: Rolls back to the previous revision, same as not passing --to-revision at all
+      - id: c
+        text: Prints an error because 0 is not a valid revision
+      - id: d
+        text: Deletes all revision history
+    correctAnswer: b
+    explanation: "`--to-revision=0` is a sentinel value that means 'the revision before the current one' — it is equivalent to omitting the flag entirely. This is documented behaviour, not an error."
+    wrongExplanations:
+      a: "Revision 0 does not mean 'empty state'. It is a sentinel for the previous revision."
+      c: "0 is accepted as a valid value; kubectl does not error. It has the same effect as omitting `--to-revision`."
+      d: "No rollout command deletes revision history. History retention is controlled by `revisionHistoryLimit` on the Deployment spec."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment"
+
+  - id: q3
+    type: single-choice
+    prompt: "A Deployment is created with `revisionHistoryLimit: 0`. A learner tries `kubectl rollout undo`. What happens?"
+    options:
+      - id: a
+        text: The rollback succeeds because Kubernetes always keeps the previous ReplicaSet
+      - id: b
+        text: The rollback fails because no previous ReplicaSet is retained; there is nothing to roll back to
+      - id: c
+        text: The rollback succeeds but resets the image to the Kubernetes default (nginx:latest)
+      - id: d
+        text: The command prints a warning and applies the rollback anyway using etcd history
+    correctAnswer: b
+    explanation: "`revisionHistoryLimit: 0` tells Kubernetes not to retain any old ReplicaSets after a successful rollout. Without retained ReplicaSets there is no previous template to restore, so `kubectl rollout undo` reports that there is no revision to roll back to."
+    wrongExplanations:
+      a: "When `revisionHistoryLimit` is 0, Kubernetes garbage-collects old ReplicaSets immediately after a rollout completes. There is no previous revision available."
+      c: "There is no 'default image'. When history is exhausted, the command fails rather than inventing a fallback."
+      d: "kubectl rollout undo does not consult etcd audit logs or history. It only works with retained ReplicaSets."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#revision-history-limit"
+
+  - id: q4
+    type: single-choice
+    prompt: "What is the key difference between `kubectl rollout restart` and `kubectl rollout undo`?"
+    options:
+      - id: a
+        text: restart is faster because it skips the ReplicaSet creation step
+      - id: b
+        text: restart creates new Pods with the same current template; undo restores a previous Pod template
+      - id: c
+        text: undo works only on Deployments; restart works on any workload type
+      - id: d
+        text: restart requires a cluster admin role; undo does not
+    correctAnswer: b
+    explanation: "`kubectl rollout restart` triggers a rolling replacement of Pods using the **same** current Pod template — the image and configuration do not change. It is used to pick up changes from mounted Secrets/ConfigMaps or to refresh stale Pods. `kubectl rollout undo` restores a **previous** revision's Pod template, changing the image and other template fields back to what they were."
+    wrongExplanations:
+      a: "Both operations create new ReplicaSets or update ReplicaSet scale. restart is not faster — it still performs a full rolling update."
+      c: "Both commands support Deployments, DaemonSets, and StatefulSets. The scope is not what distinguishes them."
+      d: "Both commands require equivalent RBAC permissions (update on deployments/rollout). Neither inherently needs cluster-admin."
+    docRef: "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_restart/"
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which TWO kubectl commands are most useful for diagnosing why Pods are stuck in `ImagePullBackOff`? (Select two.)"
+    options:
+      - id: a
+        text: kubectl describe pod <pod-name> -n <ns>
+      - id: b
+        text: kubectl get events -n <ns>
+      - id: c
+        text: kubectl rollout history deployment/<name> -n <ns>
+      - id: d
+        text: kubectl top pod -n <ns>
+    correctAnswers: [a, b]
+    explanation: "`kubectl describe pod` shows the Events section at the bottom, which includes the exact pull error message (e.g., 'failed to pull image ... not found'). `kubectl get events` lists all namespace events including image-pull failures with timestamps. Together they give both the full error detail and the timeline."
+    wrongExplanations:
+      c: "`kubectl rollout history` shows revision metadata, not why a Pod is in a failed state. It cannot report on image-pull errors."
+      d: "`kubectl top pod` shows CPU and memory usage from the metrics server. Pods in ImagePullBackOff never start, so they consume no measurable resources and would not appear in top output."
+    docRef: "https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/"
+
+  - id: q6
+    type: single-choice
+    prompt: "What does `kubectl rollout history deployment/api -n ns --revision=2` display?"
+    options:
+      - id: a
+        text: The diff between revision 2 and the current revision
+      - id: b
+        text: The full Pod template for revision 2, including container images and labels
+      - id: c
+        text: Only the change-cause annotation for revision 2
+      - id: d
+        text: The list of Pods that were running during revision 2
+    correctAnswer: b
+    explanation: "With `--revision=N`, `kubectl rollout history` outputs the complete Pod template stored in the ReplicaSet for that revision — including container names, images, labels, environment variables, and other template fields. This lets you inspect exactly what was deployed at that revision before deciding whether to restore it."
+    wrongExplanations:
+      a: "There is no built-in diff output. You would need to capture two `--revision=N` outputs and diff them manually."
+      c: "The change-cause annotation is shown in the basic `history` output (without `--revision`). The `--revision=N` form shows the full template, of which the annotation is just one part."
+      d: "Past Pod instances are not retained in revision history. The history stores the Pod *template*, not the Pods that ran."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#checking-rollout-history-of-a-deployment"

@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0021
+type: task
+title: Desired State Revisited
+summary: Scale a Deployment and document the reason with an annotation without creating an unnecessary new rollout revision.
+track: kubernetes
+level: 1
+order: 3
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [deployments, scaling, annotations, desired-state, kubectl]
+prerequisites: [k8s-0020]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0021`"
+  - "Deployment `orders` has 4 desired replicas and a completed rollout"
+  - "Deployment `orders` carries the annotation `featherlab.dev/scale-reason: high-availability`"
+
+hints:
+  - "`kubectl scale deployment orders -n fl-k8s-0021 --replicas=4` changes the replica count. Scaling changes `spec.replicas` but does NOT modify the Pod template, so no new ReplicaSet (revision) is created."
+  - "Add an annotation to the Deployment object itself (not the Pod template): `kubectl annotate deployment orders -n fl-k8s-0021 featherlab.dev/scale-reason=high-availability`."
+  - "Check the rollout with `kubectl rollout status deployment/orders -n fl-k8s-0021` and verify the annotation with `kubectl get deployment orders -n fl-k8s-0021 -o yaml | grep scale-reason`."
+
+lifecycle:
+  namespaces: [fl-k8s-0021]
+  setup:
+    manifests: [setup/orders.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment orders has 4 available replicas
+    weight: 2
+    params: { name: orders, namespace: fl-k8s-0021, replicas: 4 }
+  - id: desired-replicas
+    type: k8s.replicas-desired
+    label: Deployment orders spec.replicas is 4
+    params: { kind: Deployment, name: orders, namespace: fl-k8s-0021, replicas: 4 }
+  - id: scale-annotation
+    type: k8s.annotations
+    label: Deployment orders carries the scale-reason annotation
+    params:
+      kind: Deployment
+      name: orders
+      namespace: fl-k8s-0021
+      annotations:
+        featherlab.dev/scale-reason: high-availability

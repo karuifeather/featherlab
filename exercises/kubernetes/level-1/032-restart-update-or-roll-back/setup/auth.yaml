@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: fl-k8s-0032
+  labels:
+    app: auth
+spec:
+  replicas: 2
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: server
+          image: nginx:1.27-alpne

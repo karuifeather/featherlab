@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: fl-k8s-0027
+  labels:
+    app: inventory
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: inventory
+  template:
+    metadata:
+      labels:
+        app: inventory
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: app
+          image: nginx:1.27

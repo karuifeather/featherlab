@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  namespace: fl-k8s-0029
+  labels:
+    app: search
+spec:
+  replicas: 2
+  paused: true
+  selector:
+    matchLabels:
+      app: search
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: app
+          image: nginx:1.27

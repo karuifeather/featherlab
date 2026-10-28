@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: k8s-0020
+type: task
+title: Metadata and Pod Templates
+summary: Fix a Deployment whose Pod template is missing a label that selector-aware tools expect.
+track: kubernetes
+level: 1
+order: 2
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [deployments, pod-templates, labels, selectors, kubectl]
+prerequisites: [k8s-0019]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0020`"
+  - "Deployment `frontend` has 2 available replicas and a completed rollout"
+  - "The Pod template carries the label `env=staging`"
+
+hints:
+  - "Run `kubectl get deployment frontend -n fl-k8s-0020 -o yaml` and compare `metadata.labels` with `spec.template.metadata.labels`. The Deployment itself has `env=staging`, but the Pods it creates do not."
+  - "Edit the Pod template: `kubectl edit deployment frontend -n fl-k8s-0020`, then find the `spec.template.metadata.labels` section and add `env: staging` there."
+  - "After saving, run `kubectl rollout status deployment/frontend -n fl-k8s-0020` to confirm the rollout completes."
+
+lifecycle:
+  namespaces: [fl-k8s-0020]
+  setup:
+    manifests: [setup/frontend.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment frontend has 2 available replicas
+    weight: 2
+    params: { name: frontend, namespace: fl-k8s-0020, replicas: 2 }
+  - id: env-label
+    type: k8s.pod-template-labels
+    label: Pod template carries env=staging
+    params:
+      kind: Deployment
+      name: frontend
+      namespace: fl-k8s-0020
+      labels: { env: staging }

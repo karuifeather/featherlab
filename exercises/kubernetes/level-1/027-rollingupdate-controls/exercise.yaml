@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0027
+type: task
+title: RollingUpdate Controls
+summary: Tune a Deployment's RollingUpdate parameters to control the trade-off between rollout speed and availability.
+track: kubernetes
+level: 1
+order: 9
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [deployments, rolling-update, maxsurge, maxunavailable, kubectl]
+prerequisites: [k8s-0026]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0027`"
+  - "Deployment `inventory` uses RollingUpdate with `maxSurge: 1` and `maxUnavailable: 1`"
+  - "Deployment `inventory` has 4 available replicas with a completed rollout"
+
+hints:
+  - "Check the current settings: `kubectl get deployment inventory -n fl-k8s-0027 -o jsonpath='{.spec.strategy}'`."
+  - 'Patch with: `kubectl patch deployment inventory -n fl-k8s-0027 --type=merge -p ''{"spec":{"strategy":{"rollingUpdate":{"maxSurge":1,"maxUnavailable":1}}}}''`'
+  - "After patching, trigger a rollout (e.g., touch the Pod template) to see the new settings in action, or just confirm with `kubectl get deployment inventory -n fl-k8s-0027 -o yaml`."
+
+lifecycle:
+  namespaces: [fl-k8s-0027]
+  setup:
+    manifests: [setup/inventory.yaml]
+
+checks:
+  - id: strategy
+    type: k8s.deployment-strategy
+    label: Deployment inventory uses RollingUpdate with maxSurge=1 and maxUnavailable=1
+    weight: 2
+    params:
+      {
+        name: inventory,
+        namespace: fl-k8s-0027,
+        strategy: RollingUpdate,
+        maxSurge: "1",
+        maxUnavailable: "1",
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment inventory has 4 available replicas
+    params: { name: inventory, namespace: fl-k8s-0027, replicas: 4 }

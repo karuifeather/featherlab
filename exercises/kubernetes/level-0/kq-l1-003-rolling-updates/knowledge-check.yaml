@@ -1,0 +1,133 @@
+schemaVersion: 1
+id: kq-k8s-l1-003
+activityType: knowledge-check
+title: Rollout Strategies
+summary: Test your understanding of RollingUpdate vs Recreate strategy, maxSurge/maxUnavailable, and pausing deployments.
+track: kubernetes
+level: 1
+order: 11.5
+difficulty: intermediate
+estimatedMinutes: 6
+tags: [deployments, rolling-update, recreate, pause, revision-history]
+relatedLabs: [k8s-0026, k8s-0027, k8s-0028, k8s-0029]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the key difference between the `Recreate` and `RollingUpdate` Deployment strategies?"
+    options:
+      - id: a
+        text: Recreate updates Pods one at a time; RollingUpdate deletes all Pods at once
+      - id: b
+        text: Recreate deletes all existing Pods before creating new ones; RollingUpdate keeps old Pods running while new ones come up
+      - id: c
+        text: Recreate is faster than RollingUpdate for large Deployments
+      - id: d
+        text: Recreate supports maxSurge and maxUnavailable; RollingUpdate does not
+    correctAnswer: b
+    explanation: "With `Recreate`, the Deployment controller terminates all existing Pods before any new Pod is created — this guarantees that only one version runs at a time but causes downtime. With `RollingUpdate`, old and new Pods co-exist during the transition, enabling zero-downtime updates."
+    wrongExplanations:
+      a: "This describes the opposite: RollingUpdate replaces Pods gradually; Recreate removes all at once."
+      c: "Recreate is not inherently faster — it may appear faster on small clusters but causes downtime, which is the opposite of desirable in production."
+      d: "`maxSurge` and `maxUnavailable` are parameters of `RollingUpdate`, not `Recreate`. The `Recreate` strategy has no such tuning parameters."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy"
+
+  - id: q2
+    type: single-choice
+    prompt: "A Deployment has `replicas: 4` and `strategy.rollingUpdate.maxUnavailable: 0`. What does this guarantee during a rolling update?"
+    options:
+      - id: a
+        text: No new Pods are created until all old Pods are terminated
+      - id: b
+        text: The rollout completes instantly with no intermediate state
+      - id: c
+        text: No existing Pod is removed until a replacement Pod is Ready — zero downtime, at the cost of needing extra capacity
+      - id: d
+        text: Only one Pod is updated at a time, with a 30-second delay between each
+    correctAnswer: c
+    explanation: "`maxUnavailable: 0` means the number of unavailable Pods during a rollout must never exceed 0. Kubernetes will not terminate an old Pod until the replacement new Pod is fully Ready and counted toward the available replica count. This prevents service degradation but requires temporarily running `replicas + maxSurge` Pods simultaneously."
+    wrongExplanations:
+      a: "This describes the `Recreate` strategy, not `RollingUpdate` with `maxUnavailable: 0`."
+      b: "Rollouts always take some time; `maxUnavailable: 0` slows the rollout because each new Pod must be Ready before the old one is removed."
+      d: "There is no built-in delay between Pod replacements. The pacing is controlled by `maxSurge` and `maxUnavailable`, not by time intervals."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment"
+
+  - id: q3
+    type: single-choice
+    prompt: "How do you add a traceable change-cause entry to `kubectl rollout history` output?"
+    options:
+      - id: a
+        text: Include a `changeLog:` field in the Deployment spec
+      - id: b
+        text: Set the `kubernetes.io/change-cause` annotation on the Deployment object
+      - id: c
+        text: Pass the `--record` flag to `kubectl apply` (this is the only supported method)
+      - id: d
+        text: Edit the ReplicaSet created by the Deployment and add a label
+    correctAnswer: b
+    explanation: "The `kubernetes.io/change-cause` annotation on the Deployment object is what `kubectl rollout history` reads for its CHANGE-CAUSE column. You can set it with `kubectl annotate deployment <name> kubernetes.io/change-cause='<message>'` before or after the rollout. The `--record` flag was deprecated in Kubernetes 1.22 and removed in 1.25."
+    wrongExplanations:
+      a: "There is no `changeLog:` field in the Deployment spec. History tracking is done via annotations, not spec fields."
+      c: "The `--record` flag was deprecated in Kubernetes 1.22 and removed in 1.25. The current supported approach is to set the `kubernetes.io/change-cause` annotation directly."
+      d: "Editing the ReplicaSet does not affect `kubectl rollout history`. The history reads from the Deployment's annotations and the ReplicaSets it owns, using the annotation on the Deployment."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#checking-rollout-history-of-a-deployment"
+
+  - id: q4
+    type: single-choice
+    prompt: "You pause a Deployment, update its container image, then scale it from 2 to 4 replicas. What happens when you resume?"
+    options:
+      - id: a
+        text: Only the image update is applied; scaling changes are discarded while paused
+      - id: b
+        text: Both changes are applied in a single rollout, creating one new revision
+      - id: c
+        text: Two separate rollouts occur — one for the image, one for the scale change
+      - id: d
+        text: The Deployment resets to its state before it was paused
+    correctAnswer: b
+    explanation: "Pausing a Deployment batches all pending changes. When you resume, all accumulated changes (image update, replica count change, etc.) are applied together in a single rollout, producing one new revision in rollout history. This keeps history clean compared to applying changes one at a time."
+    wrongExplanations:
+      a: "All changes made while paused are accumulated and applied on resume — scaling changes are not discarded."
+      c: "Resuming triggers a single rollout for all batched changes. Multiple revisions would only happen if you resumed, then paused again and made more changes."
+      d: "Pausing does not snapshot the Deployment state for a potential reset. The changes you make while paused are pending but real — they take effect on resume."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#pausing-and-resuming-a-deployment"
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which TWO operations can you perform on a paused Deployment without triggering a rollout? (Select two.)"
+    options:
+      - id: a
+        text: Update the container image with kubectl set image
+      - id: b
+        text: Scale the replica count with kubectl scale
+      - id: c
+        text: Resume the Deployment with kubectl rollout resume
+      - id: d
+        text: Delete the Deployment and recreate it
+    correctAnswers: [a, b]
+    explanation: "While a Deployment is paused, changes to its spec (image, replicas, environment variables, resource limits, etc.) are accepted and queued but no rollout controller runs to act on them. Both `kubectl set image` and `kubectl scale` modify the Deployment spec, so they take effect — the changes just don't roll out until you resume."
+    wrongExplanations:
+      c: "Resuming the Deployment is the action that *ends* the paused state and triggers the rollout of all queued changes — it is not an operation performed while still paused."
+      d: "Deleting and recreating the Deployment is a destructive operation that causes downtime. It is not equivalent to making a change while paused; the paused state is lost on deletion."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#pausing-and-resuming-a-deployment"
+
+  - id: q6
+    type: single-choice
+    prompt: "A Deployment has `revisionHistoryLimit: 2`. What is the effect on rollback options?"
+    options:
+      - id: a
+        text: Only the 2 most recent ReplicaSets are retained; rollback is limited to those 2 revisions
+      - id: b
+        text: Rollbacks are disabled; the Deployment can only be updated forward
+      - id: c
+        text: Only 2 Pods from each revision are kept running at any time
+      - id: d
+        text: The Deployment keeps all historical revisions but only shows 2 in rollout history output
+    correctAnswer: a
+    explanation: "`revisionHistoryLimit` controls how many old ReplicaSets Kubernetes retains after a rollout. With a limit of 2, only the 2 most recently superseded ReplicaSets are kept alongside the current one. Older ReplicaSets are garbage-collected. This means `kubectl rollout undo` can only target those 2 retained revisions. The default is 10."
+    wrongExplanations:
+      b: "Rollbacks are not disabled. The limit only reduces how many historical revisions are available for rollback, not whether rollback is possible at all."
+      c: "`revisionHistoryLimit` governs old ReplicaSets (revision records), not the number of Pods running per revision. Replicas are controlled by the `spec.replicas` field."
+      d: "Kubernetes physically deletes old ReplicaSets beyond the limit — it does not hide them from output while keeping them. Once a ReplicaSet is garbage-collected, it cannot be rolled back to."
+    docRef: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#clean-up-policy"

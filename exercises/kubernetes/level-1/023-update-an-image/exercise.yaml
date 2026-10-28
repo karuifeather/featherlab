@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0023
+type: task
+title: Update an Image
+summary: Update a running Deployment's container image and confirm the rolling update completes.
+track: kubernetes
+level: 1
+order: 5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [deployments, set-image, rollout-status, kubectl]
+prerequisites: [k8s-0022]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0023`"
+  - "Deployment `storefront` runs image `nginx:1.27-alpine` on container `web`"
+  - "Deployment `storefront` has 2 available replicas with a completed rollout"
+
+hints:
+  - "`kubectl set image deployment/storefront web=nginx:1.27-alpine -n fl-k8s-0023` updates the named container's image. The container name is `web`."
+  - "Monitor progress: `kubectl rollout status deployment/storefront -n fl-k8s-0023`. The command blocks until the rollout is complete."
+  - "To verify: `kubectl get deployment storefront -n fl-k8s-0023 -o jsonpath='{.spec.template.spec.containers[0].image}'`."
+
+lifecycle:
+  namespaces: [fl-k8s-0023]
+  setup:
+    manifests: [setup/storefront.yaml]
+
+checks:
+  - id: image
+    type: k8s.container-image
+    label: Container web runs nginx:1.27-alpine
+    params:
+      {
+        kind: Deployment,
+        name: storefront,
+        namespace: fl-k8s-0023,
+        image: "nginx:1.27-alpine",
+        container: web,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment storefront has 2 available replicas
+    weight: 2
+    params: { name: storefront, namespace: fl-k8s-0023, replicas: 2 }

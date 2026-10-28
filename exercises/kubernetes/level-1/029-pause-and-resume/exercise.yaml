@@ -1,0 +1,57 @@
+schemaVersion: 1
+id: k8s-0029
+type: task
+title: Pause and Resume
+summary: Resume a paused Deployment after updating its image and replica count.
+track: kubernetes
+level: 1
+order: 11
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, pause, resume, rollout, kubectl]
+prerequisites: [k8s-0028]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0029`"
+  - "Deployment `search` is not paused"
+  - "Deployment `search` runs image `nginx:1.27-alpine` on container `app`"
+  - "Deployment `search` has 3 available replicas with a completed rollout"
+
+hints:
+  - "Check the current state: `kubectl get deployment search -n fl-k8s-0029 -o jsonpath='{.spec.paused}'` (should be `true`). While paused, apply all your changes."
+  - "Update image: `kubectl set image deployment/search app=nginx:1.27-alpine -n fl-k8s-0029`. Scale: `kubectl scale deployment search -n fl-k8s-0029 --replicas=3`. Neither takes effect yet."
+  - "Resume: `kubectl rollout resume deployment/search -n fl-k8s-0029`. Then watch: `kubectl rollout status deployment/search -n fl-k8s-0029`."
+
+lifecycle:
+  namespaces: [fl-k8s-0029]
+  setup:
+    manifests: [setup/search.yaml]
+
+checks:
+  - id: not-paused
+    type: k8s.deployment-not-paused
+    label: Deployment search is not paused
+    params: { name: search, namespace: fl-k8s-0029 }
+  - id: image
+    type: k8s.container-image
+    label: Container app runs nginx:1.27-alpine
+    params:
+      {
+        kind: Deployment,
+        name: search,
+        namespace: fl-k8s-0029,
+        image: "nginx:1.27-alpine",
+        container: app,
+      }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment search has 3 available replicas
+    weight: 2
+    params: { name: search, namespace: fl-k8s-0029, replicas: 3 }

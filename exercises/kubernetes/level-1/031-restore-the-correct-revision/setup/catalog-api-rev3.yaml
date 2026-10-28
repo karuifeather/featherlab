@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-api
+  namespace: fl-k8s-0031
+  labels:
+    app: catalog-api
+  annotations:
+    kubernetes.io/change-cause: "broken deploy nginx:1.27-alpne"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalog-api
+  template:
+    metadata:
+      labels:
+        app: catalog-api
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: api
+          image: nginx:1.27-alpne
