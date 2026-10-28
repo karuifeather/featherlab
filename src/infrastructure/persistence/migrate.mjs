@@ -1,6 +1,7 @@
 import * as migration001 from "./migrations/001-initial.mjs";
 import * as migration002 from "./migrations/002-active-environment.mjs";
 import * as migration003 from "./migrations/003-environment-state.mjs";
+import * as migration004 from "./migrations/004-knowledge-checks.mjs";
 
 /**
  * Ordered list of all migrations. Each entry must have:
@@ -11,7 +12,7 @@ import * as migration003 from "./migrations/003-environment-state.mjs";
  * Never remove or reorder entries. Migrations are immutable once released.
  * Add new migrations at the end.
  */
-const MIGRATIONS = [migration001, migration002, migration003];
+const MIGRATIONS = [migration001, migration002, migration003, migration004];
 
 // Verify the list is ordered and has no gaps (catches accidental edits).
 for (let i = 0; i < MIGRATIONS.length; i++) {

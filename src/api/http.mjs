@@ -1,4 +1,4 @@
-import { FeatherLabError } from "../core/errors.mjs";
+import { FeatherLabError, InputError } from "../core/errors.mjs";
 
 export class MethodNotAllowedError extends FeatherLabError {
   constructor(method, allowed) {
@@ -42,6 +42,37 @@ const STATUS_BY_CODE = {
   LIFECYCLE_FAILED: 500,
   METHOD_NOT_ALLOWED: 405,
 };
+
+/**
+ * Read and parse a JSON request body. Rejects malformed, too-large, or non-JSON payloads.
+ */
+export async function readJsonBody(req, maxBytes = 64 * 1024) {
+  const contentType = req.headers["content-type"] ?? "";
+  if (!contentType.startsWith("application/json")) {
+    throw new InputError('Content-Type must be "application/json".');
+  }
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new InputError(`Request body exceeds ${maxBytes} bytes.`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch {
+        reject(new InputError("Request body is not valid JSON."));
+      }
+    });
+    req.on("error", reject);
+  });
+}
 
 // Only these detail keys are safe to show a learner; stderr and the like stay in the logs.
 const PUBLIC_DETAIL_KEYS = [

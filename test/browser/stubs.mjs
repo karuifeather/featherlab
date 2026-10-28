@@ -257,6 +257,67 @@ export const passed = {
   },
 };
 
+export const knowledgeCheckStub = {
+  id: "kq-k8s-l0-001",
+  activityType: "knowledge-check",
+  title: "Kubernetes Basics Quiz",
+  summary: "Test your knowledge of Kubernetes fundamentals.",
+  track: "kubernetes",
+  level: 0,
+  order: 1.5,
+  difficulty: "beginner",
+  estimatedMinutes: 5,
+  questionCount: 2,
+  questions: [
+    {
+      id: "q1",
+      type: "single-choice",
+      prompt: "What does kubectl get pods do?",
+      options: [
+        { id: "a", text: "Lists running pods" },
+        { id: "b", text: "Creates a new pod" },
+        { id: "c", text: "Deletes all pods" },
+      ],
+    },
+    {
+      id: "q2",
+      type: "multiple-select",
+      prompt: "Which flags show all namespaces?",
+      options: [
+        { id: "a", text: "-A" },
+        { id: "b", text: "--all-namespaces" },
+        { id: "c", text: "-n default" },
+      ],
+    },
+  ],
+  tags: [],
+  relatedLabs: [],
+  contentRevision: "1.0",
+};
+
+export const submitResult = {
+  quizId: "kq-k8s-l0-001",
+  revision: "1.0",
+  completed: true,
+  score: { earned: 2, possible: 2, percent: 100 },
+  questions: [
+    {
+      id: "q1",
+      correct: true,
+      submitted: "a",
+      correctIds: ["a"],
+      explanation: "kubectl get pods lists all pods in the current namespace.",
+    },
+    {
+      id: "q2",
+      correct: true,
+      submitted: ["a", "b"],
+      correctIds: ["a", "b"],
+      explanation: "Both -A and --all-namespaces are equivalent flags.",
+    },
+  ],
+};
+
 const json = (route, body) =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 
@@ -328,6 +389,26 @@ export async function stubApi(
     const i = Number(new URL(r.request().url()).pathname.split("/").pop());
     return json(r, { hint: { exerciseId: "k8s-0001", index: i, total: 2, text: hints[i - 1] } });
   });
+
+  // Knowledge-check routes — ordered most-specific first.
+  await page.route(/\/api\/knowledge-checks\/[^/?]+\/submit/, (r) => json(r, submitResult));
+  await page.route(/\/api\/knowledge-checks\/[^/?]+\/progress/, (r) => json(r, { progress: null }));
+  await page.route(/\/api\/knowledge-checks\/[^/?]+\/attempts/, (r) => json(r, { attempts: [] }));
+  await page.route(/\/api\/knowledge-checks\/progress\/track\/[^/?]+/, (r) =>
+    json(r, { quizzes: [], summary: { total: 1, completed: 0 } }),
+  );
+  await page.route(/\/api\/knowledge-checks\/[^/?]+(\?.*)?$/, (r) =>
+    json(r, { knowledgeCheck: knowledgeCheckStub }),
+  );
+  await page.route(/\/api\/knowledge-checks(\?.*)?$/, (r) =>
+    json(r, { knowledgeChecks: [knowledgeCheckStub] }),
+  );
+  await page.route(/\/api\/activities(\?.*)?$/, (r) =>
+    json(r, {
+      activities: [...exercises.map((e) => ({ ...e, activityType: "task" })), knowledgeCheckStub],
+    }),
+  );
+
   return { terminalMessages };
 }
 

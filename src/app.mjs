@@ -1,15 +1,18 @@
 import { ContentError } from "./core/errors.mjs";
 import { EnvironmentSession } from "./application/environment-session.mjs";
 import { ExerciseService } from "./application/exercise-service.mjs";
+import { KnowledgeCheckService } from "./application/knowledge-check-service.mjs";
 import { AttemptsService } from "./application/learning/attempts-service.mjs";
 import { ProgressionService } from "./application/learning/progression-service.mjs";
 import { ResumeService } from "./application/learning/resume-service.mjs";
 import { ExerciseRegistry } from "./core/exercises/registry.mjs";
+import { KnowledgeCheckRegistry } from "./core/knowledge-checks/registry.mjs";
 import { LifecycleManager } from "./core/lifecycle/manager.mjs";
 import { TrackRegistry } from "./core/tracks.mjs";
 import { combinators } from "./core/validation/combinators.mjs";
 import { ValidatorRegistry } from "./core/validation/registry.mjs";
 import { createFsContentSource } from "./infrastructure/content/fs-loader.mjs";
+import { createKnowledgeCheckSource } from "./infrastructure/content/knowledge-check-loader.mjs";
 import { createWorkstationRunner } from "./infrastructure/docker/workstation-runner.mjs";
 import { createPersistence } from "./infrastructure/persistence/index.mjs";
 import { createKubernetesTrack } from "./tracks/kubernetes/index.mjs";
@@ -63,6 +66,26 @@ export function createApp({
     resumeService = new ResumeService({ resume: persistence.resume, registry, progression });
   }
 
+  const kcSource = createKnowledgeCheckSource(contentRoot ? { root: contentRoot } : undefined);
+  let knowledgeCheckRegistry;
+  try {
+    knowledgeCheckRegistry = KnowledgeCheckRegistry.build(kcSource.discover());
+  } catch (error) {
+    if (error instanceof ContentError) throw error;
+    knowledgeCheckRegistry = KnowledgeCheckRegistry.build([]);
+  }
+
+  const knowledgeCheckService = new KnowledgeCheckService({
+    registry: knowledgeCheckRegistry,
+    persistence: persistence
+      ? {
+          quizAttempts: persistence.quizAttempts,
+          quizProgress: persistence.quizProgress,
+          transaction: (fn) => persistence.transaction(fn),
+        }
+      : null,
+  });
+
   return {
     service: new ExerciseService({
       registry,
@@ -71,11 +94,33 @@ export function createApp({
       attemptsService,
       resumeService,
     }),
+    knowledgeCheckService,
     registry,
+    knowledgeCheckRegistry,
     tracks,
     validators,
     persistence,
   };
+}
+
+/**
+ * Validate packaged (or `contentRoot`) knowledge-check definitions without running the full app.
+ *
+ * @returns {{ok: boolean, count: number, problems: Array<{file: string, path?: string, message: string}>}}
+ */
+export function validateKnowledgeChecks({ contentRoot } = {}) {
+  try {
+    const source = createKnowledgeCheckSource(contentRoot ? { root: contentRoot } : undefined);
+    const registry = KnowledgeCheckRegistry.build(source.discover());
+    return { ok: true, count: registry.size, problems: [] };
+  } catch (error) {
+    if (error instanceof ContentError) return { ok: false, count: 0, problems: error.problems };
+    return {
+      ok: false,
+      count: 0,
+      problems: [{ file: contentRoot ?? "exercises", message: error.message }],
+    };
+  }
 }
 
 /**

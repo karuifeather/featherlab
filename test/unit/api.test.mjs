@@ -54,10 +54,12 @@ test("GET /api/exercises lists summaries and supports filters", async () => {
     "the API returns curriculum order, which is not id order",
   );
   assert.deepEqual(Object.keys(body.exercises[0]).sort(), [
+    "activityType",
     "difficulty",
     "estimatedMinutes",
     "id",
     "level",
+    "order",
     "prerequisites",
     "summary",
     "tags",

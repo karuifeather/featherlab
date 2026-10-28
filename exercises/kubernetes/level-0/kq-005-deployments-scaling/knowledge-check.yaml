@@ -1,0 +1,131 @@
+schemaVersion: 1
+id: kq-k8s-l0-005
+activityType: knowledge-check
+title: Deployments and Scaling
+summary: Test your understanding of Deployments, replica scaling, and rollout management commands.
+track: kubernetes
+level: 0
+order: 7.5
+difficulty: beginner
+estimatedMinutes: 5
+tags: [deployments, scaling, replicas, rollout, kubectl]
+relatedLabs: [k8s-0002, k8s-0015]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl scale deployment nginx --replicas=3` do?"
+    options:
+      - id: a
+        text: Creates 3 identical copies of the `nginx` Deployment
+      - id: b
+        text: Sets the desired replica count to 3, causing Kubernetes to converge toward that number
+      - id: c
+        text: Deletes Pods until exactly 3 remain, regardless of their state
+      - id: d
+        text: Limits the Deployment to run on at most 3 nodes
+    correctAnswer: b
+    explanation: "`kubectl scale` updates `spec.replicas` in the Deployment. The ReplicaSet controller then adds or removes Pods as needed to reach the desired count. Convergence is handled by Kubernetes, not kubectl."
+    wrongExplanations:
+      a: "There is already one Deployment; `scale` changes its replica count, not copies it."
+      c: "The controller gracefully terminates or starts Pods; it does not pick by state."
+      d: "`replicas` is the Pod count, not a node constraint. Node placement is governed by scheduling rules."
+    tryCommand: kubectl scale deployment nginx --replicas=3
+
+  - id: q2
+    type: single-choice
+    prompt: "What does `kubectl rollout status deployment/nginx` report?"
+    options:
+      - id: a
+        text: The rollout history with revision numbers
+      - id: b
+        text: Whether the most recent rollout has finished and all replicas are available
+      - id: c
+        text: The health of each individual Pod in the Deployment
+      - id: d
+        text: The Deployment's CPU and memory usage during the rollout
+    correctAnswer: b
+    explanation: "`kubectl rollout status` watches the Deployment and prints progress lines until all desired Pods are updated and available, then exits with success. It blocks until completion or timeout."
+    wrongExplanations:
+      a: "Revision history is shown by `kubectl rollout history`."
+      c: "Per-Pod health is visible with `kubectl get pods` or `kubectl describe pod`."
+      d: "Resource metrics require `kubectl top`; `rollout status` tracks replica availability."
+    tryCommand: kubectl rollout status deployment/nginx
+
+  - id: q3
+    type: single-choice
+    prompt: "What does `kubectl rollout undo deployment/nginx` do?"
+    options:
+      - id: a
+        text: Pauses the current rollout
+      - id: b
+        text: Deletes the Deployment and re-creates it from scratch
+      - id: c
+        text: Rolls the Deployment back to the previous revision
+      - id: d
+        text: Scales the Deployment down to zero replicas
+    correctAnswer: c
+    explanation: "`kubectl rollout undo` reverts the Deployment to its previous revision. You can also target a specific revision with `--to-revision=<n>`. The rollback itself is treated as a new rollout."
+    wrongExplanations:
+      a: "Pausing a rollout uses `kubectl rollout pause deployment/nginx`."
+      b: "Deleting and re-creating would lose all history; `undo` does a targeted in-place revert."
+      d: "Scaling to zero uses `kubectl scale deployment/nginx --replicas=0`."
+    tryCommand: kubectl rollout undo deployment/nginx
+
+  - id: q4
+    type: single-choice
+    prompt: "What does `kubectl rollout history deployment/nginx` list?"
+    options:
+      - id: a
+        text: All kubectl commands ever run against the Deployment
+      - id: b
+        text: Numbered revision entries showing when and what changed in each rollout
+      - id: c
+        text: The git commit history of the Deployment's YAML file
+      - id: d
+        text: Events from the most recent rollout only
+    correctAnswer: b
+    explanation: "`kubectl rollout history` lists each revision of the Deployment (by default up to `revisionHistoryLimit`, default 10), with the change-cause annotation if set. Add `--revision=<n>` to inspect a specific revision's spec."
+    wrongExplanations:
+      a: "kubectl command history is not tracked inside the cluster."
+      c: "Kubernetes does not know about your git repository."
+      d: "All retained revisions are shown, not only the most recent one."
+    tryCommand: kubectl rollout history deployment/nginx
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which `kubectl rollout` subcommands are valid for managing a Deployment rollout? (select all that apply)"
+    options:
+      - id: a
+        text: kubectl rollout status
+      - id: b
+        text: kubectl rollout undo
+      - id: c
+        text: kubectl rollout history
+      - id: d
+        text: kubectl rollout describe
+    correctAnswers: [a, b, c]
+    explanation: "`rollout status`, `rollout undo`, and `rollout history` are all valid subcommands of `kubectl rollout`. They let you monitor progress, revert to a previous revision, and inspect revision history respectively."
+    wrongExplanations:
+      d: "`kubectl rollout describe` does not exist. Use `kubectl describe deployment/<name>` for detailed Deployment info."
+    tryCommand: kubectl rollout history deployment/nginx --revision=2
+
+  - id: q6
+    type: single-choice
+    prompt: "What relationship does a Deployment have with its ReplicaSet?"
+    options:
+      - id: a
+        text: A Deployment and a ReplicaSet are the same thing with different names
+      - id: b
+        text: A Deployment creates and manages one or more ReplicaSets to implement rolling updates
+      - id: c
+        text: A ReplicaSet is the parent that creates the Deployment
+      - id: d
+        text: A Deployment only uses ReplicaSets when you have more than one replica
+    correctAnswer: b
+    explanation: "A Deployment owns ReplicaSets. On each template change, the Deployment creates a new ReplicaSet and gradually scales it up while scaling the old one down. Old ReplicaSets are retained for rollback."
+    wrongExplanations:
+      a: "They are distinct resource types with different purposes and controllers."
+      c: "The Deployment is the higher-level owner; it creates and manages ReplicaSets."
+      d: "A Deployment uses a ReplicaSet even for a single replica; the ReplicaSet is always the underlying mechanism."

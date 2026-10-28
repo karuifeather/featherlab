@@ -8,10 +8,15 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = "GET" } = {}) {
+async function request(path, { method = "GET", body } = {}) {
   let response;
   try {
-    response = await fetch(path, { method });
+    response = await fetch(path, {
+      method,
+      ...(body !== undefined
+        ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+        : {}),
+    });
   } catch {
     throw new ApiError("Could not reach the featherlab server.", { code: "NETWORK" });
   }
@@ -32,6 +37,8 @@ async function request(path, { method = "GET" } = {}) {
 
 const exercisePath = (id) => `/api/exercises/${encodeURIComponent(id)}`;
 
+const kcPath = (id) => `/api/knowledge-checks/${encodeURIComponent(id)}`;
+
 export const api = {
   listExercises: (query = "") => request(`/api/exercises${query}`),
   getExercise: (id) => request(exercisePath(id)),
@@ -48,4 +55,14 @@ export const api = {
   getResume: () => request("/api/resume"),
   getVersion: () => request("/api/version"),
   getStatus: () => request("/api/status"),
+
+  // Knowledge check endpoints
+  listActivities: (query = "") => request(`/api/activities${query}`),
+  listKnowledgeChecks: (query = "") => request(`/api/knowledge-checks${query}`),
+  getKnowledgeCheck: (id) => request(kcPath(id)),
+  submitKnowledgeCheck: (id, body) => request(`${kcPath(id)}/submit`, { method: "POST", body }),
+  getKnowledgeCheckAttempts: (id) => request(`${kcPath(id)}/attempts`),
+  getKnowledgeCheckProgress: (id) => request(`${kcPath(id)}/progress`),
+  getQuizTrackProgress: (trackId) =>
+    request(`/api/knowledge-checks/progress/track/${encodeURIComponent(trackId)}`),
 };

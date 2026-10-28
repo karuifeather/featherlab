@@ -1,0 +1,133 @@
+schemaVersion: 1
+id: kq-k8s-l0-004
+activityType: knowledge-check
+title: Namespaces and Labels
+summary: Verify your knowledge of namespace scoping, label selectors, and kubectl filtering flags.
+track: kubernetes
+level: 0
+order: 5.5
+difficulty: beginner
+estimatedMinutes: 5
+tags: [namespaces, labels, selectors, kubectl]
+relatedLabs: [k8s-0013, k8s-0014]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl get pods -n kube-system` do?"
+    options:
+      - id: a
+        text: Lists Pods in all namespaces
+      - id: b
+        text: Lists Pods in the kube-system namespace only
+      - id: c
+        text: Lists Pods and filters those managed by the system
+      - id: d
+        text: Switches your default namespace to kube-system permanently
+    correctAnswer: b
+    explanation: "`-n kube-system` (short for `--namespace kube-system`) scopes the query to a single namespace. The `kube-system` namespace holds core cluster components like coredns and kube-proxy."
+    wrongExplanations:
+      a: "Listing all namespaces requires `-A` / `--all-namespaces`."
+      c: "`-n` is a namespace flag, not a filter on system ownership."
+      d: "Changing the default namespace requires editing your kubeconfig context, not using `-n`."
+    tryCommand: kubectl get pods -n kube-system
+
+  - id: q2
+    type: single-choice
+    prompt: "What does `kubectl get pods -l app=nginx` do?"
+    options:
+      - id: a
+        text: Returns only Pods that have the label `app=nginx`
+      - id: b
+        text: Returns all Pods and adds an `app` column showing the label value
+      - id: c
+        text: Returns Pods in a namespace named `app`
+      - id: d
+        text: Returns Pods whose name contains the string `nginx`
+    correctAnswer: a
+    explanation: "`-l app=nginx` (short for `--selector app=nginx`) applies a label selector. Only resources with a label key `app` whose value is exactly `nginx` are returned."
+    wrongExplanations:
+      b: "Adding label values as columns uses `-L app` (capital L), not `-l`."
+      c: "Namespace scoping uses `-n`, not `-l`."
+      d: "Name-based filtering uses `--field-selector metadata.name=<name>`, not `-l`."
+    tryCommand: kubectl get pods -l app=nginx
+
+  - id: q3
+    type: single-choice
+    prompt: "What does `--show-labels` add to `kubectl get pods` output?"
+    options:
+      - id: a
+        text: An extra LABELS column listing all key=value pairs for each Pod
+      - id: b
+        text: Filters the output to only show labelled Pods
+      - id: c
+        text: Shows the label selector of each Pod's owner Deployment
+      - id: d
+        text: Adds individual columns for each label key found
+    correctAnswer: a
+    explanation: "`--show-labels` appends a LABELS column that prints all labels on each resource as comma-separated `key=value` pairs. It does not filter — all Pods are still shown."
+    wrongExplanations:
+      b: "`--show-labels` does not filter; it only adds a column. Use `-l` to filter."
+      c: "The owning Deployment's selector is visible in `kubectl describe deployment`."
+      d: "Projecting individual label keys into their own columns uses `-L <key>` (capital L)."
+    tryCommand: kubectl get pods --show-labels
+
+  - id: q4
+    type: single-choice
+    prompt: "What does `kubectl get pods -L app` do?"
+    options:
+      - id: a
+        text: Filters Pods to only those with an `app` label
+      - id: b
+        text: Adds a column named APP showing the value of the `app` label for each Pod
+      - id: c
+        text: Lists all label keys present on each Pod
+      - id: d
+        text: Same as `--show-labels`, but only for the `app` key
+    correctAnswer: b
+    explanation: "`-L app` (capital L, `--label-columns app`) adds an extra column named APP to the output table. Each row shows that Pod's `app` label value, or `<none>` if the label is absent."
+    wrongExplanations:
+      a: "Filtering by label uses lowercase `-l` (or `--selector`), not uppercase `-L`."
+      c: "Showing all labels uses `--show-labels`."
+      d: "`-L app` projects only the `app` key into its own column; `--show-labels` shows all labels in one column."
+    tryCommand: kubectl get pods -L app
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which kubectl flags filter resources by label? (select all that apply)"
+    options:
+      - id: a
+        text: -l
+      - id: b
+        text: --selector
+      - id: c
+        text: -n
+      - id: d
+        text: --field-selector
+    correctAnswers: [a, b]
+    explanation: "`-l` and `--selector` are two spellings of the same flag — both apply a label selector expression that filters resources by their labels. They are exactly equivalent."
+    wrongExplanations:
+      c: "`-n` scopes by namespace, not by label."
+      d: "`--field-selector` filters by object fields (e.g. `status.phase=Running` or `metadata.name=foo`), not by labels."
+    tryCommand: kubectl get pods --selector app=nginx,env=prod
+
+  - id: q6
+    type: single-choice
+    prompt: "How do you add a label `env=staging` to an existing Pod named `web-pod`?"
+    options:
+      - id: a
+        text: kubectl set label pod web-pod env=staging
+      - id: b
+        text: kubectl label pod web-pod env=staging
+      - id: c
+        text: kubectl annotate pod web-pod env=staging
+      - id: d
+        text: kubectl patch pod web-pod --label env=staging
+    correctAnswer: b
+    explanation: "`kubectl label` is the dedicated subcommand for adding or updating labels on any resource. It performs a PATCH under the hood, leaving all other fields intact."
+    wrongExplanations:
+      a: "`kubectl set label` is not a valid kubectl command; the correct subcommand is `label`."
+      c: "`kubectl annotate` manages annotations, which are metadata not used for selection."
+      d: "`kubectl patch` can update labels via JSON Patch, but `--label` is not a real flag for it."
+    tryCommand: kubectl label pod web-pod env=staging

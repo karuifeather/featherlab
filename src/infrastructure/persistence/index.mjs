@@ -4,6 +4,8 @@ import { runMigrations } from "./migrate.mjs";
 import { ActiveEnvironmentRepository } from "./repositories/active-environment.mjs";
 import { AttemptsRepository } from "./repositories/attempts.mjs";
 import { ProgressRepository } from "./repositories/progress.mjs";
+import { QuizAttemptsRepository } from "./repositories/quiz-attempts.mjs";
+import { QuizProgressRepository } from "./repositories/quiz-progress.mjs";
 import { ResumeRepository } from "./repositories/resume.mjs";
 
 export { CURRENT_VERSION } from "./migrate.mjs";
@@ -44,6 +46,8 @@ export function createPersistence({ stateDir }) {
     progress: new ProgressRepository(db),
     resume: new ResumeRepository(db),
     environment: new ActiveEnvironmentRepository(db),
+    quizAttempts: new QuizAttemptsRepository(db),
+    quizProgress: new QuizProgressRepository(db),
     transaction(fn) {
       return db.transaction(fn);
     },
