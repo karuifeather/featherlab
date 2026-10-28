@@ -1,13 +1,19 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { test, expect } from "@playwright/test";
 import {
   exercises,
   noProgress,
+  detail,
   stubApi,
   forceDomTerminal,
   enterWorkspace,
   withLockedExercise,
   withProgress,
 } from "./stubs.mjs";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -419,6 +425,9 @@ test("locked exercise shows lock indicator and cannot be selected", async ({ pag
   const lockedLesson = lessons.nth(1);
   await expect(lockedLesson).toContainText("⊘");
   await expect(lockedLesson).toHaveAttribute("aria-disabled", "true");
+  // Prereq note is hidden by default; clicking the locked row reveals it.
+  await expect(lockedLesson).not.toContainText("Requires:");
+  await lockedLesson.click({ force: true });
   await expect(lockedLesson).toContainText("Requires:");
   // The first lesson should still be active/available
   const firstLesson = lessons.nth(0);
@@ -552,4 +561,46 @@ test("sidebar order and Next follow the backend's curriculum order, not ids", as
   await expect(page.getByTestId("next-exercise-btn")).toContainText("Inspect a Pod");
   await page.getByTestId("next-exercise-btn").click();
   await expect(page.getByTestId("exercise-panel")).toContainText("Exercise 02");
+});
+
+// Regression: k8s-0011 description contains a pipe table and https:// links. Verify
+// they render as elements — no raw | characters, no ]( sequences — and that the table
+// does not cause horizontal overflow on mobile.
+test("k8s-0011 description renders table and https links without raw Markdown", async ({
+  page,
+  baseURL,
+}) => {
+  const description = readFileSync(
+    path.join(repoRoot, "exercises/kubernetes/level-0/011-inspect-a-pod/description.md"),
+    "utf8",
+  );
+  // Override detail route to serve k8s-0011's real description.
+  await page.route(/\/api\/exercises\/[^/?]+(\?.*)?$/, (r) =>
+    r.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ exercise: { ...detail, description } }),
+    }),
+  );
+  await enterWorkspace(page, baseURL);
+
+  const panel = page.locator('[data-testid="exercise-panel"]');
+
+  // Table rendered correctly: 3 data rows, no raw pipes in visible text.
+  await expect(panel.locator(".md-table tbody tr")).toHaveCount(3);
+  const text = await panel.innerText();
+  expect(text).not.toMatch(/\|\s*\|/); // no adjacent pipe characters
+  expect(text).not.toMatch(/\]\(/); // no raw Markdown link syntax
+
+  // Links are real anchors pointing to kubernetes.io with secure rel attribute.
+  const links = panel.locator('a[href^="https://kubernetes.io"]');
+  await expect(links).toHaveCount(3);
+  for (const link of await links.all()) {
+    await expect(link).toHaveAttribute("rel", /noopener/);
+    await expect(link).toHaveAttribute("target", "_blank");
+  }
+
+  // No horizontal overflow on mobile (390px).
+  await page.setViewportSize({ width: 390, height: 844 });
+  const overflow = await panel.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(2);
 });

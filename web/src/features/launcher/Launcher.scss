@@ -216,32 +216,74 @@
   transform: translateX(3px);
 }
 
-// Curriculum list.
+// Curriculum: vertical accordion. Each level is a collapsible row, so the list stays
+// scannable as the curriculum grows without showing hundreds of entries at once.
 .curriculum {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px 16px;
-  padding: 10px;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
+  overflow: hidden;
 }
 
 .curriculum-level {
-  min-width: 0;
+  border-bottom: 1px solid var(--border-subtle);
+
+  &:last-child {
+    border-bottom: 0;
+  }
 }
 
-.curriculum-level-title {
-  margin: 4px 8px 4px;
+.curriculum-level-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+  transition: background var(--dur-fast) var(--ease-out);
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text-primary);
+  }
+}
+
+.curriculum-level-caret {
+  flex-shrink: 0;
+  font-size: 10px;
+  transition: transform var(--dur-base) var(--ease-out);
+  transform: rotate(-90deg);
+
+  &.open {
+    transform: rotate(0deg);
+  }
+}
+
+.curriculum-level-name {
+  flex: 1;
+  text-align: left;
+}
+
+.curriculum-level-summary {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
 }
 
 .curriculum-items {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 6px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -252,9 +294,9 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 7px 8px;
+  padding: 7px 14px 7px 28px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: transparent;
   color: var(--text-primary);
   font-size: 13px;
@@ -325,17 +367,6 @@
   border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   color: var(--accent);
-}
-
-.curriculum-note {
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: 45%;
-  font-size: 11.5px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .launcher-footer {
