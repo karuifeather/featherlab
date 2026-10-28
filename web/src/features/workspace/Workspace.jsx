@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./Workspace.scss";
 import { api } from "../../api/client.js";
 import { ExercisePanel } from "../exercises/ExercisePanel.jsx";
 import { ExerciseSidebar } from "../exercises/ExerciseSidebar.jsx";
+import { KnowledgeCheckPanel } from "../knowledge-checks/KnowledgeCheckPanel.jsx";
 import { useExerciseList } from "../exercises/useExerciseList.js";
 import { useTrackProgress } from "../exercises/useTrackProgress.js";
 import { PracticeTerminal } from "../terminal/PracticeTerminal.jsx";
@@ -32,6 +33,7 @@ export function Workspace({ track, initialExerciseId }) {
     error: progressError,
     refresh: refreshProgress,
   } = useTrackProgress(track);
+  const [quizzes, setQuizzes] = useState([]);
   const [chosenId, setChosenId] = useState(initialExerciseId ?? null);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -52,6 +54,22 @@ export function Workspace({ track, initialExerciseId }) {
     refreshProgress();
   }, [refreshProgress]);
 
+  // Fetch quizzes for this track. Non-fatal: if unavailable, sidebar simply shows no quizzes.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listKnowledgeChecks(`?track=${encodeURIComponent(track)}`)
+      .then((data) => {
+        if (!cancelled) setQuizzes(data.knowledgeChecks ?? []);
+      })
+      .catch(() => {
+        // Knowledge checks unavailable; proceed with labs only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [track]);
+
   if (!exercises) return <div className="workspace-loading muted">Loading exercises…</div>;
   if (error)
     return (
@@ -59,6 +77,9 @@ export function Workspace({ track, initialExerciseId }) {
         {error}
       </div>
     );
+
+  // Build a set of quiz IDs for quick lookup
+  const quizIdSet = new Set(quizzes.map((q) => q.id));
 
   const selected = exercises.find((e) => e.id === chosenId) ?? exercises[0];
   const ordinal = selected
@@ -68,21 +89,30 @@ export function Workspace({ track, initialExerciseId }) {
   const selectedProgress = selected ? progressMap.get(selected.id) : undefined;
   const nextExercise = selected ? findNextAvailable(exercises, selected.id, progressMap) : null;
 
+  // Determine whether the chosen ID is a quiz (not a lab)
+  const chosenIsQuiz = chosenId ? quizIdSet.has(chosenId) : false;
+  const chosenQuizId = chosenIsQuiz ? chosenId : null;
+
   const pick = (id, { confirmed = false } = {}) => {
-    // Guard: never open a locked exercise
-    if (progressMap.get(id)?.state === "locked") return;
+    const isQuiz = quizIdSet.has(id);
+
+    // Labs: guard against picking a locked exercise
+    if (!isQuiz && progressMap.get(id)?.state === "locked") return;
 
     setSwitchConfirmedFor(confirmed ? id : null);
     setChosenId(id);
     setDrawerOpen(false);
     setMobileTab("problem");
 
-    // Persist resume state in the background. Race-condition safe: we only care that
-    // the *last* selection wins; stale responses carry no state we need.
-    latestSelectId.current = id;
-    api.select(id).catch(() => {
-      // Persistence failure is non-fatal; resume just won't be updated.
-    });
+    if (!isQuiz) {
+      // Persist resume state for labs only. Race-condition safe: we only care that
+      // the *last* selection wins; stale responses carry no state we need.
+      latestSelectId.current = id;
+      api.select(id).catch(() => {
+        // Persistence failure is non-fatal; resume just won't be updated.
+      });
+    }
+    // Quizzes: no server-side select — they never touch the Kubernetes environment.
   };
 
   const workspaceClass = [
@@ -98,7 +128,8 @@ export function Workspace({ track, initialExerciseId }) {
       <ExerciseSidebar
         track={track}
         exercises={exercises}
-        selectedId={selected?.id}
+        quizzes={quizzes}
+        selectedId={chosenId ?? selected?.id}
         onSelect={pick}
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed((c) => !c)}
@@ -153,7 +184,9 @@ export function Workspace({ track, initialExerciseId }) {
           data-mobile-tab={mobileTab}
         >
           <div className="split-problem">
-            {selected ? (
+            {chosenIsQuiz ? (
+              <KnowledgeCheckPanel key={chosenQuizId} id={chosenQuizId} />
+            ) : selected ? (
               <ExercisePanel
                 key={selected.id}
                 exerciseId={selected.id}

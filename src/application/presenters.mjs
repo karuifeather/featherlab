@@ -11,10 +11,12 @@ export function presentSummary(e) {
   return {
     id: e.id,
     type: e.type,
+    activityType: "task",
     title: e.title,
     summary: e.summary,
     track: e.track,
     level: e.level,
+    order: e.order,
     difficulty: e.difficulty,
     estimatedMinutes: e.estimatedMinutes,
     tags: [...e.tags],

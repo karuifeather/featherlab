@@ -1,0 +1,152 @@
+schemaVersion: 1
+id: kq-k8s-l0-007
+activityType: knowledge-check
+title: Troubleshooting Tools
+summary: Check your knowledge of kubectl commands for diagnosing and debugging workloads in Kubernetes.
+track: kubernetes
+level: 0
+order: 9.5
+difficulty: beginner
+estimatedMinutes: 6
+tags: [troubleshooting, logs, exec, describe, inspection, kubectl]
+relatedLabs: [k8s-0017]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl logs pod/my-pod` display?"
+    options:
+      - id: a
+        text: Kubernetes audit log events related to the Pod
+      - id: b
+        text: The stdout and stderr output of the Pod's primary container
+      - id: c
+        text: System logs from the node where the Pod is running
+      - id: d
+        text: The Pod's event history from the API server
+    correctAnswer: b
+    explanation: "`kubectl logs` streams the stdout/stderr of a container. For a single-container Pod, this gives you the application's output — the first place to look when something is wrong."
+    wrongExplanations:
+      a: "Kubernetes audit logs are a cluster-level concept; they are not surfaced by `kubectl logs`."
+      c: "Node system logs are accessed via `journalctl` or SSH to the node, not `kubectl logs`."
+      d: "Event history is shown by `kubectl describe pod` or `kubectl get events`."
+    tryCommand: kubectl logs pod/my-pod
+
+  - id: q2
+    type: single-choice
+    prompt: "Which flag streams container logs in real-time, staying attached until you press Ctrl+C?"
+    options:
+      - id: a
+        text: --watch
+      - id: b
+        text: --tail
+      - id: c
+        text: -f
+      - id: d
+        text: --live
+    correctAnswer: c
+    explanation: "`-f` (or `--follow`) tells `kubectl logs` to keep the connection open and print new log lines as they arrive, similar to `tail -f` on a local log file."
+    wrongExplanations:
+      a: "`--watch` is a flag for `kubectl get` that watches for resource state changes, not for log streaming."
+      b: "`--tail=<n>` shows the last N lines of the log but does not follow new output."
+      d: "`--live` is not a valid kubectl flag."
+    tryCommand: kubectl logs -f pod/my-pod
+
+  - id: q3
+    type: single-choice
+    prompt: "What does `kubectl exec -it my-pod -- /bin/bash` do?"
+    options:
+      - id: a
+        text: Runs `/bin/bash` on the node where `my-pod` is scheduled
+      - id: b
+        text: Opens an interactive bash shell inside the `my-pod` container
+      - id: c
+        text: Copies `/bin/bash` from the container to the local machine
+      - id: d
+        text: Restarts the `my-pod` container with `/bin/bash` as the entrypoint
+    correctAnswer: b
+    explanation: "`kubectl exec -it` attaches an interactive TTY (`-i` for stdin, `-t` for TTY allocation) and runs the given command inside the running container. This is the main way to inspect the container filesystem, run diagnostics, or test connectivity."
+    wrongExplanations:
+      a: "`kubectl exec` targets the container process namespace, not the underlying node."
+      c: "Copying files uses `kubectl cp`; `exec` runs commands."
+      d: "`exec` runs a command in the existing container process; it does not restart the container."
+    tryCommand: kubectl exec -it my-pod -- /bin/bash
+
+  - id: q4
+    type: single-choice
+    prompt: "What does `kubectl describe pod my-pod` show that `kubectl get pod my-pod` does not?"
+    options:
+      - id: a
+        text: The Pod's YAML manifest in full detail
+      - id: b
+        text: The Pod's age and restart count
+      - id: c
+        text: Events, container state transitions, and volume/mount details
+      - id: d
+        text: The Pod's network IP address
+    correctAnswer: c
+    explanation: "`kubectl describe` produces a rich human-readable report that includes the Events section (scheduling, image pulls, container starts/crashes), probe status, volume mounts, and environment variables — critical context for diagnosing issues."
+    wrongExplanations:
+      a: "The full YAML manifest is shown by `kubectl get pod my-pod -o yaml`."
+      b: "`kubectl get pod` does include AGE and RESTARTS columns in its tabular output."
+      d: "The Pod IP is shown in `kubectl get pod -o wide` as well as in `describe`."
+    tryCommand: kubectl describe pod my-pod
+
+  - id: q5
+    type: single-choice
+    prompt: "What does `kubectl port-forward pod/my-pod 8080:80` do?"
+    options:
+      - id: a
+        text: Exposes the Pod on port 8080 to all external traffic
+      - id: b
+        text: Forwards local port 8080 on your machine to port 80 inside the Pod
+      - id: c
+        text: Creates a Service that maps port 8080 to the Pod's port 80
+      - id: d
+        text: Changes the Pod's containerPort from 80 to 8080
+    correctAnswer: b
+    explanation: "`kubectl port-forward` opens a tunnel: traffic sent to `localhost:8080` on your workstation is proxied to port 80 of the target Pod. It is a temporary, single-user debugging tool — not a production exposure mechanism."
+    wrongExplanations:
+      a: "port-forward is local to the machine running kubectl; it does not expose the Pod publicly."
+      c: "A Service is a persistent cluster resource; `port-forward` is a temporary tunnel with no cluster-side object."
+      d: "`port-forward` does not modify the Pod spec; it creates a proxy connection."
+    tryCommand: kubectl port-forward pod/my-pod 8080:80
+
+  - id: q6
+    type: single-choice
+    prompt: "What does `kubectl get events` show?"
+    options:
+      - id: a
+        text: A history of kubectl commands run against the cluster
+      - id: b
+        text: Cluster-level audit events filtered by user
+      - id: c
+        text: Recent Kubernetes events such as Pod scheduling, image pulls, and probe failures
+      - id: d
+        text: Changes made to the etcd database
+    correctAnswer: c
+    explanation: "Kubernetes Events record significant occurrences in the cluster: why a Pod was scheduled (or not), image pull results, container restarts, probe failures, and more. They are namespaced and expire after ~1 hour by default."
+    wrongExplanations:
+      a: "kubectl command history is not stored in the cluster."
+      b: "Audit events are a separate cluster-level log, not surfaced by `kubectl get events`."
+      d: "etcd is the internal key-value store; its changes are not exposed to `kubectl get events`."
+    tryCommand: kubectl get events --sort-by=.lastTimestamp
+
+  - id: q7
+    type: multiple-select
+    prompt: "Which kubectl commands are most useful for debugging a Pod stuck in CrashLoopBackOff? (select all that apply)"
+    options:
+      - id: a
+        text: kubectl logs <pod-name> --previous
+      - id: b
+        text: kubectl describe pod <pod-name>
+      - id: c
+        text: kubectl scale deployment <name> --replicas=0
+      - id: d
+        text: kubectl get events
+    correctAnswers: [a, b, d]
+    explanation: "`kubectl logs --previous` shows the logs from the last crashed container instance. `kubectl describe` reveals the exit code, restart count, and recent Events. `kubectl get events` shows scheduling and probe-failure messages. Together these three commands usually identify the root cause."
+    wrongExplanations:
+      c: "Scaling to zero stops the crash loop but does not help you understand *why* it is crashing. It is a mitigation, not a diagnostic tool."
+    tryCommand: kubectl logs <pod-name> --previous

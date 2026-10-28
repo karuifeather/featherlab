@@ -1,5 +1,5 @@
 import { NotFoundError } from "../core/errors.mjs";
-import { MethodNotAllowedError } from "./http.mjs";
+import { MethodNotAllowedError, readJsonBody } from "./http.mjs";
 
 /**
  * Thin HTTP adapters over ExerciseService. A handler maps request -> service call ->
@@ -97,6 +97,90 @@ export function buildRoutes() {
     route("GET", /^\/api\/resume$/, (_, { service }) => ({
       body: { resume: service.getResume() },
     })),
+
+    // Combined activities endpoint (labs + knowledge checks, sorted)
+    route("GET", /^\/api\/activities$/, (_, { service, knowledgeCheckService, url }) => {
+      const q = url.searchParams;
+      const track = q.get("track") ?? undefined;
+      const level =
+        q.get("level") != null && q.get("level") !== "" ? Number(q.get("level")) : undefined;
+      const labs = service.list({ track, level });
+      const quizzes = knowledgeCheckService ? knowledgeCheckService.list({ track, level }) : [];
+      const activities = [...labs, ...quizzes].sort(
+        (a, b) =>
+          a.level - b.level ||
+          (a.order ?? Infinity) - (b.order ?? Infinity) ||
+          a.id.localeCompare(b.id),
+      );
+      return { body: { activities } };
+    }),
+
+    // List knowledge checks
+    route("GET", /^\/api\/knowledge-checks$/, (_, { knowledgeCheckService, url }) => {
+      if (!knowledgeCheckService) throw new NotFoundError("Knowledge checks not available.");
+      const q = url.searchParams;
+      return {
+        body: {
+          knowledgeChecks: knowledgeCheckService.list({
+            track: q.get("track") ?? undefined,
+            level:
+              q.get("level") != null && q.get("level") !== "" ? Number(q.get("level")) : undefined,
+          }),
+        },
+      };
+    }),
+
+    // Track progress for knowledge checks — must come before the /:id route
+    route(
+      "GET",
+      /^\/api\/knowledge-checks\/progress\/track\/([a-z0-9-]{1,63})$/,
+      ([, trackId], { knowledgeCheckService }) => {
+        if (!knowledgeCheckService)
+          return { body: { quizzes: [], summary: { total: 0, completed: 0 } } };
+        return { body: knowledgeCheckService.getTrackProgress(trackId) };
+      },
+    ),
+
+    // Get one knowledge check (sanitized — no answer keys)
+    route(
+      "GET",
+      new RegExp(`^/api/knowledge-checks/${id}$`),
+      ([, kcId], { knowledgeCheckService }) => {
+        if (!knowledgeCheckService) throw new NotFoundError("Knowledge checks not available.");
+        return { body: { knowledgeCheck: knowledgeCheckService.get(kcId) } };
+      },
+    ),
+
+    // Submit answers to a knowledge check
+    route(
+      "POST",
+      new RegExp(`^/api/knowledge-checks/${id}/submit$`),
+      async ([, kcId], { knowledgeCheckService, req }) => {
+        if (!knowledgeCheckService) throw new NotFoundError("Knowledge checks not available.");
+        const body = await readJsonBody(req);
+        return { body: await knowledgeCheckService.submit(kcId, body) };
+      },
+    ),
+
+    // Get attempt history for a knowledge check
+    route(
+      "GET",
+      new RegExp(`^/api/knowledge-checks/${id}/attempts$`),
+      ([, kcId], { knowledgeCheckService }) => {
+        if (!knowledgeCheckService) throw new NotFoundError("Knowledge checks not available.");
+        return { body: { attempts: knowledgeCheckService.getAttempts(kcId) } };
+      },
+    ),
+
+    // Get progress for a knowledge check
+    route(
+      "GET",
+      new RegExp(`^/api/knowledge-checks/${id}/progress$`),
+      ([, kcId], { knowledgeCheckService }) => {
+        if (!knowledgeCheckService) throw new NotFoundError("Knowledge checks not available.");
+        return { body: { progress: knowledgeCheckService.getProgress(kcId) } };
+      },
+    ),
   ];
 }
 

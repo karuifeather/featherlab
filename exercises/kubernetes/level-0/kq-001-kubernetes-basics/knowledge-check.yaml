@@ -1,0 +1,131 @@
+schemaVersion: 1
+id: kq-k8s-l0-001
+activityType: knowledge-check
+title: Kubernetes Basics
+summary: Check your understanding of Pods, Deployments, Namespaces, and basic kubectl commands.
+track: kubernetes
+level: 0
+order: 1.5
+difficulty: beginner
+estimatedMinutes: 5
+tags: [pods, kubectl, namespaces, deployments]
+relatedLabs: [k8s-0001]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl get pods` do?"
+    options:
+      - id: a
+        text: Lists all Pods in the current namespace
+      - id: b
+        text: Creates a new Pod with a default image
+      - id: c
+        text: Deletes all Pods in the current namespace
+      - id: d
+        text: Shows detailed events for all Pods
+    correctAnswer: a
+    explanation: "`kubectl get pods` lists all Pods in the currently configured namespace (usually `default`). Use `-n <namespace>` to target another namespace, or `-A` for all namespaces."
+    wrongExplanations:
+      b: "Creating a Pod requires `kubectl run` or applying a manifest — `get` is read-only."
+      c: "Deletion uses `kubectl delete pods --all`. The `get` subcommand never modifies cluster state."
+      d: "`kubectl describe pod <name>` shows Events. `get` produces a concise tabular summary."
+    tryCommand: kubectl get pods
+
+  - id: q2
+    type: single-choice
+    prompt: "Which flag outputs a resource in YAML format?"
+    options:
+      - id: a
+        text: --output=text
+      - id: b
+        text: -o yaml
+      - id: c
+        text: --format yaml
+      - id: d
+        text: -o manifest
+    correctAnswer: b
+    explanation: "`-o yaml` (or `--output yaml`) tells kubectl to print the full resource manifest in YAML. This is useful for inspecting what Kubernetes actually stored."
+    wrongExplanations:
+      a: "`--output=text` is not a valid kubectl output format."
+      c: "`--format` is not a kubectl flag; use `-o` / `--output`."
+      d: "`-o manifest` is not valid; the correct value is `yaml` or `json`."
+    tryCommand: kubectl get pod <pod-name> -o yaml
+
+  - id: q3
+    type: single-choice
+    prompt: "What does a Kubernetes Deployment manage?"
+    options:
+      - id: a
+        text: A single Pod with a fixed IP address
+      - id: b
+        text: A set of replicated Pods with a desired replica count
+      - id: c
+        text: Storage volumes attached to a node
+      - id: d
+        text: Network routing rules between services
+    correctAnswer: b
+    explanation: "A Deployment declares a desired number of Pod replicas running a given container image. Kubernetes continuously reconciles actual state toward that desired state."
+    wrongExplanations:
+      a: "A bare Pod is not managed by a Deployment and has no built-in self-healing."
+      c: "Persistent storage is managed by PersistentVolumes and PersistentVolumeClaims."
+      d: "Network routing rules are the domain of Services and NetworkPolicies."
+
+  - id: q4
+    type: single-choice
+    prompt: "What is a Kubernetes Namespace used for?"
+    options:
+      - id: a
+        text: Grouping cluster nodes by geographic region
+      - id: b
+        text: Providing network isolation at the OS level
+      - id: c
+        text: Logically partitioning cluster resources for different teams or environments
+      - id: d
+        text: Storing container images on the cluster
+    correctAnswer: c
+    explanation: "Namespaces provide a scope for resource names, allowing multiple teams or environments to share one cluster without name collisions. Resource quotas and RBAC policies can be applied per-namespace."
+    wrongExplanations:
+      a: "Node grouping is handled by node labels and taints/tolerations, not namespaces."
+      b: "OS-level network isolation requires a NetworkPolicy or a CNI plugin, not just a namespace."
+      d: "Container images are stored in a container registry (like Docker Hub or a private registry), not on the cluster."
+
+  - id: q5
+    type: single-choice
+    prompt: "Which flag lists Pods across ALL namespaces at once?"
+    options:
+      - id: a
+        text: --namespace=all
+      - id: b
+        text: -n default
+      - id: c
+        text: -A
+      - id: d
+        text: --global
+    correctAnswer: c
+    explanation: "`-A` (short for `--all-namespaces`) tells kubectl to query every namespace and include a NAMESPACE column in the output."
+    wrongExplanations:
+      b: "`-n default` scopes the query to a single namespace named `default`."
+      a: "`--namespace=all` is not valid; there is no namespace named `all` by default."
+      d: "`--global` is not a kubectl flag."
+    tryCommand: kubectl get pods -A
+
+  - id: q6
+    type: single-choice
+    prompt: "What extra information does `kubectl describe pod` show compared to `kubectl get pod`?"
+    options:
+      - id: a
+        text: The container image digest and registry URL
+      - id: b
+        text: Events, conditions, volume mounts, and container state details
+      - id: c
+        text: The YAML manifest exactly as submitted
+      - id: d
+        text: Live CPU and memory usage metrics
+    correctAnswer: b
+    explanation: "`kubectl describe` shows a human-readable view that includes Events (what happened to the resource), readiness conditions, environment variables, volume mounts, and more — useful for diagnosing problems."
+    wrongExplanations:
+      c: "The stored manifest is retrieved with `kubectl get pod -o yaml`, not `describe`."
+      d: "Live metrics require `kubectl top pod` (needs metrics-server installed), not `describe`."
+      a: "Image digests can be seen in `-o yaml` output or `docker inspect`, not in `describe` output primarily."

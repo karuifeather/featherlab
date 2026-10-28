@@ -2,7 +2,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { createApp, validateContent } from "../src/app.mjs";
+import { createApp, validateContent, validateKnowledgeChecks } from "../src/app.mjs";
 import { startServer } from "../src/server.mjs";
 import { createRuntime } from "../src/lib/runtime.mjs";
 import { LifecycleCoordinator } from "../src/lifecycle/coordinator.mjs";
@@ -115,7 +115,7 @@ async function runStart() {
     throw new Error("FEATHERLAB_PORT must be a non-privileged TCP port.");
 
   const runtime = createRuntime({}, { log: cliLogger });
-  const { service, persistence } = createApp({
+  const { service, knowledgeCheckService, persistence } = createApp({
     stateDir: runtime.config.stateDir,
     workstation: runtime.config.workstation,
     cluster: runtime.config.cluster,
@@ -167,6 +167,7 @@ async function runStart() {
     serverFactory: (p) =>
       startServer(p, {
         service,
+        knowledgeCheckService,
         workstation: runtime.config.workstation,
         cluster: runtime.config.cluster,
         version,
@@ -329,6 +330,17 @@ try {
         process.exitCode = 1;
       } else {
         console.log(`Validated ${result.count} exercise${result.count === 1 ? "" : "s"}: OK`);
+      }
+      const kcResult = validateKnowledgeChecks({ contentRoot: dir });
+      if (!kcResult.ok) {
+        console.error("Invalid knowledge-check content:");
+        for (const p of kcResult.problems)
+          console.error(`  - ${p.file}${p.path ? ` [${p.path}]` : ""}: ${p.message}`);
+        process.exitCode = 1;
+      } else if (kcResult.count > 0) {
+        console.log(
+          `Validated ${kcResult.count} knowledge check${kcResult.count === 1 ? "" : "s"}: OK`,
+        );
       }
       break;
     }

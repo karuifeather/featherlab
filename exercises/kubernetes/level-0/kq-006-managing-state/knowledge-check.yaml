@@ -1,0 +1,128 @@
+schemaVersion: 1
+id: kq-k8s-l0-006
+activityType: knowledge-check
+title: Managing Desired State
+summary: Verify your understanding of how Kubernetes reconciles live state with a declared specification.
+track: kubernetes
+level: 0
+order: 8.5
+difficulty: beginner
+estimatedMinutes: 5
+tags: [deployments, desired-state, labels, replicas, kubectl]
+relatedLabs: [k8s-0016]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "If you manually delete a Pod that belongs to a Deployment, what happens next?"
+    options:
+      - id: a
+        text: The Deployment is also deleted
+      - id: b
+        text: Nothing — the Pod count drops permanently to one below desired
+      - id: c
+        text: The ReplicaSet controller creates a replacement Pod to restore the desired count
+      - id: d
+        text: The Deployment is paused until an admin manually restarts it
+    correctAnswer: c
+    explanation: "The ReplicaSet controller continuously watches Pod count vs desired replicas. When it detects fewer Pods than desired, it immediately creates a new one — this is the self-healing loop at the core of Kubernetes."
+    wrongExplanations:
+      b: "Kubernetes actively reconciles. A dropped Pod triggers the controller to create a replacement."
+      a: "Deleting a single Pod does not cascade to its owning Deployment or ReplicaSet."
+      d: "Kubernetes controllers reconcile automatically; no manual intervention is needed for Pod replacement."
+
+  - id: q2
+    type: single-choice
+    prompt: "Which `kubectl apply` behaviour makes it safe to run repeatedly against the same manifest?"
+    options:
+      - id: a
+        text: It skips the apply if the resource version has not changed
+      - id: b
+        text: "It performs a three-way merge: desired state vs last-applied vs live state, patching only differences"
+      - id: c
+        text: It deletes the existing resource and re-creates it from scratch
+      - id: d
+        text: It locks the resource so no other process can modify it during the apply
+    correctAnswer: b
+    explanation: "`kubectl apply` stores a `last-applied-configuration` annotation and uses it in a three-way merge with the current file and the live resource. Only fields that actually changed are patched, making re-runs idempotent."
+    wrongExplanations:
+      a: "kubectl does not skip applies based on content hashing; it always does the merge calculation."
+      c: "Delete-and-recreate is done by `kubectl replace --force`. `apply` avoids downtime by patching in-place."
+      d: "Kubernetes does not have a locking mechanism for apply operations."
+
+  - id: q3
+    type: single-choice
+    prompt: "What happens when you change the `spec.template` of a Deployment (e.g. update the container image)?"
+    options:
+      - id: a
+        text: The existing Pods are updated in-place without restarting
+      - id: b
+        text: The Deployment is deleted and a new one is created
+      - id: c
+        text: "A rolling update begins: a new ReplicaSet scales up while the old one scales down"
+      - id: d
+        text: Nothing, until you manually trigger a rollout with `kubectl rollout start`
+    correctAnswer: c
+    explanation: "Changing `spec.template` increments the Deployment's revision. Kubernetes creates a new ReplicaSet for the new template and performs a rolling update, respecting `maxSurge` and `maxUnavailable` settings."
+    wrongExplanations:
+      a: "Pods are immutable in terms of spec; Kubernetes must replace them, not update them in-place."
+      b: "The Deployment itself is patched; a new one is not created. Only the ReplicaSets change."
+      d: "`kubectl rollout start` is not a valid command. Editing `spec.template` automatically triggers the rollout."
+
+  - id: q4
+    type: single-choice
+    prompt: "You applied a Deployment with `replicas: 3` but a node is unavailable. How many Pods does Kubernetes try to maintain?"
+    options:
+      - id: a
+        text: 2 — it reduces the desired count to match available nodes
+      - id: b
+        text: 3 — it keeps trying to schedule all desired Pods, leaving unschedulable ones in Pending
+      - id: c
+        text: 0 — it pauses all scheduling when a node is unavailable
+      - id: d
+        text: 1 — it reduces to a single Pod to avoid overloading remaining nodes
+    correctAnswer: b
+    explanation: "The desired replica count is authoritative. Kubernetes will create 3 Pods and attempt to schedule them. Pods that cannot be placed stay in `Pending` state until a node becomes available."
+    wrongExplanations:
+      a: "Kubernetes does not dynamically reduce `spec.replicas`; the desired count stays at 3."
+      c: "Scheduling continues; only the affected Pods remain Pending — others schedule normally."
+      d: "Kubernetes does not automatically scale down to protect remaining nodes; that requires a policy."
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which changes to a Deployment's spec trigger a new rollout with Pod replacement? (select all that apply)"
+    options:
+      - id: a
+        text: Changing the container image tag
+      - id: b
+        text: Adding or changing an environment variable in the container spec
+      - id: c
+        text: Changing `spec.replicas` from 2 to 4
+      - id: d
+        text: Adding a label to the Pod template metadata
+    correctAnswers: [a, b, d]
+    explanation: "Any change to `spec.template` — including the image, environment variables, labels, or annotations on the Pod template — triggers a new rollout because it changes the Pod spec that the ReplicaSet uses. Changing only `spec.replicas` scales the existing ReplicaSet without creating a new one."
+    wrongExplanations:
+      c: "Scaling (`spec.replicas`) does not change `spec.template`, so the existing ReplicaSet is simply scaled — no new rollout occurs."
+    tryCommand: kubectl set image deployment/nginx nginx=nginx:1.27
+
+  - id: q6
+    type: single-choice
+    prompt: "What does `kubectl edit deployment nginx` allow you to do?"
+    options:
+      - id: a
+        text: Edit the Deployment's YAML in your default text editor and save changes live to the cluster
+      - id: b
+        text: View the Deployment spec in read-only mode
+      - id: c
+        text: Edit the Deployment only if it is currently paused
+      - id: d
+        text: Open the Deployment's source YAML file from disk
+    correctAnswer: a
+    explanation: "`kubectl edit` fetches the live resource, opens it in your `$EDITOR`, and re-applies the changes when you save and exit. It is equivalent to `kubectl get -o yaml`, editing the file, then `kubectl apply`."
+    wrongExplanations:
+      b: "`kubectl edit` opens the resource for editing, not in read-only mode."
+      c: "`kubectl edit` works on any Deployment, paused or not."
+      d: "`kubectl edit` works against the live cluster state, not files on disk."
+    tryCommand: kubectl edit deployment nginx

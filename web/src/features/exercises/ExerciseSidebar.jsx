@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./ExerciseSidebar.scss";
+import "../knowledge-checks/KnowledgeCheckPanel.scss";
 
 const DIFFICULTY_RANK = { beginner: 1, easy: 1, intermediate: 2, medium: 2, advanced: 3, hard: 3 };
 
@@ -24,9 +25,37 @@ function prereqLabel(unmetIds, progressMap) {
   return unmetIds.map((id) => progressMap.get(id)?.title ?? id).join(", ");
 }
 
+/**
+ * Merge exercises (labs) and quizzes into one sorted list per level.
+ * Labs have integer orders; quizzes have float orders (e.g. 1.5) for interleaving.
+ */
+function mergeByLevel(exercises, quizzes) {
+  const allItems = [
+    ...exercises.map((e) => ({ ...e, _itemType: "lab" })),
+    ...quizzes.map((q) => ({ ...q, _itemType: "quiz" })),
+  ];
+  const levelMap = new Map();
+  for (const item of allItems) {
+    if (!levelMap.has(item.level)) levelMap.set(item.level, []);
+    levelMap.get(item.level).push(item);
+  }
+  for (const items of levelMap.values()) {
+    items.sort((a, b) => {
+      // Sort by explicit order (float). Items without an order keep their original
+      // relative position (stable sort returns 0 — never fall through to id compare,
+      // which would break tests whose exercise stubs have no order field).
+      const aOrd = a.order ?? Infinity;
+      const bOrd = b.order ?? Infinity;
+      return aOrd - bOrd;
+    });
+  }
+  return [...levelMap.entries()].sort(([a], [b]) => a - b);
+}
+
 export function ExerciseSidebar({
   track,
   exercises,
+  quizzes = [],
   selectedId,
   onSelect,
   collapsed = false,
@@ -36,7 +65,7 @@ export function ExerciseSidebar({
   progressError = null,
   summary = null,
 }) {
-  const levels = [...Map.groupBy(exercises, (e) => e.level)];
+  const levels = mergeByLevel(exercises, quizzes);
   const [collapsedLevels, setCollapsedLevels] = useState(() => new Set());
 
   const toggleLevel = (level) =>
@@ -76,6 +105,7 @@ export function ExerciseSidebar({
       <nav className="sidebar-levels" aria-label="Exercises">
         {levels.map(([level, items]) => {
           const open = !collapsedLevels.has(level);
+          const totalCount = items.length;
           return (
             <div className="level-group" key={level}>
               <button
@@ -89,15 +119,24 @@ export function ExerciseSidebar({
                   ▾
                 </span>
                 <span className="level-label">Level {level}</span>
-                <span className="level-count">{items.length}</span>
+                <span className="level-count">{totalCount}</span>
               </button>
               {open && (
                 <div className="level-items">
-                  {items.map((exercise, i) => {
-                    const active = exercise.id === selectedId;
-                    // Default to "available" while progress is loading so exercises
-                    // never flash as locked before data arrives.
-                    const info = progressMap.get(exercise.id);
+                  {items.map((item) => {
+                    if (item._itemType === "quiz") {
+                      return (
+                        <QuizSidebarItem
+                          key={item.id}
+                          quiz={item}
+                          active={item.id === selectedId}
+                          onSelect={onSelect}
+                        />
+                      );
+                    }
+                    // Lab item
+                    const active = item.id === selectedId;
+                    const info = progressMap.get(item.id);
                     const state = progressLoading ? "available" : (info?.state ?? "available");
                     const isLocked = state === "locked";
                     const isCompleted = state === "completed";
@@ -105,34 +144,37 @@ export function ExerciseSidebar({
                       ? prereqLabel(info?.unmetPrerequisites, progressMap)
                       : null;
                     const ariaLabel = isLocked
-                      ? `${exercise.title} — locked${unmetTitles ? `, requires: ${unmetTitles}` : ""}`
-                      : exercise.title;
+                      ? `${item.title} — locked${unmetTitles ? `, requires: ${unmetTitles}` : ""}`
+                      : item.title;
+                    // Ordinal counts only labs
+                    const labOrdinal =
+                      items
+                        .filter((x) => x._itemType === "lab")
+                        .findIndex((x) => x.id === item.id) + 1;
 
                     return (
                       <button
-                        key={exercise.id}
+                        key={item.id}
                         className={`lesson ${active ? "selected" : ""} ${isCompleted ? "completed" : ""} ${isLocked ? "locked" : ""}`}
                         data-testid="lesson"
                         aria-current={active ? "true" : undefined}
                         aria-disabled={isLocked ? "true" : undefined}
                         aria-label={ariaLabel}
-                        title={
-                          isLocked && unmetTitles ? `Requires: ${unmetTitles}` : exercise.title
-                        }
-                        onClick={isLocked ? undefined : () => onSelect(exercise.id)}
+                        title={isLocked && unmetTitles ? `Requires: ${unmetTitles}` : item.title}
+                        onClick={isLocked ? undefined : () => onSelect(item.id)}
                       >
                         <span className="lesson-ord" aria-hidden="true">
-                          {isCompleted ? "✓" : isLocked ? "⊘" : String(i + 1).padStart(2, "0")}
+                          {isCompleted ? "✓" : isLocked ? "⊘" : String(labOrdinal).padStart(2, "0")}
                         </span>
                         <div className="lesson-main">
-                          <span className="lesson-title">{exercise.title}</span>
+                          <span className="lesson-title">{item.title}</span>
                           {isLocked && unmetTitles && (
                             <span className="lesson-prereq-note" aria-hidden="true">
                               Requires: {unmetTitles}
                             </span>
                           )}
                         </div>
-                        {!isLocked && <DifficultyDots difficulty={exercise.difficulty} />}
+                        {!isLocked && <DifficultyDots difficulty={item.difficulty} />}
                       </button>
                     );
                   })}
@@ -153,5 +195,29 @@ export function ExerciseSidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+function QuizSidebarItem({ quiz, active, onSelect }) {
+  return (
+    <button
+      type="button"
+      className={`kc-sidebar-item ${active ? "selected" : ""}`}
+      data-testid="knowledge-check-item"
+      aria-current={active ? "true" : undefined}
+      aria-label={`${quiz.title} — knowledge check`}
+      title={quiz.title}
+      onClick={() => onSelect(quiz.id)}
+    >
+      <span className="kc-sidebar-icon" aria-hidden="true">
+        ✦
+      </span>
+      <div className="kc-sidebar-main">
+        <span className="kc-sidebar-title">{quiz.title}</span>
+        <span className="kc-sidebar-sub">
+          Quiz · {quiz.questionCount ?? quiz.questions?.length ?? "?"} questions
+        </span>
+      </div>
+    </button>
   );
 }

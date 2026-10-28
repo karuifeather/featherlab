@@ -15,6 +15,7 @@ export async function startServer(
   port = 4317,
   {
     service = createApp().service,
+    knowledgeCheckService,
     workstation,
     cluster = DEFAULT_CLUSTER,
     docker,
@@ -47,7 +48,9 @@ export async function startServer(
         const { route, match } = matchRoute(routes, req.method, url.pathname);
         const { status = 200, body } = await route.handler(match, {
           service,
+          knowledgeCheckService,
           url,
+          req,
           cluster,
           getVersionInfo,
         });

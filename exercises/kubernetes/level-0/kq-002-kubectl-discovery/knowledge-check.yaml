@@ -1,0 +1,134 @@
+schemaVersion: 1
+id: kq-k8s-l0-002
+activityType: knowledge-check
+title: kubectl Discovery
+summary: Test your knowledge of kubectl inspection commands, output formats, and resource discovery tools.
+track: kubernetes
+level: 0
+order: 2.5
+difficulty: beginner
+estimatedMinutes: 5
+tags: [kubectl, inspection, logs, labels, output-formats]
+relatedLabs: [k8s-0011]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl explain pod.spec.containers` show?"
+    options:
+      - id: a
+        text: The list of running containers in every Pod
+      - id: b
+        text: Documentation for the containers field of a Pod spec, including allowed sub-fields
+      - id: c
+        text: The container images pulled on each node
+      - id: d
+        text: An error, because you must specify a Pod name
+    correctAnswer: b
+    explanation: "`kubectl explain` is a built-in reference for any API field. `pod.spec.containers` navigates to the containers array definition and shows its type, description, and child fields."
+    wrongExplanations:
+      a: "Listing running containers uses `kubectl get pods -o json` or `kubectl describe pod`."
+      c: "Image pull history is not surfaced by `kubectl explain`."
+      d: "`kubectl explain` queries the API schema, not a specific resource — no Pod name needed."
+    tryCommand: kubectl explain pod.spec.containers
+
+  - id: q2
+    type: single-choice
+    prompt: "Which command lists every resource type the cluster API server knows about?"
+    options:
+      - id: a
+        text: kubectl list resources
+      - id: b
+        text: kubectl get all
+      - id: c
+        text: kubectl api-resources
+      - id: d
+        text: kubectl get resources --all
+    correctAnswer: c
+    explanation: "`kubectl api-resources` prints the full table of available resource types, their short names, API groups, whether they are namespaced, and their KIND. It reflects what the server actually supports."
+    wrongExplanations:
+      a: "`kubectl list resources` is not a valid kubectl command."
+      b: "`kubectl get all` retrieves common resources (Pods, Deployments, Services…) in the current namespace, but not the list of resource *types*."
+      d: "`kubectl get resources --all` is not a valid kubectl command."
+    tryCommand: kubectl api-resources
+
+  - id: q3
+    type: single-choice
+    prompt: "What extra columns does `-o wide` add to `kubectl get pods` output?"
+    options:
+      - id: a
+        text: Labels and annotations for each Pod
+      - id: b
+        text: Node name, Pod IP address, and nominated node
+      - id: c
+        text: Container image digests and pull policies
+      - id: d
+        text: CPU and memory request/limit values
+    correctAnswer: b
+    explanation: "`-o wide` extends the default table with the Node the Pod is scheduled on, the Pod's cluster IP, and (for Pods with readiness gates) a nominated node column."
+    wrongExplanations:
+      a: "Labels are shown with `--show-labels`; annotations require `-o yaml`."
+      c: "Image digests are not part of the wide output; use `-o yaml` for full image details."
+      d: "Resource requests/limits are in `-o yaml` output or `kubectl describe`."
+    tryCommand: kubectl get pods -o wide
+
+  - id: q4
+    type: single-choice
+    prompt: "What does `kubectl get pods --no-headers` remove from the output?"
+    options:
+      - id: a
+        text: The Pod names
+      - id: b
+        text: The column header row (NAME, READY, STATUS…)
+      - id: c
+        text: Pods that are not in Running state
+      - id: d
+        text: The namespace column
+    correctAnswer: b
+    explanation: "`--no-headers` suppresses the first line that contains column names. This is useful when piping kubectl output into shell scripts that parse line-by-line."
+    wrongExplanations:
+      a: "Pod names are always printed; they are how you identify each row."
+      c: "Filtering by status requires `--field-selector status.phase=Running`, not `--no-headers`."
+      d: "The namespace column only appears when using `-A` or `-n`; `--no-headers` does not remove it."
+    tryCommand: kubectl get pods --no-headers
+
+  - id: q5
+    type: single-choice
+    prompt: "What does `kubectl get pods -o name` print?"
+    options:
+      - id: a
+        text: Only the Pod name without the resource type prefix
+      - id: b
+        text: Each resource as `pod/<name>`, one per line
+      - id: c
+        text: A JSON object with just the `metadata.name` field
+      - id: d
+        text: The short name alias for the Pod resource type
+    correctAnswer: b
+    explanation: "`-o name` outputs each resource as `<type>/<name>`, one per line (e.g. `pod/nginx-abc123`). This format is accepted directly by other kubectl commands like `kubectl delete`."
+    wrongExplanations:
+      a: "The type prefix is always included with `-o name`; it cannot be stripped this way."
+      c: "JSON output requires `-o json`; `-o name` is plain text."
+      d: "Resource type aliases are shown by `kubectl api-resources`."
+    tryCommand: kubectl get pods -o name
+
+  - id: q6
+    type: single-choice
+    prompt: "Which command shows the stdout logs of a running Pod?"
+    options:
+      - id: a
+        text: kubectl inspect pod <name>
+      - id: b
+        text: kubectl get logs <name>
+      - id: c
+        text: kubectl logs <name>
+      - id: d
+        text: kubectl describe pod <name> --logs
+    correctAnswer: c
+    explanation: "`kubectl logs <pod-name>` streams the stdout (and stderr) of the Pod's first container. Add `-c <container>` for multi-container Pods, or `-f` to follow the stream live."
+    wrongExplanations:
+      a: "`kubectl inspect` is not a valid kubectl subcommand."
+      b: "`kubectl get logs` is not a valid kubectl command; the correct subcommand is `logs`."
+      d: "`kubectl describe` does not have a `--logs` flag; it shows Events, not container logs."
+    tryCommand: kubectl logs <pod-name>

@@ -1,0 +1,150 @@
+schemaVersion: 1
+id: kq-k8s-l0-003
+activityType: knowledge-check
+title: YAML Manifests and Dry Runs
+summary: Check your understanding of Kubernetes manifest structure, kubectl apply, and the dry-run workflow.
+track: kubernetes
+level: 0
+order: 3.5
+difficulty: beginner
+estimatedMinutes: 6
+tags: [yaml, manifests, dry-run, kubectl, apply]
+relatedLabs: [k8s-0012]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does `kubectl apply --dry-run=client -f pod.yaml` do?"
+    options:
+      - id: a
+        text: Applies the manifest and immediately deletes the resource
+      - id: b
+        text: Validates and shows what would be created without sending anything to the cluster
+      - id: c
+        text: Applies the manifest only if the resource does not already exist
+      - id: d
+        text: Sends the manifest to the server for validation but does not persist it
+    correctAnswer: b
+    explanation: "`--dry-run=client` performs all client-side validation and prints the resource that *would* be created, but never contacts the API server. It is fast and safe — ideal for checking manifests before applying."
+    wrongExplanations:
+      c: "That behaviour describes `kubectl create` (which errors if the resource exists), not dry-run."
+      d: "Server-side validation without persisting uses `--dry-run=server`, not `--dry-run=client`."
+      a: "No resource is created or deleted; dry-run is entirely non-destructive."
+    tryCommand: kubectl apply --dry-run=client -f pod.yaml
+
+  - id: q2
+    type: single-choice
+    prompt: "How do you generate a YAML manifest for a Deployment without creating it in the cluster?"
+    options:
+      - id: a
+        text: kubectl get deployment nginx -o yaml
+      - id: b
+        text: kubectl create deployment nginx --image=nginx --dry-run=client -o yaml
+      - id: c
+        text: kubectl apply deployment nginx --output yaml
+      - id: d
+        text: kubectl manifest deployment nginx --image=nginx
+    correctAnswer: b
+    explanation: "Combining `--dry-run=client` with `-o yaml` makes kubectl print the full manifest it *would* create. You can redirect this to a file and commit it as your source of truth."
+    wrongExplanations:
+      a: "`kubectl get deployment nginx` only works if the Deployment already exists in the cluster."
+      c: "`kubectl apply` does not accept `--output` without a file (`-f`), and this syntax is invalid."
+      d: "`kubectl manifest` is not a valid kubectl subcommand."
+    tryCommand: kubectl create deployment nginx --image=nginx --dry-run=client -o yaml
+
+  - id: q3
+    type: single-choice
+    prompt: "What is the key difference between `kubectl apply` and `kubectl create`?"
+    options:
+      - id: a
+        text: "`apply` requires a running cluster; `create` works offline"
+      - id: b
+        text: "`apply` is declarative and safe to re-run; `create` errors if the resource already exists"
+      - id: c
+        text: "`apply` only works with Deployments; `create` works with any resource"
+      - id: d
+        text: "`apply` is faster because it skips schema validation"
+    correctAnswer: b
+    explanation: "`kubectl apply` performs a three-way merge: it compares the desired manifest, the last-applied config, and the live state, then patches only what changed. Running it again on the same manifest is safe. `kubectl create` issues a POST and returns an error if the resource already exists."
+    wrongExplanations:
+      a: "Both commands contact the API server and require a reachable cluster."
+      c: "Both `apply` and `create` work with any resource type."
+      d: "`apply` does more work than `create` (three-way merge), not less."
+
+  - id: q4
+    type: single-choice
+    prompt: "Which field in a Kubernetes manifest specifies the resource type?"
+    options:
+      - id: a
+        text: type
+      - id: b
+        text: resource
+      - id: c
+        text: kind
+      - id: d
+        text: spec.type
+    correctAnswer: c
+    explanation: "The `kind` field (e.g. `kind: Pod`, `kind: Deployment`) tells Kubernetes which resource type the manifest describes. Together with `apiVersion` it uniquely identifies the API object."
+    wrongExplanations:
+      a: "`type` is used inside certain resource specs (e.g. `spec.type` in a Service), but not as the top-level resource identifier."
+      b: "`resource` is not a standard top-level manifest field."
+      d: "`spec.type` is a field in a Service spec, not the top-level resource type identifier."
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which kubectl commands support the `--dry-run=client` flag? (select all that apply)"
+    options:
+      - id: a
+        text: kubectl apply
+      - id: b
+        text: kubectl create
+      - id: c
+        text: kubectl get
+      - id: d
+        text: kubectl describe
+    correctAnswers: [a, b]
+    explanation: "Both `kubectl apply` and `kubectl create` are write operations that accept `--dry-run=client` to simulate the change without touching the cluster. Read operations like `get` and `describe` never mutate state, so `--dry-run` has no meaning for them."
+    wrongExplanations:
+      c: "`kubectl get` is a read-only command; dry-run is irrelevant and not supported."
+      d: "`kubectl describe` is read-only; it does not support `--dry-run`."
+    tryCommand: kubectl create configmap my-cfg --from-literal=key=val --dry-run=client -o yaml
+
+  - id: q6
+    type: single-choice
+    prompt: "What does `kubectl diff -f deploy.yaml` show?"
+    options:
+      - id: a
+        text: Syntax errors in the YAML file
+      - id: b
+        text: The difference between the file and what is currently live in the cluster
+      - id: c
+        text: The change history of the resource since it was first created
+      - id: d
+        text: Fields that differ between two YAML files on disk
+    correctAnswer: b
+    explanation: "`kubectl diff` sends the manifest to the server (dry-run=server) and prints a unified diff of the live resource vs what would be applied — handy for reviewing changes before committing them."
+    wrongExplanations:
+      a: "YAML syntax validation happens in the client without a cluster; `diff` requires a live cluster."
+      c: "Change history is tracked by `kubectl rollout history` (for Deployments) or audit logs."
+      d: "`kubectl diff` compares cluster state to a file, not two files on disk."
+    tryCommand: kubectl diff -f deploy.yaml
+
+  - id: q7
+    type: single-choice
+    prompt: "Which required top-level field pairs with `kind` to fully identify the Kubernetes API version of a resource?"
+    options:
+      - id: a
+        text: version
+      - id: b
+        text: apiVersion
+      - id: c
+        text: group
+      - id: d
+        text: schema
+    correctAnswer: b
+    explanation: "Every Kubernetes manifest requires both `apiVersion` (e.g. `apps/v1` or `v1`) and `kind`. Together they uniquely identify the API object type and which API group handles it."
+    wrongExplanations:
+      a: "`version` is not a valid top-level manifest field."
+      c: "`group` is not a top-level manifest field; the group is encoded inside `apiVersion`."
+      d: "`schema` is not a standard Kubernetes manifest field."
