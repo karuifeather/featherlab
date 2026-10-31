@@ -15,10 +15,6 @@ kubectl create job data-fix \
   -n fl-k8s-0078 \
   -- sh -c 'echo "data fixed"'
 
-kubectl patch job data-fix -n fl-k8s-0078 \
-  --type=merge \
-  -p='{"spec":{"backoffLimit":1}}'
-
 kubectl wait --for=condition=complete job/data-fix -n fl-k8s-0078 --timeout=120s
 ```
 

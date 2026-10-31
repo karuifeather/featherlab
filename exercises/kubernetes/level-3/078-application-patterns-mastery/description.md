@@ -8,7 +8,7 @@ The `fl-k8s-0078` namespace has a broken platform. Three resources were deployed
 
 **What needs to be created:**
 
-- **Job `data-fix`** — run a one-time task: image `busybox:1.36`, command `echo 'data fixed'`, `backoffLimit: 1`.
+- **Job `data-fix`** — run a one-time task: image `busybox:1.36`, command `echo 'data fixed'`.
 
 Fix everything so that:
 

@@ -132,9 +132,10 @@ for (const [id, scenario] of Object.entries(SCENARIOS)) {
     const solved = await service.check(id);
     assert.equal(solved.outcome, "passed", `solution should pass: ${describeFailures(solved)}`);
 
-    // Each variant must fail exactly the expected checks.
+    // Each variant starts from a fresh baseline and must fail exactly the expected checks.
     for (const variant of scenario.variants ?? []) {
-      await service.activate(id, confirmed); // reset
+      await service.reset(id);
+      assert.equal((await service.check(id)).outcome, "failed", "reset restores the baseline");
       await variant.run(k);
       const result = await service.check(id);
       assert.deepEqual(
@@ -144,13 +145,13 @@ for (const [id, scenario] of Object.entries(SCENARIOS)) {
       );
     }
 
-    // Switch to a different exercise and come back — progress should be preserved.
+    // Switch to a different exercise and come back — completion record must be intact.
     const others = registry.list({ track: "kubernetes", level: 0 });
     if (others.length > 0) {
       const other = others[0].id;
       await service.activate(other, confirmed);
       const revisit = await service.activate(id, confirmed);
-      assert.equal(revisit.environment, "resumed", "expected resumed environment on revisit");
+      assert.equal(revisit.environment, "fresh", "revisit after switch should start fresh");
     }
   });
 }

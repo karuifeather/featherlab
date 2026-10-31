@@ -27,7 +27,7 @@ requirements:
   - "CronJob `report-runner` with schedule `0 6 * * *` (was a Pod)"
 
 hints:
-  - "Delete the wrong resources first: `kubectl delete job web-server daemonset batch-task pod report-runner -n fl-k8s-0077` (adapt as needed)"
+  - "Delete the wrong resources first: `kubectl delete job/web-server deployment/batch-task deployment/node-monitor pod/report-runner -n fl-k8s-0077`"
   - "A Deployment is for long-running, replicated services. A Job is for one-time tasks. A DaemonSet runs on every node. A CronJob runs on a schedule."
   - "Use `kubectl rollout status deployment/web-server -n fl-k8s-0077` after creating the Deployment."
 

@@ -278,7 +278,9 @@ spec:
   "k8s-0063": {
     initial: [["Deployment", "web-app", "fl-k8s-0063"]],
     async solve(k) {
-      k.apply(`
+      // Setup creates this Deployment with kubectl create (no last-applied annotation), so
+      // kubectl apply cannot remove "helper" from containers[]. Use replace --force instead.
+      k.replace(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -345,7 +347,9 @@ spec:
       {
         name: "monitor removed from initContainers",
         async run(k) {
-          k.apply(`
+          // Use replace (not apply) — strategic merge patch preserves initContainers when omitted,
+          // so kubectl apply would NOT remove the monitor sidecar.
+          k.replace(`
 apiVersion: apps/v1
 kind: Deployment
 metadata:

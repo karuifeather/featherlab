@@ -254,7 +254,7 @@ spec:
       containers:
         - name: checker
           image: busybox:1.36
-          command: ["sh", "-c", "while true; do echo ok; sleep 30; done"]
+          command: ["sh", "-c", "while true; do echo checking; sleep 30; done"]
 `);
       k.run("rollout", "status", "daemonset/node-checker", "-n", "fl-k8s-0074", "--timeout=120s");
     },
@@ -307,6 +307,8 @@ spec:
   "k8s-0075": {
     initial: [["daemonset", "log-forwarder", "fl-k8s-0075"]],
     async solve(k) {
+      // Wait for the setup DaemonSet pods to be ready before checking daemonset-status.
+      k.run("rollout", "status", "daemonset/log-forwarder", "-n", "fl-k8s-0075", "--timeout=120s");
       // Adding a metadata label to a DaemonSet does not trigger a Pod rollout.
       k.run("label", "daemonset", "log-forwarder", "tier=monitoring", "-n", "fl-k8s-0075");
     },
@@ -314,6 +316,15 @@ spec:
       {
         name: "wrong label key (type=monitoring instead of tier=monitoring)",
         async run(k) {
+          // Wait for DaemonSet to be ready first (same as solve) so only the label check fails.
+          k.run(
+            "rollout",
+            "status",
+            "daemonset/log-forwarder",
+            "-n",
+            "fl-k8s-0075",
+            "--timeout=120s",
+          );
           k.run("label", "daemonset", "log-forwarder", "type=monitoring", "-n", "fl-k8s-0075");
         },
         failing: ["label"],
@@ -321,6 +332,14 @@ spec:
       {
         name: "wrong label value (tier=observability instead of tier=monitoring)",
         async run(k) {
+          k.run(
+            "rollout",
+            "status",
+            "daemonset/log-forwarder",
+            "-n",
+            "fl-k8s-0075",
+            "--timeout=120s",
+          );
           k.run("label", "daemonset", "log-forwarder", "tier=observability", "-n", "fl-k8s-0075");
         },
         failing: ["label"],
@@ -332,6 +351,8 @@ spec:
   "k8s-0076": {
     initial: [["daemonset", "cluster-agent", "fl-k8s-0076"]],
     async solve(k) {
+      // Wait for the setup DaemonSet pods to be ready before checking daemonset-status.
+      k.run("rollout", "status", "daemonset/cluster-agent", "-n", "fl-k8s-0076", "--timeout=120s");
       // Adding a metadata label — no Pod rollout triggered.
       k.run("label", "daemonset", "cluster-agent", "observed=yes", "-n", "fl-k8s-0076");
     },
@@ -339,14 +360,31 @@ spec:
       {
         name: "label value is 'true' instead of 'yes'",
         async run(k) {
+          // Wait for DaemonSet to be ready first (same as solve) so only the label check fails.
+          k.run(
+            "rollout",
+            "status",
+            "daemonset/cluster-agent",
+            "-n",
+            "fl-k8s-0076",
+            "--timeout=120s",
+          );
           k.run("label", "daemonset", "cluster-agent", "observed=true", "-n", "fl-k8s-0076");
         },
         failing: ["label"],
       },
       {
         name: "label not applied at all",
-        async run() {
-          // No label applied — label check fails, but daemonset is still ready from setup.
+        async run(k) {
+          // Wait for ready, then apply no label — only the label check fails.
+          k.run(
+            "rollout",
+            "status",
+            "daemonset/cluster-agent",
+            "-n",
+            "fl-k8s-0076",
+            "--timeout=120s",
+          );
         },
         failing: ["label"],
       },
