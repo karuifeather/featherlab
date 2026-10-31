@@ -38,11 +38,51 @@ jobs:
           ./node_modules/.bin/featherlab validate-content
           ./node_modules/.bin/featherlab exercises
 
-  integration:
-    name: Real kind cluster and browser end-to-end
+  # Build the workstation image once; all downstream jobs load it from the artifact.
+  # This avoids N redundant Docker builds and guarantees every job tests the same image.
+  build-image:
+    name: Build workstation image
     needs: [quality]
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build workstation image
+        run: docker build -t featherlab-workstation:dev docker
+      - name: Export image
+        run: docker save featherlab-workstation:dev | gzip > /tmp/workstation.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workstation-image
+          path: /tmp/workstation.tar.gz
+          retention-days: 1
+
+  # Each circuit runs in its own parallel job against an isolated kind cluster.
+  # To add a new level: append one entry to the matrix include list — wall time stays flat.
+  integration:
+    name: "Kind tests · ${{ matrix.suite }}"
+    needs: [build-image]
+    runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: level-0
+            files: test/integration/level0-circuit.test.mjs
+          - suite: level-2
+            files: test/integration/level2-circuit.test.mjs
+          - suite: level-3
+            files: test/integration/level3-circuit.test.mjs
+          - suite: lifecycle-and-misc
+            files: >-
+              test/integration/lifecycle.test.mjs
+              test/integration/kind.test.mjs
+              test/integration/progression.test.mjs
+              test/integration/progression-http.test.mjs
+              test/integration/knowledge-check-isolation.test.mjs
+    env:
+      FEATHERLAB_KIND_TESTS: "1"
+      FEATHERLAB_IMAGE: featherlab-workstation:dev
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -54,16 +94,46 @@ jobs:
           curl -fsSL --retry 3 --retry-delay 5 -o kind "https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64"
           chmod +x kind
           sudo mv kind /usr/local/bin/kind
-      - name: Build the workstation image from this commit
-        run: docker build -t featherlab-workstation:dev docker
+      - uses: actions/download-artifact@v4
+        with:
+          name: workstation-image
+          path: /tmp
+      - name: Load workstation image
+        run: docker load -i /tmp/workstation.tar.gz
+      - run: npm ci
+      - name: Run kind tests
+        # node --test accepts multiple file arguments; matrix.files is space-separated
+        run: node --test --test-concurrency=1 ${{ matrix.files }}
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker ps -a || true
+          kind get clusters || true
+
+  e2e:
+    name: Browser end-to-end
+    needs: [build-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install kind
+        run: |
+          curl -fsSL --retry 3 --retry-delay 5 -o kind "https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64"
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+      - uses: actions/download-artifact@v4
+        with:
+          name: workstation-image
+          path: /tmp
+      - name: Load workstation image
+        run: docker load -i /tmp/workstation.tar.gz
       - run: npm ci
       - run: npm run build
-      # Both suites create and delete their own featherlab-test-<id> cluster; neither can
-      # address a cluster named "featherlab" (see test/helpers/isolated-environment.mjs).
-      - name: Exercise lifecycle against a disposable kind cluster
-        env:
-          FEATHERLAB_IMAGE: featherlab-workstation:dev
-        run: npm run test:kind
       - run: npx playwright install --with-deps chromium
       - name: Browser end-to-end against the real backend
         env:
