@@ -95,6 +95,37 @@ test("the prerequisite graph is the designed curriculum, not one linear chain", 
     "k8s-0008": ["k8s-0004", "k8s-0039"],
     "k8s-0009": ["k8s-0005", "k8s-0008"],
     "k8s-0010": ["k8s-0003", "k8s-0006", "k8s-0007", "k8s-0009"],
+    // Level 3: M5.5 Circuit A — One-Time Pods and Init Containers.
+    "k8s-0054": ["k8s-0053"],
+    "k8s-0055": ["k8s-0054"],
+    "k8s-0056": ["k8s-0055"],
+    "k8s-0057": ["k8s-0056"],
+    "k8s-0058": ["k8s-0057"],
+    "k8s-0059": ["k8s-0058"],
+    "k8s-0060": ["k8s-0059"],
+    // Level 3: M5.5 Circuit C — Native Sidecars.
+    "k8s-0061": ["k8s-0060"],
+    "k8s-0062": ["k8s-0061"],
+    "k8s-0063": ["k8s-0062"],
+    "k8s-0064": ["k8s-0063"],
+    // Level 3: M5.5 Circuit D — Jobs.
+    "k8s-0065": ["k8s-0064"],
+    "k8s-0066": ["k8s-0065"],
+    "k8s-0067": ["k8s-0066"],
+    "k8s-0068": ["k8s-0067"],
+    "k8s-0069": ["k8s-0068"],
+    // Level 3: M5.5 Circuit E — CronJobs (gates behind Jobs circuit).
+    "k8s-0070": ["k8s-0069"],
+    "k8s-0071": ["k8s-0070"],
+    "k8s-0072": ["k8s-0071"],
+    "k8s-0073": ["k8s-0072"],
+    // Level 3: M5.5 Circuit F — DaemonSets and Workload Selection.
+    "k8s-0074": ["k8s-0073"],
+    "k8s-0075": ["k8s-0074"],
+    "k8s-0076": ["k8s-0075"],
+    "k8s-0077": ["k8s-0076"],
+    // Level 3: M5.5 Final Challenge.
+    "k8s-0078": ["k8s-0077"],
   });
 });
 

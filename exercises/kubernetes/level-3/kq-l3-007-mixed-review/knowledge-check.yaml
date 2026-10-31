@@ -1,0 +1,156 @@
+schemaVersion: 1
+id: kq-k8s-l3-007
+activityType: knowledge-check
+title: "Level 3 Mixed Review: Workload Controllers"
+summary: Consolidate your understanding of DaemonSets, init containers, CronJobs, Jobs, and how to choose the right controller for each workload type.
+track: kubernetes
+level: 3
+order: 26.5
+difficulty: intermediate
+estimatedMinutes: 6
+tags: [deployments, jobs, cronjobs, daemonsets, init-containers]
+relatedLabs: [k8s-0074, k8s-0075, k8s-0076, k8s-0077, k8s-0078]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: >
+      A DaemonSet and a Deployment both run Pods. What is the fundamental
+      difference between them?
+    options:
+      - id: a
+        text: "A DaemonSet runs exactly one Pod per node; a Deployment runs a fixed replica count across the cluster."
+      - id: b
+        text: "A DaemonSet can only run on master nodes; a Deployment runs on worker nodes."
+      - id: c
+        text: "A Deployment is for stateless apps; a DaemonSet is for stateful apps."
+      - id: d
+        text: "A DaemonSet requires a PersistentVolume; a Deployment does not."
+    correctAnswer: a
+    explanation: >
+      A DaemonSet ensures exactly one Pod runs on every (eligible) node. If a new node joins,
+      the DaemonSet adds a Pod to it automatically. A Deployment keeps a fixed replica count
+      and does not track node topology.
+    wrongExplanations:
+      b: "DaemonSets schedule on any eligible node by default — including control-plane nodes when a toleration is added, but also worker nodes."
+      c: "The stateful vs stateless distinction belongs to StatefulSets vs Deployments. DaemonSets are about per-node placement, not state."
+      d: "DaemonSets have no special storage requirement. Log collectors and network agents typically use the host filesystem, not a PersistentVolume."
+
+  - id: q2
+    type: single-choice
+    prompt: >
+      An init container fails repeatedly and shows `Init:CrashLoopBackOff`.
+      You discover the image tag is wrong. Which fix is correct?
+    options:
+      - id: a
+        text: "Delete the Pod and recreate it without the init container."
+      - id: b
+        text: "Patch the parent Deployment's initContainers image to a valid tag and let the rollout recreate the Pod."
+      - id: c
+        text: "Run `kubectl exec` into the init container to fix the image."
+      - id: d
+        text: "Scale the Deployment to 0, then back to 1 to clear the error."
+    correctAnswer: b
+    explanation: >
+      Editing the Deployment spec (e.g. `kubectl patch` or `kubectl edit`) and changing the
+      init container image to a valid tag triggers a rolling update. The new Pod is created
+      with the corrected image and the init container runs successfully.
+    wrongExplanations:
+      a: "Removing the init container changes the application's startup behavior, not the image tag. The init container may be required for configuration."
+      c: "A container in `CrashLoopBackOff` exits immediately — `kubectl exec` cannot attach to it. You must fix the image in the spec."
+      d: "Scaling to 0 and back restarts Pods but does not change the image. The same broken image will cause the same failure."
+
+  - id: q3
+    type: single-choice
+    prompt: >
+      Which cron expression runs a job every Sunday at midnight?
+    options:
+      - id: a
+        text: "`0 0 * * 7`"
+      - id: b
+        text: "`0 0 * * 0`"
+      - id: c
+        text: "`0 0 0 * *`"
+      - id: d
+        text: "`* * * * 0`"
+    correctAnswer: b
+    explanation: >
+      The five fields are: minute, hour, day-of-month, month, day-of-week.
+      `0 0 * * 0` means minute=0, hour=0, any day-of-month, any month, Sunday (day 0).
+    wrongExplanations:
+      a: "Day-of-week 7 is also Sunday in some cron implementations, but 0 is the standard. Kubernetes accepts 0."
+      c: "`0 0 0 * *` puts 0 in the day-of-month field, making it run on midnight of the 1st of every month, not every Sunday."
+      d: "`* * * * 0` uses wildcards for minute and hour, so it would fire every minute on Sundays, not just at midnight."
+
+  - id: q4
+    type: single-choice
+    prompt: >
+      You ran `kubectl create job test-run --from=cronjob/archiver -n dev`.
+      The resulting Job Pod is in `ImagePullBackOff`. What is the most likely cause?
+    options:
+      - id: a
+        text: "The Job did not inherit the CronJob's schedule."
+      - id: b
+        text: "The Job Pod is using a broken image tag copied from the CronJob's jobTemplate."
+      - id: c
+        text: "The `--from=cronjob/` flag only copies metadata, not the container spec."
+      - id: d
+        text: "The namespace `dev` does not allow manually triggered Jobs."
+    correctAnswer: b
+    explanation: >
+      `kubectl create job --from=cronjob/` copies the full jobTemplate, including the container
+      image. If the CronJob's image is bad, the manually created Job will fail for the same
+      reason. Fix the CronJob's image first, then retry the manual run.
+    wrongExplanations:
+      a: "Manually created Jobs have no schedule — they run immediately. The schedule field is irrelevant to a `--from=cronjob` Job."
+      c: "`--from=cronjob/` copies the entire `spec.jobTemplate.spec`, including all containers and their images."
+      d: "Kubernetes has no namespace-level restriction on manually triggered Jobs. The failure is in image pulling, not authorization."
+
+  - id: q5
+    type: single-choice
+    prompt: >
+      A platform needs: a long-running web API, a nightly data export,
+      a log collector on every node, and a one-time database migration.
+      Which controller mapping is correct?
+    options:
+      - id: a
+        text: "Web API=Deployment; nightly export=CronJob; log collector=DaemonSet; migration=Job"
+      - id: b
+        text: "Web API=StatefulSet; nightly export=CronJob; log collector=DaemonSet; migration=Job"
+      - id: c
+        text: "Web API=Deployment; nightly export=CronJob; log collector=Deployment; migration=CronJob"
+      - id: d
+        text: "Web API=Deployment; nightly export=Job; log collector=DaemonSet; migration=CronJob"
+    correctAnswer: a
+    explanation: >
+      Deployment: long-running, replicated services. CronJob: recurring scheduled tasks.
+      DaemonSet: one Pod per node — perfect for node-level collectors. Job: finite, one-time
+      tasks with a completion guarantee.
+    wrongExplanations:
+      b: "StatefulSet is for workloads that need stable network identity or ordered startup, such as databases. A stateless web API uses a Deployment."
+      c: "A Deployment with a fixed replica count does not adapt to cluster topology — it cannot guarantee one Pod per node. A CronJob fires repeatedly; it is wrong for a one-time migration."
+      d: "A nightly export fires on a schedule and must use a CronJob. A one-time migration runs once and must use a Job, not a CronJob."
+
+  - id: q6
+    type: single-choice
+    prompt: >
+      A DaemonSet in a single-node kind cluster shows `DESIRED: 1`. Is this healthy?
+    options:
+      - id: a
+        text: "No — a DaemonSet should always show DESIRED >= 2."
+      - id: b
+        text: "Yes — DESIRED equals the number of eligible nodes, and a single-node cluster has one node."
+      - id: c
+        text: "No — kind clusters cap DaemonSets at 1 due to a sandbox limitation."
+      - id: d
+        text: "Uncertain — scale the DaemonSet manually to verify."
+    correctAnswer: b
+    explanation: >
+      DaemonSet desired count equals the number of schedulable nodes that match any node
+      selector and tolerations. A default kind cluster has one node, so `DESIRED=1` is
+      fully healthy. If `READY=1` and `AVAILABLE=1`, the DaemonSet is working correctly.
+    wrongExplanations:
+      a: "DaemonSets scale with the node count, not a minimum of 2. On a 3-node cluster, DESIRED would be 3."
+      c: "kind does not cap DaemonSets. The DESIRED count reflects real node count in the kind cluster."
+      d: "DaemonSets cannot be scaled manually — `kubectl scale` does not work on DaemonSets. DESIRED is always set by the controller based on node count."

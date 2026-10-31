@@ -1,0 +1,50 @@
+schemaVersion: 1
+id: k8s-0055
+type: task
+title: Inspect a Completed Task
+summary: Inspect the logs of a completed Pod, then create a second Pod that also exits successfully.
+track: kubernetes
+level: 3
+order: 2
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [pods, restart-policy, logs, one-shot]
+prerequisites: [k8s-0054]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0055`"
+  - "A Pod named `data-probe` is already created for you; inspect its logs"
+  - "Create a Pod named `inspector`"
+  - 'Command: `echo "found it"`'
+  - "Both Pods must reach phase `Succeeded`"
+
+hints:
+  - "`kubectl logs data-probe -n fl-k8s-0055` prints the output of a completed Pod just like a running one."
+  - "Create the inspector Pod with `kubectl run inspector --image=busybox:1.36 --restart=Never -n fl-k8s-0055 --command -- echo 'found it'`."
+  - "After creating inspector, wait with `kubectl wait pod/inspector -n fl-k8s-0055 --for=jsonpath={.status.phase}=Succeeded --timeout=60s`."
+
+lifecycle:
+  namespaces: [fl-k8s-0055]
+  setup:
+    manifests: [setup/probe.yaml]
+
+checks:
+  - id: data-probe-phase
+    type: k8s.pod-phase
+    label: Pod data-probe has reached Succeeded
+    params: { name: data-probe, namespace: fl-k8s-0055, phase: Succeeded }
+  - id: inspector-exists
+    type: k8s.resource-in-namespace
+    label: Pod inspector exists in fl-k8s-0055
+    params: { kind: Pod, name: inspector, namespace: fl-k8s-0055 }
+  - id: inspector-phase
+    type: k8s.pod-phase
+    label: Pod inspector phase is Succeeded
+    params: { name: inspector, namespace: fl-k8s-0055, phase: Succeeded }

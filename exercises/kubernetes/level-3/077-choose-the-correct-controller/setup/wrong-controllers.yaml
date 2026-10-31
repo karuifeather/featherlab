@@ -1,0 +1,68 @@
+# web-server should be a Deployment but is incorrectly a Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: web-server
+  namespace: fl-k8s-0077
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: web
+          image: nginx:1.27
+---
+# batch-task should be a Job but is incorrectly a Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batch-task
+  namespace: fl-k8s-0077
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: batch-task
+  template:
+    metadata:
+      labels:
+        app: batch-task
+    spec:
+      containers:
+        - name: task
+          image: busybox:1.36
+          command: ["sh", "-c", "echo batch done"]
+---
+# node-monitor should be a DaemonSet but is incorrectly a Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-monitor
+  namespace: fl-k8s-0077
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-monitor
+  template:
+    metadata:
+      labels:
+        app: node-monitor
+    spec:
+      containers:
+        - name: monitor
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo monitoring; sleep 30; done"]
+---
+# report-runner should be a CronJob but is incorrectly a Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: report-runner
+  namespace: fl-k8s-0077
+spec:
+  restartPolicy: Never
+  containers:
+    - name: runner
+      image: busybox:1.36
+      command: ["sh", "-c", "echo report"]

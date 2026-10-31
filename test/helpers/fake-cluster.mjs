@@ -20,6 +20,8 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
   const calls = [];
   const key = (kind, namespace, name) => `${kind}/${namespace ?? ""}/${name}`;
   const execEnvMap = new Map(); // key: `${podName}/${envKey}`, value: string | null (null = unset)
+  const execFileMap = new Map(); // key: `${podName}/${path}`, value: string | null (null = absent)
+  const execContainerErrors = new Set(); // key: `${podName}/${container}`, returns server error
   const cluster = {
     calls,
     down: false,
@@ -29,6 +31,14 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
     /** Seed a runtime env var for a pod: `setEnvResult(podName, "KEY", "value")` or `null` for unset. */
     setEnvResult(podName, envKey, value) {
       execEnvMap.set(`${podName}/${envKey}`, value);
+    },
+    /** Seed a file content for a pod: `setFileResult(podName, "/path", "content")` or `null` for absent. */
+    setFileResult(podName, path, content) {
+      execFileMap.set(`${podName}/${path}`, content);
+    },
+    /** Simulate kubectl exec failing for a container (e.g. container not found). */
+    setExecContainerError(podName, container) {
+      execContainerErrors.add(`${podName}/${container}`);
     },
     put(resource) {
       const { kind, metadata } = resource;
@@ -130,7 +140,22 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
       }
       if (verb === "exec") {
         const podName = args[2];
+        const container = flag("-c");
         const ddIdx = args.indexOf("--");
+        const cmd = ddIdx >= 0 ? args[ddIdx + 1] : undefined;
+        if (cmd === "head") {
+          // Check for simulated container errors (e.g. container not found).
+          if (container && execContainerErrors.has(`${podName}/${container}`))
+            return fail(
+              `Error from server: container "${container}" in pod "${podName}" is not valid for pod`,
+            );
+          // args after -- are: head -c 4096 -- <path>
+          const filePath = ddIdx >= 0 ? args[ddIdx + 5] : undefined;
+          const mapKey = `${podName}/${filePath}`;
+          const content = execFileMap.get(mapKey); // undefined = not seeded, null = explicitly absent
+          if (content != null) return ok(content);
+          return { stdout: "", stderr: "command terminated with exit code 1", exitCode: 1 };
+        }
         // args after -- are: printenv KEY
         const envKey = ddIdx >= 0 ? args[ddIdx + 2] : undefined;
         const mapKey = `${podName}/${envKey}`;

@@ -1,0 +1,130 @@
+schemaVersion: 1
+id: kq-k8s-l3-001
+activityType: knowledge-check
+title: Temporary Pods and Restart Policies
+summary: Check your understanding of restartPolicy, one-shot pods, and inspecting completed pods.
+track: kubernetes
+level: 3
+order: 3.5
+difficulty: beginner
+estimatedMinutes: 5
+tags: [pods, restart-policy, one-shot, logs]
+relatedLabs: [k8s-0054, k8s-0055, k8s-0056]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the default `restartPolicy` for a Pod?"
+    options:
+      - id: a
+        text: Never
+      - id: b
+        text: OnFailure
+      - id: c
+        text: Always
+      - id: d
+        text: OnSuccess
+    correctAnswer: c
+    explanation: "The default `restartPolicy` is `Always`, which restarts containers whenever they exit, regardless of exit code. This is appropriate for long-running services."
+    wrongExplanations:
+      a: "`Never` must be set explicitly; it is not the default."
+      b: "`OnFailure` must be set explicitly; it restarts only on non-zero exit codes."
+      d: "`OnSuccess` is not a valid restartPolicy value in Kubernetes."
+    tryCommand: kubectl run tmp --image=busybox:1.36 --dry-run=client -o yaml | grep restartPolicy
+
+  - id: q2
+    type: single-choice
+    prompt: "A Pod uses `restartPolicy: Never` and its container runs `echo hello` and exits 0. What phase does the Pod reach?"
+    options:
+      - id: a
+        text: Running
+      - id: b
+        text: Succeeded
+      - id: c
+        text: Completed
+      - id: d
+        text: Terminated
+    correctAnswer: b
+    explanation: "When all containers in a `restartPolicy: Never` pod exit successfully (exit 0), the Pod phase moves to `Succeeded`. The STATUS column in `kubectl get pods` shows `Completed`, but the underlying phase field is `Succeeded`."
+    wrongExplanations:
+      a: "`Running` means at least one container is still running. A completed container is no longer Running."
+      c: "`Completed` is a human-readable STATUS label shown by kubectl, not the actual phase field. The phase field value is `Succeeded`."
+      d: "`Terminated` is a container state, not a Pod phase."
+
+  - id: q3
+    type: single-choice
+    prompt: "Which `kubectl run` flag sets `restartPolicy: Never`?"
+    options:
+      - id: a
+        text: --once
+      - id: b
+        text: --restart=Never
+      - id: c
+        text: --rm
+      - id: d
+        text: --restart=OnSuccess
+    correctAnswer: b
+    explanation: "`--restart=Never` maps directly to `restartPolicy: Never` in the Pod spec. `kubectl run` accepts `Never`, `OnFailure`, or `Always` as values for `--restart`."
+    wrongExplanations:
+      a: "`--once` is not a valid `kubectl run` flag."
+      c: "`--rm` deletes the Pod after it exits — it requires an interactive session (`-i`/`-it`) and does not affect `restartPolicy`."
+      d: "`--restart=OnSuccess` is not a valid value. The valid values are `Never`, `OnFailure`, and `Always`."
+    tryCommand: kubectl run --help | grep restart
+
+  - id: q4
+    type: single-choice
+    prompt: "Can you read logs from a Pod that has already completed (phase Succeeded)?"
+    options:
+      - id: a
+        text: No — logs are deleted as soon as the container exits
+      - id: b
+        text: Yes — `kubectl logs` works on completed Pods
+      - id: c
+        text: Only if you pass `--previous`
+      - id: d
+        text: Only if the Pod was created with a PersistentVolume
+    correctAnswer: b
+    explanation: "`kubectl logs` retrieves the container's stdout/stderr from the node's log buffer. This buffer is retained after the container exits, so you can read a completed Pod's logs exactly as you would a running one — until the Pod is deleted."
+    wrongExplanations:
+      a: "Logs are not deleted when the container exits; they remain until the Pod is deleted or the node's log rotation removes them."
+      c: "`--previous` is for the *previous* (restarted) instance of a container, not a completed Pod."
+      d: "Log retention has nothing to do with PersistentVolumes; it uses the node's local log buffer."
+
+  - id: q5
+    type: single-choice
+    prompt: "A Pod has `restartPolicy: OnFailure` and its container exits with code 0. What happens?"
+    options:
+      - id: a
+        text: The container is restarted
+      - id: b
+        text: The Pod moves to phase Failed
+      - id: c
+        text: The Pod moves to phase Succeeded
+      - id: d
+        text: The Pod stays in Running phase
+    correctAnswer: c
+    explanation: "`OnFailure` only restarts the container when it exits with a non-zero code. Exit code 0 is a success, so the Pod moves to `Succeeded`, the same as `restartPolicy: Never`."
+    wrongExplanations:
+      a: "`OnFailure` does not restart on exit code 0; only a non-zero exit triggers a restart."
+      b: "`Failed` phase is reached when a container exits non-zero with `restartPolicy: Never`, or when a container keeps failing with `OnFailure` and the backoff limit is exceeded."
+      d: "Once all containers have exited, the Pod moves to a terminal phase (Succeeded or Failed); it does not stay Running."
+
+  - id: q6
+    type: single-choice
+    prompt: "You want to run a one-time debug command in the cluster and have the Pod deleted automatically when it exits. Which combination is correct?"
+    options:
+      - id: a
+        text: "`kubectl run --restart=Never --rm -it`"
+      - id: b
+        text: "`kubectl run --restart=Never`"
+      - id: c
+        text: "`kubectl run --restart=Always --rm`"
+      - id: d
+        text: "`kubectl run --once --delete`"
+    correctAnswer: a
+    explanation: "`--rm` combined with `-i` (or `-it` for interactive TTY) deletes the Pod automatically after it exits. Without `-i`/`-it`, `--rm` has no effect. `--restart=Never` ensures the container runs once."
+    wrongExplanations:
+      b: "`--restart=Never` alone keeps the Pod in the cluster after it exits; you must add `--rm -i` to auto-delete."
+      c: "`--restart=Always` would restart the container, which is the opposite of a one-time run."
+      d: "`--once` and `--delete` are not valid `kubectl run` flags."

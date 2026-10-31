@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0077
+type: task
+title: Choose the Correct Controller
+summary: Fix a broken platform where four workloads are using wrong controller types, replacing each with the appropriate Kubernetes resource.
+track: kubernetes
+level: 3
+order: 25
+difficulty: intermediate
+estimatedMinutes: 20
+tags: [deployments, daemonsets, cronjobs, jobs]
+prerequisites: [k8s-0076]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0077`"
+  - "Four workloads are pre-created with wrong controller types"
+  - "Deployment `web-server` with 2 replicas (was a Job)"
+  - "Job `batch-task` complete (was a Deployment)"
+  - "DaemonSet `node-monitor` ready (was a Deployment)"
+  - "CronJob `report-runner` with schedule `0 6 * * *` (was a Pod)"
+
+hints:
+  - "Delete the wrong resources first: `kubectl delete job web-server daemonset batch-task pod report-runner -n fl-k8s-0077` (adapt as needed)"
+  - "A Deployment is for long-running, replicated services. A Job is for one-time tasks. A DaemonSet runs on every node. A CronJob runs on a schedule."
+  - "Use `kubectl rollout status deployment/web-server -n fl-k8s-0077` after creating the Deployment."
+
+lifecycle:
+  namespaces: [fl-k8s-0077]
+  setup:
+    manifests: [setup/wrong-controllers.yaml]
+
+checks:
+  - id: web-rollout
+    type: k8s.rollout-complete
+    label: Deployment web-server is rolled out with 2 replicas
+    params: { name: web-server, namespace: fl-k8s-0077, replicas: 2 }
+  - id: batch-complete
+    type: k8s.job-complete
+    label: Job batch-task has completed
+    params: { name: batch-task, namespace: fl-k8s-0077 }
+  - id: node-monitor-ready
+    type: k8s.daemonset-status
+    label: DaemonSet node-monitor has all Pods ready
+    params: { name: node-monitor, namespace: fl-k8s-0077 }
+  - id: report-schedule
+    type: k8s.cronjob-config
+    label: CronJob report-runner has schedule "0 6 * * *"
+    params:
+      name: report-runner
+      namespace: fl-k8s-0077
+      schedule: "0 6 * * *"

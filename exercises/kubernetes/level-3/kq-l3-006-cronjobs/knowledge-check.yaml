@@ -1,0 +1,128 @@
+schemaVersion: 1
+id: kq-k8s-l3-006
+activityType: knowledge-check
+title: CronJob Scheduling and Maintenance
+summary: Test your understanding of CronJob schedules, concurrency policies, suspension, and how to trigger manual runs.
+track: kubernetes
+level: 3
+order: 21.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [cronjobs, scheduling, batch]
+relatedLabs: [k8s-0070, k8s-0071, k8s-0072, k8s-0073]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What does the cron expression `0 1 * * *` mean?"
+    options:
+      - id: a
+        text: Every minute during the first hour of the day
+      - id: b
+        text: At 1:00 AM every day
+      - id: c
+        text: Once a month on the first day at midnight
+      - id: d
+        text: Every hour on the first minute
+    correctAnswer: b
+    explanation: "The five fields in order are minute, hour, day-of-month, month, day-of-week. `0 1 * * *` means: minute=0, hour=1, every day-of-month, every month, every day-of-week — i.e. 1:00 AM every day."
+    wrongExplanations:
+      a: "Minute 0 of hour 1 is a single point in time (1:00 AM), not a range within the first hour."
+      c: "To run on the first day of every month, you would use `0 1 1 * *`. The third field controls day-of-month."
+      d: "Every hour at minute 0 would be `0 * * * *`. The `1` in the hour position restricts execution to hour 1 only."
+
+  - id: q2
+    type: single-choice
+    prompt: "A CronJob has `concurrencyPolicy: Forbid`. The previous Job is still running when the next schedule fires. What happens?"
+    options:
+      - id: a
+        text: The previous Job is killed and a new Job starts
+      - id: b
+        text: Both Jobs run simultaneously
+      - id: c
+        text: The new Job is skipped; the running Job is not affected
+      - id: d
+        text: The CronJob is automatically suspended until the running Job completes
+    correctAnswer: c
+    explanation: "`Forbid` skips the scheduled run if a previous Job from the same CronJob is still active. The running Job continues uninterrupted. This policy prevents resource contention when jobs take longer than their interval."
+    wrongExplanations:
+      a: "That is the behavior of `concurrencyPolicy: Replace`, which cancels the running Job before starting a new one."
+      b: "That is the default behavior (`concurrencyPolicy: Allow`), which places no restriction on concurrent runs."
+      d: "CronJobs are never automatically suspended by concurrency policy behavior. Suspension requires an explicit `spec.suspend: true`."
+
+  - id: q3
+    type: single-choice
+    prompt: "What does setting `spec.suspend: true` on a CronJob do?"
+    options:
+      - id: a
+        text: Deletes all Jobs created by the CronJob
+      - id: b
+        text: Stops any currently running Jobs from the CronJob
+      - id: c
+        text: Prevents new Jobs from being created on schedule, without affecting Jobs already running
+      - id: d
+        text: Pauses the CronJob's controller until the cluster is restarted
+    correctAnswer: c
+    explanation: "`suspend: true` tells the CronJob controller to skip all future scheduled firings. It does not stop, delete, or otherwise affect Jobs that are already running. Set `suspend: false` to resume normal scheduling."
+    wrongExplanations:
+      a: "Deleting Jobs requires explicit `kubectl delete job`. `suspend` only controls future scheduling, not existing resources."
+      b: "Running Jobs are owned by the cluster's Job controller, which is independent of the CronJob controller. `suspend` has no effect on them."
+      d: "The CronJob controller continues running in the control plane. `suspend` only sets a flag the controller reads to decide whether to schedule the next run."
+
+  - id: q4
+    type: single-choice
+    prompt: "Which command creates an immediate Job from a CronJob named `nightly-report` in namespace `ops`?"
+    options:
+      - id: a
+        text: "`kubectl run nightly-report --from=cronjob -n ops`"
+      - id: b
+        text: "`kubectl create job manual --from=cronjob/nightly-report -n ops`"
+      - id: c
+        text: "`kubectl trigger cronjob/nightly-report -n ops`"
+      - id: d
+        text: "`kubectl apply -f cronjob/nightly-report --now -n ops`"
+    correctAnswer: b
+    explanation: "`kubectl create job <name> --from=cronjob/<cj-name>` is the correct command. It copies the CronJob's job template and submits a new Job with the name you provide. This is the standard way to test a CronJob or trigger a manual run without waiting for the schedule."
+    wrongExplanations:
+      a: "`kubectl run` creates Pods, not Jobs, and has no `--from=cronjob` flag."
+      c: "There is no `kubectl trigger` command in Kubernetes."
+      d: "`kubectl apply` applies a manifest from a file. It does not read from a live CronJob resource and has no `--now` flag for scheduling."
+
+  - id: q5
+    type: single-choice
+    prompt: "Why do integration tests create a manual Job from a CronJob instead of waiting for the cron schedule to fire?"
+    options:
+      - id: a
+        text: "Manual Jobs run faster than scheduled ones"
+      - id: b
+        text: "Scheduled firing depends on wall-clock time, making tests slow, flaky, or requiring time manipulation"
+      - id: c
+        text: "CronJobs cannot be tested without a special test mode flag"
+      - id: d
+        text: "The schedule always fires at a random time in test environments"
+    correctAnswer: b
+    explanation: "A cron schedule fires at a specific wall-clock time. Waiting for it in a test could mean waiting up to the full interval (minutes, hours, or longer). Tests that depend on wall-clock triggers are slow and non-deterministic. Creating a Job manually from `--from=cronjob/<name>` tests the template's correctness immediately, without any time dependency."
+    wrongExplanations:
+      a: "Manual and scheduled Jobs use the same template and execute identically. There is no performance difference."
+      c: "There is no special test mode for CronJobs. `kubectl create job --from=cronjob/...` is a standard production feature."
+      d: "Cron schedules are deterministic — they fire at the configured times. The problem is not randomness but the wait time involved."
+
+  - id: q6
+    type: single-choice
+    prompt: "What is `successfulJobsHistoryLimit` on a CronJob?"
+    options:
+      - id: a
+        text: The maximum number of Jobs that can run simultaneously
+      - id: b
+        text: The number of seconds to wait before retrying a failed Job
+      - id: c
+        text: The number of successfully completed Jobs to keep in the namespace for inspection
+      - id: d
+        text: The total number of times the CronJob's schedule can fire before it is automatically deleted
+    correctAnswer: c
+    explanation: "`successfulJobsHistoryLimit` controls how many completed (succeeded) Job objects are retained after they finish. Old Jobs beyond this limit are deleted automatically. This lets you inspect recent runs with `kubectl get jobs` without accumulating unbounded history. The default is 3."
+    wrongExplanations:
+      a: "Simultaneous Job concurrency is controlled by `concurrencyPolicy`, not history limits."
+      b: "Retry backoff for failed Jobs is controlled by `backoffLimit` on the Job spec, not on the CronJob."
+      d: "CronJobs do not have a built-in total-run limit. They continue firing indefinitely unless you delete them or set `suspend: true`."

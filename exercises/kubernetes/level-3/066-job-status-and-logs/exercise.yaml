@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0066
+type: task
+title: Job Status and Logs
+summary: Inspect a completed Job's status and logs, then create your own Job in the same namespace.
+track: kubernetes
+level: 3
+order: 14
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [jobs, batch, logs, observability]
+prerequisites: [k8s-0065]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0066`"
+  - "A Job named `data-processor` has already completed — inspect its status and logs"
+  - "Create a new Job named `summary-job`"
+  - "Image: `busybox:1.36`, command: `sh -c 'echo summary-done'`"
+  - "Job `summary-job` must complete successfully"
+
+hints:
+  - "Use `kubectl get job data-processor -n fl-k8s-0066` to see COMPLETIONS and AGE. Use `kubectl logs job/data-processor -n fl-k8s-0066` to read its output."
+  - "Create the new job with `kubectl create job summary-job --image=busybox:1.36 -n fl-k8s-0066 -- sh -c 'echo summary-done'`."
+  - "Wait with `kubectl wait --for=condition=complete job/summary-job -n fl-k8s-0066 --timeout=120s`, then verify the COMPLETIONS column shows `1/1`."
+
+lifecycle:
+  namespaces: [fl-k8s-0066]
+  setup:
+    manifests: [setup/processor.yaml]
+
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Job summary-job exists in fl-k8s-0066
+    params: { kind: Job, name: summary-job, namespace: fl-k8s-0066 }
+  - id: image
+    type: k8s.container-image
+    label: Job summary-job uses busybox:1.36
+    params:
+      kind: Job
+      name: summary-job
+      namespace: fl-k8s-0066
+      image: "busybox:1.36"
+  - id: complete
+    type: k8s.job-complete
+    label: Job summary-job has completed successfully
+    params: { name: summary-job, namespace: fl-k8s-0066 }

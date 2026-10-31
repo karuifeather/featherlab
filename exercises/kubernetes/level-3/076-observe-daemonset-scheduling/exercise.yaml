@@ -1,0 +1,50 @@
+schemaVersion: 1
+id: k8s-0076
+type: task
+title: Observe DaemonSet Scheduling
+summary: Inspect a running DaemonSet to see how many nodes it schedules on, then mark it as observed with a label.
+track: kubernetes
+level: 3
+order: 24
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [daemonsets, scheduling]
+prerequisites: [k8s-0075]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0076`"
+  - "DaemonSet `cluster-agent` is already running"
+  - "Inspect the DaemonSet to see its desired and ready Pod counts"
+  - 'Add label `observed: "yes"` to the DaemonSet metadata'
+  - "DaemonSet must remain ready"
+
+hints:
+  - "`kubectl get daemonset cluster-agent -n fl-k8s-0076` shows DESIRED, CURRENT, READY columns."
+  - "`kubectl describe daemonset cluster-agent -n fl-k8s-0076` shows node selector, tolerations, and events."
+  - "To add the label: `kubectl label daemonset cluster-agent observed=yes -n fl-k8s-0076`"
+
+lifecycle:
+  namespaces: [fl-k8s-0076]
+  setup:
+    manifests: [setup/agent.yaml]
+
+checks:
+  - id: label
+    type: k8s.labels
+    label: DaemonSet cluster-agent has label observed=yes
+    params:
+      kind: DaemonSet
+      name: cluster-agent
+      namespace: fl-k8s-0076
+      labels: { observed: "yes" }
+  - id: ready
+    type: k8s.daemonset-status
+    label: DaemonSet cluster-agent has all Pods ready
+    params: { name: cluster-agent, namespace: fl-k8s-0076 }

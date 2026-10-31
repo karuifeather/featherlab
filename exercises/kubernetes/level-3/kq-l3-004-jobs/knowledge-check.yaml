@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l3-004
+activityType: knowledge-check
+title: Kubernetes Jobs
+summary: Check your understanding of batch/v1 Jobs, completion modes, backoff limits, and deadlines.
+track: kubernetes
+level: 3
+order: 17.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [jobs, batch, backoff-limit, active-deadline, restart-policy]
+relatedLabs: [k8s-0065, k8s-0066, k8s-0067, k8s-0068, k8s-0069]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What `restartPolicy` values are valid in a Job's pod template?"
+    options:
+      - id: a
+        text: "Only `Never`"
+      - id: b
+        text: "`Never` and `OnFailure`"
+      - id: c
+        text: "`Never`, `OnFailure`, and `Always`"
+      - id: d
+        text: "Only `OnFailure`"
+    correctAnswer: b
+    explanation: "A Job's pod template must use `restartPolicy: Never` or `restartPolicy: OnFailure`. The default `Always` is explicitly rejected — a Job should run to completion, not restart indefinitely."
+    wrongExplanations:
+      a: "`OnFailure` is also valid and useful when you want the container to retry on failure within the same Pod."
+      c: "`Always` is not allowed in a Job — it would cause the container to restart forever, which contradicts the Job's purpose of completing a task."
+      d: "`Never` is also valid. With `Never`, a failed Pod is not restarted; the Job creates a new Pod instead (up to `backoffLimit` times)."
+    tryCommand: kubectl create job test --image=busybox:1.36 --dry-run=client -o yaml | grep restartPolicy
+
+  - id: q2
+    type: single-choice
+    prompt: "A Job has `backoffLimit: 3`. How many total Pod attempts can Kubernetes make before failing the Job?"
+    options:
+      - id: a
+        text: "3"
+      - id: b
+        text: "4"
+      - id: c
+        text: "6 (the default)"
+      - id: d
+        text: "Unlimited — backoffLimit only delays retries, it does not cap them"
+    correctAnswer: b
+    explanation: "`backoffLimit` counts retries, not total attempts. With `backoffLimit: 3`, Kubernetes makes 1 initial attempt plus 3 retries = 4 total Pod attempts before the Job is marked as failed."
+    wrongExplanations:
+      a: "`backoffLimit: 3` allows 3 *retries*, so the total number of attempts is 4 (3 + 1 initial)."
+      c: "The default `backoffLimit` is 6 (so 7 total attempts), but this question asks about `backoffLimit: 3`."
+      d: "`backoffLimit` hard-caps the number of retries. Once exceeded, the Job is marked Failed and no more Pods are created."
+
+  - id: q3
+    type: single-choice
+    prompt: "You need to patch the container image in an existing Job's pod template. What happens?"
+    options:
+      - id: a
+        text: "kubectl apply updates the template and triggers new Pods"
+      - id: b
+        text: "The change is rejected — Job pod templates are immutable after creation"
+      - id: c
+        text: "The change is applied but existing Pods are not affected"
+      - id: d
+        text: "The Job is automatically restarted"
+    correctAnswer: b
+    explanation: "Job pod templates are immutable. Kubernetes rejects any attempt to change the template fields (image, command, volumes, etc.) after the Job is created. To fix a broken Job, you must delete it and create a new one."
+    wrongExplanations:
+      a: "`kubectl apply` will be rejected with an error like 'Forbidden: updates to job spec for fields other than...'."
+      c: "Kubernetes does not allow even partial template changes — the entire template is locked on creation."
+      d: "Jobs do not auto-restart. If a Job's template is wrong, you must manually delete and recreate it."
+    tryCommand: kubectl explain job.spec.template
+
+  - id: q4
+    type: single-choice
+    prompt: "What does `spec.activeDeadlineSeconds` do on a Job?"
+    options:
+      - id: a
+        text: "Sets how long each individual Pod has to run before being killed"
+      - id: b
+        text: "Sets a wall-clock time limit for the entire Job from its start time"
+      - id: c
+        text: "Delays Job start by the specified number of seconds"
+      - id: d
+        text: "Sets the maximum time a Pod can stay in Pending state"
+    correctAnswer: b
+    explanation: "`activeDeadlineSeconds` is measured from the Job's `.status.startTime`. If the Job has not completed within that window, Kubernetes terminates all its Pods and marks it with `DeadlineExceeded`. It applies to the whole Job, not individual Pods."
+    wrongExplanations:
+      a: "Per-Pod time limits are set by `spec.activeDeadlineSeconds` on the Pod itself, not on the Job."
+      c: "`activeDeadlineSeconds` starts counting when the Job starts, not before — it is not a delay."
+      d: "Pod pending time limits are not controlled by this field."
+
+  - id: q5
+    type: single-choice
+    prompt: "A Job completes with COMPLETIONS showing `4/4`. What does that mean?"
+    options:
+      - id: a
+        text: "4 Pods were created and all 4 are currently Running"
+      - id: b
+        text: "4 Pods succeeded; the required number of completions has been reached"
+      - id: c
+        text: "4 Pods failed and 4 new ones were created"
+      - id: d
+        text: "The Job has been retried 4 times"
+    correctAnswer: b
+    explanation: "The COMPLETIONS column in `kubectl get jobs` shows `<succeeded>/<required>`. `4/4` means 4 successful Pod completions were required (`spec.completions: 4`) and all 4 have been achieved. The Job is now complete."
+    wrongExplanations:
+      a: "Completed Pods are not Running — they are in phase Succeeded (STATUS: Completed)."
+      c: "Failed Pods are tracked separately in `.status.failed`, not in the COMPLETIONS column."
+      d: "Retries are tracked by `.status.failed`, not by the COMPLETIONS count."
+    tryCommand: kubectl get job -n fl-k8s-0068

@@ -1,0 +1,14 @@
+# Pre-created Pod for the learner to inspect. It runs a single command and exits successfully.
+# The learner inspects its logs, then creates their own Pod (inspector) in the same namespace.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: data-probe
+  namespace: fl-k8s-0055
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: probe
+      image: busybox:1.36
+      command: ["sh", "-c", "echo inspection-complete"]

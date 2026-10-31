@@ -1,0 +1,15 @@
+# Pod with a broken command: "echoo" is a typo and does not exist.
+# The container exits non-zero, leaving the Pod in phase Failed.
+# The learner must delete this Pod and recreate it with the corrected command.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: worker
+  namespace: fl-k8s-0056
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: worker
+      image: busybox:1.36
+      command: ["sh", "-c", "echoo 'hello'"]

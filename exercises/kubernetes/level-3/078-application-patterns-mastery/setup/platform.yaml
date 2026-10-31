@@ -1,0 +1,61 @@
+# Deployment with a broken init container image
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: fl-k8s-0078
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      initContainers:
+        - name: config-load
+          image: busybox:BROKEN
+          command: ["sh", "-c", "echo config loaded"]
+      containers:
+        - name: server
+          image: nginx:1.27
+---
+# CronJob with an impossible schedule (Feb 31 never fires)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: archiver
+  namespace: fl-k8s-0078
+spec:
+  schedule: "0 0 31 2 *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: archive
+              image: busybox:1.36
+              command: ["sh", "-c", "echo archiving"]
+---
+# DaemonSet with a broken image
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: metrics
+  namespace: fl-k8s-0078
+spec:
+  selector:
+    matchLabels:
+      app: metrics
+  template:
+    metadata:
+      labels:
+        app: metrics
+    spec:
+      containers:
+        - name: collector
+          image: busybox:BROKEN
+          command: ["sh", "-c", "while true; do echo metrics; sleep 30; done"]

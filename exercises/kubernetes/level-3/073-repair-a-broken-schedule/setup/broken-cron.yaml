@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: metrics
+  namespace: fl-k8s-0073
+spec:
+  schedule: "0 0 * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: task
+              image: busybox:1.36
+              command: ["sh", "-c", "echo metrics ok"]

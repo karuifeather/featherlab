@@ -13,6 +13,7 @@ export default [
       "test-results/**",
       "playwright-report/**",
       ".husky/_/**",
+      ".claude/**",
     ],
   },
   {

@@ -1,0 +1,63 @@
+schemaVersion: 1
+id: k8s-0061
+type: task
+title: A Supporting Container
+summary: Add a native sidecar to a Deployment by placing it in initContainers[] with restartPolicy Always.
+track: kubernetes
+level: 3
+order: 9
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [deployments, init-containers, native-sidecar, sidecars]
+prerequisites: [k8s-0060]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0061`"
+  - "Deployment name: `app`"
+  - "Main container name: `app`, image: `nginx:1.27`"
+  - "Native sidecar name: `logger`, image: `busybox:1.36`, command: `sh -c 'while true; do echo logging; sleep 5; done'`"
+  - "The sidecar must be in `initContainers[]` with `restartPolicy: Always`"
+  - "Deployment must roll out successfully (1 replica ready)"
+
+hints:
+  - "A native sidecar lives in `spec.template.spec.initContainers[]`, not `containers[]`. Add `restartPolicy: Always` to the entry — that one field is what makes it a native sidecar."
+  - "Create the Deployment with `kubectl apply -f app.yaml`. Your initContainers entry for `logger` needs `name`, `image`, `command`, and `restartPolicy: Always`."
+  - "After applying, run `kubectl rollout status deployment/app -n fl-k8s-0061` to confirm all replicas are ready, then run `kubectl get deploy app -n fl-k8s-0061` to verify READY shows `1/1`."
+
+lifecycle:
+  namespaces: [fl-k8s-0061]
+
+checks:
+  - id: sidecar
+    type: k8s.init-container
+    label: Deployment app has native sidecar logger
+    params:
+      kind: Deployment
+      name: app
+      namespace: fl-k8s-0061
+      container: logger
+      image: "busybox:1.36"
+      nativeSidecar: true
+  - id: main-image
+    type: k8s.container-image
+    label: Main container app uses nginx:1.27
+    params:
+      kind: Deployment
+      name: app
+      namespace: fl-k8s-0061
+      container: app
+      image: "nginx:1.27"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app is fully rolled out
+    params:
+      name: app
+      namespace: fl-k8s-0061
+      replicas: 1

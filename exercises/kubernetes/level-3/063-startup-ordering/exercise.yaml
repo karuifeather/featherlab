@@ -1,0 +1,64 @@
+schemaVersion: 1
+id: k8s-0063
+type: task
+title: Startup Ordering with Native Sidecar
+summary: Fix a Deployment where a supporting container was placed in containers[] instead of initContainers[] with restartPolicy Always.
+track: kubernetes
+level: 3
+order: 11
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, init-containers, native-sidecar, troubleshooting]
+prerequisites: [k8s-0062]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0063`"
+  - "A Deployment named `web-app` is already running — inspect it"
+  - "The container `helper` is incorrectly placed in `containers[]`"
+  - "Move `helper` to `initContainers[]` and add `restartPolicy: Always`"
+  - "The main container `app` (nginx:1.27) must remain in `containers[]`"
+  - "Deployment must roll out successfully after the fix"
+
+hints:
+  - "Run `kubectl get deployment web-app -n fl-k8s-0063 -o yaml` to see the current spec. Notice that `helper` is in `spec.template.spec.containers[]` — it should be in `spec.template.spec.initContainers[]` with `restartPolicy: Always` added."
+  - "Export the manifest, move the `helper` entry from `containers` to `initContainers`, add `restartPolicy: Always` to it, then `kubectl apply -f fixed.yaml -n fl-k8s-0063`. Alternatively use `kubectl edit deployment web-app -n fl-k8s-0063`."
+  - "After applying, verify with `kubectl rollout status deployment/web-app -n fl-k8s-0063`. The `helper` container should no longer appear in `kubectl get pods -n fl-k8s-0063` under the READY count."
+
+lifecycle:
+  namespaces: [fl-k8s-0063]
+  setup:
+    manifests: [setup/app.yaml]
+
+checks:
+  - id: sidecar
+    type: k8s.init-container
+    label: Container helper is a native sidecar in initContainers[]
+    params:
+      kind: Deployment
+      name: web-app
+      namespace: fl-k8s-0063
+      container: helper
+      nativeSidecar: true
+  - id: main-image
+    type: k8s.container-image
+    label: Main container app uses nginx:1.27
+    params:
+      kind: Deployment
+      name: web-app
+      namespace: fl-k8s-0063
+      container: app
+      image: "nginx:1.27"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment web-app is fully rolled out
+    params:
+      name: web-app
+      namespace: fl-k8s-0063
+      replicas: 1

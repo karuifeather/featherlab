@@ -961,6 +961,380 @@ const containerRuntimeEnv = {
   },
 };
 
+/**
+ * k8s.init-container — passes when an initContainer with the given name exists on the
+ * Pod-spec workload. Optionally checks image and, for native sidecars, restartPolicy.
+ */
+const initContainer = {
+  type: "k8s.init-container",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(
+      p,
+      ["kind", "name", "namespace", "container", "image", "nativeSidecar"],
+      problems,
+    );
+    validateRef({ ...p, kind: p.kind ?? "Pod" }, problems, POD_SPEC_KINDS);
+    check(p.container, CONTAINER, "container", problems);
+    check(p.image, { type: "string", minLength: 1, maxLength: 300 }, "image", problems);
+    check(p.nativeSidecar, { type: "boolean" }, "nativeSidecar", problems);
+  },
+  async run(p, ctx) {
+    const kind = p.kind ?? "Pod";
+    const ref = { kind, name: p.name, namespace: p.namespace };
+    const resource = await ctx.query.get(ref);
+    if (!resource) return { passed: false, feedback: `${describe(ref)} was not found.` };
+    if (resource.metadata?.deletionTimestamp)
+      return { passed: false, feedback: `${describe(ref)} is being deleted.` };
+    const initContainers = podSpecOf(resource, kind)?.initContainers ?? [];
+    const container = initContainers.find((c) => c.name === p.container);
+    if (!container)
+      return {
+        passed: false,
+        feedback: `${describe(ref)} has no initContainer named "${p.container}".`,
+      };
+    if (p.image !== undefined && container.image !== p.image)
+      return {
+        passed: false,
+        feedback: `initContainer "${p.container}" of ${describe(ref)} uses image "${container.image}", expected "${p.image}".`,
+      };
+    if (p.nativeSidecar !== undefined) {
+      const isNative = container.restartPolicy === "Always";
+      if (p.nativeSidecar && !isNative)
+        return {
+          passed: false,
+          feedback: `initContainer "${p.container}" of ${describe(ref)} is not a native sidecar (missing restartPolicy: Always).`,
+        };
+      if (!p.nativeSidecar && isNative)
+        return {
+          passed: false,
+          feedback: `initContainer "${p.container}" of ${describe(ref)} has restartPolicy: Always; expected a regular init container.`,
+        };
+    }
+    return {
+      passed: true,
+      feedback: `${describe(ref)} has initContainer "${p.container}" as required.`,
+    };
+  },
+};
+
+/**
+ * k8s.job-complete — passes when the Job has a Complete condition with status True.
+ * Kubernetes sets this only after all required completions succeed.
+ */
+const jobComplete = resourceValidator({
+  type: "k8s.job-complete",
+  kinds: ["Job"],
+  evaluate(job, _, ref) {
+    const conditions = job.status?.conditions ?? [];
+    const complete = conditions.find((c) => c.type === "Complete" && c.status === "True");
+    const failed = conditions.find((c) => c.type === "Failed" && c.status === "True");
+    const succeeded = job.status?.succeeded ?? 0;
+    return {
+      passed: !!complete,
+      feedback: complete
+        ? `${describe(ref)} has completed successfully (${succeeded} succeeded).`
+        : failed
+          ? `${describe(ref)} has failed and will not complete.`
+          : `${describe(ref)} has not completed yet (${succeeded} succeeded so far).`,
+      details: { conditions: conditions.map((c) => `${c.type}=${c.status}`), succeeded },
+    };
+  },
+});
+
+/**
+ * k8s.job-config — static Job spec field check. Only checks fields you supply;
+ * omitted fields are not validated.
+ */
+const jobConfig = resourceValidator({
+  type: "k8s.job-config",
+  kinds: ["Job"],
+  params: {
+    completions: { type: "integer", min: 1, max: 1000 },
+    parallelism: { type: "integer", min: 0, max: 100 },
+    backoffLimit: { type: "integer", min: 0, max: 100 },
+    completionMode: { type: "string", enum: ["NonIndexed", "Indexed"] },
+    activeDeadlineSeconds: { type: "integer", min: 1, max: 86400 },
+  },
+  refine(p, problems) {
+    const fields = [
+      "completions",
+      "parallelism",
+      "backoffLimit",
+      "completionMode",
+      "activeDeadlineSeconds",
+    ];
+    if (fields.every((f) => p[f] === undefined)) problems.add("", "set at least one Job field");
+  },
+  evaluate(job, p, ref) {
+    const spec = job.spec ?? {};
+    const failures = [];
+    const fmt = (actual, expected) =>
+      `${actual === undefined ? "(not set)" : actual} — expected ${expected}`;
+    if (p.completions !== undefined && spec.completions !== p.completions)
+      failures.push(`completions: ${fmt(spec.completions, p.completions)}`);
+    if (p.parallelism !== undefined && spec.parallelism !== p.parallelism)
+      failures.push(`parallelism: ${fmt(spec.parallelism, p.parallelism)}`);
+    if (p.backoffLimit !== undefined && spec.backoffLimit !== p.backoffLimit)
+      failures.push(`backoffLimit: ${fmt(spec.backoffLimit, p.backoffLimit)}`);
+    if (p.completionMode !== undefined && spec.completionMode !== p.completionMode)
+      failures.push(`completionMode: ${fmt(spec.completionMode, p.completionMode)}`);
+    if (
+      p.activeDeadlineSeconds !== undefined &&
+      spec.activeDeadlineSeconds !== p.activeDeadlineSeconds
+    )
+      failures.push(
+        `activeDeadlineSeconds: ${fmt(spec.activeDeadlineSeconds, p.activeDeadlineSeconds)}`,
+      );
+    return {
+      passed: failures.length === 0,
+      feedback:
+        failures.length === 0
+          ? `${describe(ref)} has the required configuration.`
+          : `${describe(ref)} has incorrect configuration: ${failures.join("; ")}.`,
+    };
+  },
+});
+
+/**
+ * k8s.cronjob-config — static CronJob spec field check. Only checks fields you supply.
+ */
+const cronJobConfig = resourceValidator({
+  type: "k8s.cronjob-config",
+  kinds: ["CronJob"],
+  params: {
+    schedule: { type: "string", minLength: 1, maxLength: 100 },
+    concurrencyPolicy: { type: "string", enum: ["Allow", "Forbid", "Replace"] },
+    suspend: { type: "boolean" },
+    successfulJobsHistoryLimit: { type: "integer", min: 0, max: 100 },
+    failedJobsHistoryLimit: { type: "integer", min: 0, max: 100 },
+    timeZone: { type: "string", minLength: 1, maxLength: 100 },
+  },
+  refine(p, problems) {
+    const fields = [
+      "schedule",
+      "concurrencyPolicy",
+      "suspend",
+      "successfulJobsHistoryLimit",
+      "failedJobsHistoryLimit",
+      "timeZone",
+    ];
+    if (fields.every((f) => p[f] === undefined)) problems.add("", "set at least one CronJob field");
+  },
+  evaluate(cj, p, ref) {
+    const spec = cj.spec ?? {};
+    const failures = [];
+    const fmt = (actual, expected) =>
+      `${actual === undefined ? "(not set)" : JSON.stringify(actual)} — expected ${JSON.stringify(expected)}`;
+    if (p.schedule !== undefined && spec.schedule !== p.schedule)
+      failures.push(`schedule: ${fmt(spec.schedule, p.schedule)}`);
+    if (p.concurrencyPolicy !== undefined && spec.concurrencyPolicy !== p.concurrencyPolicy)
+      failures.push(`concurrencyPolicy: ${fmt(spec.concurrencyPolicy, p.concurrencyPolicy)}`);
+    if (p.suspend !== undefined && (spec.suspend ?? false) !== p.suspend)
+      failures.push(`suspend: ${fmt(spec.suspend ?? false, p.suspend)}`);
+    if (
+      p.successfulJobsHistoryLimit !== undefined &&
+      spec.successfulJobsHistoryLimit !== p.successfulJobsHistoryLimit
+    )
+      failures.push(
+        `successfulJobsHistoryLimit: ${fmt(spec.successfulJobsHistoryLimit, p.successfulJobsHistoryLimit)}`,
+      );
+    if (
+      p.failedJobsHistoryLimit !== undefined &&
+      spec.failedJobsHistoryLimit !== p.failedJobsHistoryLimit
+    )
+      failures.push(
+        `failedJobsHistoryLimit: ${fmt(spec.failedJobsHistoryLimit, p.failedJobsHistoryLimit)}`,
+      );
+    if (p.timeZone !== undefined && spec.timeZone !== p.timeZone)
+      failures.push(`timeZone: ${fmt(spec.timeZone, p.timeZone)}`);
+    return {
+      passed: failures.length === 0,
+      feedback:
+        failures.length === 0
+          ? `${describe(ref)} has the required configuration.`
+          : `${describe(ref)} has incorrect configuration: ${failures.join("; ")}.`,
+    };
+  },
+});
+
+/**
+ * k8s.daemonset-status — passes when the DaemonSet has at least one desired Pod and all
+ * desired Pods are ready and running the current template.
+ *
+ * Never hardcodes node count: passes when desired >= 1 and ready == desired == updated.
+ */
+const daemonSetStatus = resourceValidator({
+  type: "k8s.daemonset-status",
+  kinds: ["DaemonSet"],
+  evaluate(ds, _, ref) {
+    const s = ds.status ?? {};
+    const desired = s.desiredNumberScheduled ?? 0;
+    const ready = s.numberReady ?? 0;
+    const updated = s.updatedNumberScheduled ?? 0;
+    const generation = ds.metadata?.generation ?? 0;
+    const observed = s.observedGeneration ?? 0;
+    const counts = { desired, ready, updated };
+    const fail = (feedback) => ({ passed: false, feedback, details: counts });
+    if (desired < 1)
+      return fail(`${describe(ref)} has no Pods scheduled (desiredNumberScheduled=0).`);
+    if (observed < generation) return fail(`${describe(ref)} has pending changes not yet applied.`);
+    if (updated < desired)
+      return fail(
+        `${describe(ref)} still has ${desired - updated} Pod(s) running the old template.`,
+      );
+    if (ready < desired) return fail(`${describe(ref)} has ${ready} of ${desired} Pods ready.`);
+    return {
+      passed: true,
+      feedback: `${describe(ref)} has ${desired} of ${desired} Pods ready.`,
+      details: counts,
+    };
+  },
+});
+
+/**
+ * k8s.shared-emptydir — passes when all listed containers (from containers[] or
+ * initContainers[]) share at least one common emptyDir volume mount.
+ */
+const sharedEmptyDir = resourceValidator({
+  type: "k8s.shared-emptydir",
+  kinds: POD_SPEC_KINDS,
+  params: {
+    containers: {
+      type: "array",
+      required: true,
+      minItems: 2,
+      items: { type: "string", pattern: DNS_LABEL, maxLength: 63 },
+    },
+  },
+  evaluate(resource, p, ref) {
+    const podSpec = podSpecOf(resource, ref.kind);
+    const all = [...(podSpec?.containers ?? []), ...(podSpec?.initContainers ?? [])];
+    const emptyDirNames = new Set(
+      (podSpec?.volumes ?? []).filter((v) => v.emptyDir !== undefined).map((v) => v.name),
+    );
+    let shared = null;
+    for (const cName of p.containers) {
+      const container = all.find((c) => c.name === cName);
+      if (!container)
+        return { passed: false, feedback: `${describe(ref)} has no container "${cName}".` };
+      const mounted = new Set(
+        (container.volumeMounts ?? []).filter((m) => emptyDirNames.has(m.name)).map((m) => m.name),
+      );
+      shared = shared === null ? mounted : new Set([...shared].filter((n) => mounted.has(n)));
+    }
+    const passed = shared !== null && shared.size > 0;
+    const names = p.containers.map((c) => `"${c}"`).join(", ");
+    return {
+      passed,
+      feedback: passed
+        ? `Containers ${names} of ${describe(ref)} share an emptyDir volume.`
+        : `Containers ${names} of ${describe(ref)} do not share a common emptyDir volume mount.`,
+    };
+  },
+});
+
+const SAFE_PATH = /^(?!.*\.\.)(\/[A-Za-z0-9._-]+)+$/;
+
+/**
+ * k8s.exec-file — runs `head -c 4096 <path>` in a Running Pod of a Deployment and checks
+ * that the output contains the expected string. Path is validated at content-load time.
+ * Use this to verify that an init container wrote a file that the main container can read.
+ */
+const execFile = {
+  type: "k8s.exec-file",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["name", "namespace", "container", "path", "contains"], problems);
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(
+      p.container,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "container",
+      problems,
+    );
+    check(
+      p.path,
+      {
+        type: "string",
+        required: true,
+        pattern: SAFE_PATH,
+        patternHint: "must be an absolute path using [A-Za-z0-9._/-] only",
+        maxLength: 200,
+      },
+      "path",
+      problems,
+    );
+    check(
+      p.contains,
+      { type: "string", required: true, minLength: 1, maxLength: 300 },
+      "contains",
+      problems,
+    );
+  },
+  async run(p, ctx) {
+    const deplRef = { kind: "Deployment", name: p.name, namespace: p.namespace };
+    const deployment = await ctx.query.get(deplRef);
+    if (!deployment)
+      return {
+        passed: false,
+        feedback: `Deployment "${p.name}" was not found in namespace "${p.namespace}".`,
+      };
+    const matchLabels = deployment.spec?.selector?.matchLabels ?? {};
+    const labelSelector = Object.entries(matchLabels)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(",");
+    const pods = await ctx.query.list({ kind: "Pod", namespace: p.namespace, labelSelector });
+    const running = pods.filter(
+      (pod) => !pod.metadata.deletionTimestamp && pod.status?.phase === "Running",
+    );
+    if (running.length === 0)
+      return {
+        passed: false,
+        feedback: `No Running Pod for Deployment "${p.name}" in namespace "${p.namespace}".`,
+      };
+    const pod = running[0];
+    const allContainerStatuses = [
+      ...(pod.status?.containerStatuses ?? []),
+      ...(pod.status?.initContainerStatuses ?? []),
+    ];
+    if (allContainerStatuses.length > 0) {
+      const cs = allContainerStatuses.find((s) => s.name === p.container);
+      if (!cs?.state?.running)
+        return {
+          passed: false,
+          feedback: `Container "${p.container}" is not running in pod for Deployment "${p.name}".`,
+        };
+    }
+    const result = await ctx.query.execFileContent({
+      podName: pod.metadata.name,
+      namespace: p.namespace,
+      container: p.container,
+      path: p.path,
+    });
+    if (!result.found)
+      return {
+        passed: false,
+        feedback: `File "${p.path}" was not found in container "${p.container}".`,
+      };
+    if (!result.content.includes(p.contains))
+      return {
+        passed: false,
+        feedback: `File "${p.path}" in container "${p.container}" does not contain the expected content.`,
+      };
+    return {
+      passed: true,
+      feedback: `File "${p.path}" in container "${p.container}" contains the expected content.`,
+    };
+  },
+};
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -990,4 +1364,11 @@ export const kubernetesValidators = Object.freeze([
   deploymentNotPaused,
   podTemplateLabelsCheck,
   containerRuntimeEnv,
+  initContainer,
+  jobComplete,
+  jobConfig,
+  cronJobConfig,
+  daemonSetStatus,
+  sharedEmptyDir,
+  execFile,
 ]);

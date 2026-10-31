@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reporter
+  namespace: fl-k8s-0071
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Allow
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: task
+              image: busybox:1.36
+              command: ["sh", "-c", "echo report generated"]

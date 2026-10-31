@@ -1,0 +1,111 @@
+schemaVersion: 1
+id: kq-k8s-l3-003
+activityType: knowledge-check
+title: Native Sidecars
+summary: Check your understanding of native sidecars and how they differ from regular sidecar containers.
+track: kubernetes
+level: 3
+order: 12.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [init-containers, native-sidecar, sidecars, deployments]
+relatedLabs: [k8s-0061, k8s-0062, k8s-0063, k8s-0064]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Where do you place a native sidecar in a Pod spec?"
+    options:
+      - id: a
+        text: "`spec.containers[]` with `restartPolicy: Always`"
+      - id: b
+        text: "`spec.initContainers[]` with `restartPolicy: Always`"
+      - id: c
+        text: "`spec.sidecars[]`"
+      - id: d
+        text: "`spec.initContainers[]` without any restartPolicy"
+    correctAnswer: b
+    explanation: "A native sidecar lives in `spec.initContainers[]` and must have `restartPolicy: Always`. This single field is what distinguishes it from a regular init container — without it, an initContainer runs once and exits before the main container starts."
+    wrongExplanations:
+      a: "`containers[]` entries are peer containers, not native sidecars. Adding `restartPolicy: Always` to a regular container is not valid (it is always the default for containers[])."
+      c: "`spec.sidecars[]` does not exist in the Kubernetes API."
+      d: "An initContainer without `restartPolicy: Always` is a regular init container — it runs once and must exit successfully before the main container starts."
+    tryCommand: kubectl explain pod.spec.initContainers.restartPolicy
+
+  - id: q2
+    type: single-choice
+    prompt: "A native sidecar container crashes repeatedly. What happens to the Pod?"
+    options:
+      - id: a
+        text: "The main container is killed immediately"
+      - id: b
+        text: "The sidecar is restarted with exponential backoff; the main container is unaffected while the sidecar restarts"
+      - id: c
+        text: "The Pod is deleted and recreated"
+      - id: d
+        text: "The Pod stays Running and the sidecar is ignored after the first crash"
+    correctAnswer: b
+    explanation: "Because the sidecar has `restartPolicy: Always`, Kubernetes restarts it using exponential backoff (CrashLoopBackOff). The main container keeps running. The Pod's readiness may be affected if a readiness probe depends on the sidecar, but the Pod itself is not killed."
+    wrongExplanations:
+      a: "The main container is not killed by a sidecar crash. They have independent restart policies."
+      c: "Pods are not recreated on container crashes; the container is restarted within the same Pod (possibly with backoff delay)."
+      d: "Kubernetes does not silently ignore crashes — it restarts the container and surfaces the CrashLoopBackOff state in `kubectl get pods`."
+    tryCommand: kubectl get pods -n fl-k8s-0064
+
+  - id: q3
+    type: single-choice
+    prompt: "Which Kubernetes version introduced native sidecars as a stable feature?"
+    options:
+      - id: a
+        text: "1.24"
+      - id: b
+        text: "1.26"
+      - id: c
+        text: "1.28"
+      - id: d
+        text: "1.30"
+    correctAnswer: c
+    explanation: "Native sidecars (`restartPolicy: Always` on initContainers) were introduced as alpha in Kubernetes 1.28 and graduated to beta in 1.29. The feature requires Kubernetes 1.28 or later."
+    wrongExplanations:
+      a: "1.24 predates native sidecars entirely."
+      b: "1.26 also predates the feature."
+      d: "While 1.30 supports them, they were first available in 1.28."
+
+  - id: q4
+    type: single-choice
+    prompt: "You add a container to `initContainers[]` but forget `restartPolicy: Always`. What happens?"
+    options:
+      - id: a
+        text: "It behaves like a native sidecar anyway"
+      - id: b
+        text: "Kubernetes rejects the Pod with a validation error"
+      - id: c
+        text: "It runs as a regular init container: must complete before the main container starts"
+      - id: d
+        text: "It runs alongside the main container but is not restarted on crash"
+    correctAnswer: c
+    explanation: "Without `restartPolicy: Always`, an initContainer is a classic init container. Kubernetes runs it to completion (exit 0) before starting the main container. If it exits non-zero, the Pod fails."
+    wrongExplanations:
+      a: "The `restartPolicy: Always` field is required. Without it, the container runs as a classic init container."
+      b: "Kubernetes does not reject a plain initContainer — it is a perfectly valid, long-standing feature."
+      d: "Without `restartPolicy: Always`, the container must exit before the main container starts. It does not run alongside the main container."
+    tryCommand: kubectl explain pod.spec.initContainers
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which of the following are advantages of native sidecars over regular containers in `containers[]`? (Select all that apply)"
+    options:
+      - id: a
+        text: "The sidecar is guaranteed to start before the main container"
+      - id: b
+        text: "The sidecar uses less memory than a regular container"
+      - id: c
+        text: "The sidecar lifecycle is tied to the main container — it shuts down cleanly when the Pod terminates"
+      - id: d
+        text: "The sidecar can be tracked separately from the main container in `kubectl get pods` READY count"
+    correctAnswers: [a, c]
+    explanation: "Native sidecars start before main containers (because they are initContainers) and have their lifecycle properly managed — Kubernetes sends SIGTERM to the sidecar only after the main container has exited. Regular `containers[]` entries start in parallel with no ordering guarantee."
+    wrongExplanations:
+      b: "Memory usage is determined by the container's workload, not its placement. Native sidecars do not inherently use less memory."
+      d: "Native sidecars appear in the Init Containers section of `kubectl describe pod`, not in the READY count of `containers[]`. This actually reduces confusion about READY, but it is not a benefit listed here."

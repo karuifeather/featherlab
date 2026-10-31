@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cleanup
+  namespace: fl-k8s-0072
+spec:
+  schedule: "0 2 * * *"
+  suspend: false
+  successfulJobsHistoryLimit: 10
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: task
+              image: busybox:1.36
+              command: ["sh", "-c", "echo cleanup done"]

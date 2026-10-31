@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: k8s-0075
+type: task
+title: Maintain a Node-Local Helper
+summary: Update a running DaemonSet by adding a metadata label and confirm the rollout completes successfully.
+track: kubernetes
+level: 3
+order: 23
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [daemonsets, rolling-update]
+prerequisites: [k8s-0074]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0075`"
+  - "DaemonSet `log-forwarder` is already running"
+  - "Add label `tier: monitoring` to the DaemonSet metadata"
+  - "DaemonSet must remain ready after the update"
+
+hints:
+  - "`kubectl label daemonset log-forwarder tier=monitoring -n fl-k8s-0075` adds a label to the DaemonSet metadata."
+  - "Adding a DaemonSet metadata label does not trigger a Pod rollout — the Pods are unaffected."
+  - "Verify with `kubectl get daemonset log-forwarder -n fl-k8s-0075 --show-labels`."
+
+lifecycle:
+  namespaces: [fl-k8s-0075]
+  setup:
+    manifests: [setup/helper.yaml]
+
+checks:
+  - id: label
+    type: k8s.labels
+    label: DaemonSet log-forwarder has label tier=monitoring
+    params:
+      kind: DaemonSet
+      name: log-forwarder
+      namespace: fl-k8s-0075
+      labels: { tier: monitoring }
+  - id: ready
+    type: k8s.daemonset-status
+    label: DaemonSet log-forwarder has all Pods ready
+    params: { name: log-forwarder, namespace: fl-k8s-0075 }

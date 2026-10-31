@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: k8s-0071
+type: task
+title: Run the Template Now
+summary: Trigger an immediate Job from a CronJob's template without waiting for the schedule to fire.
+track: kubernetes
+level: 3
+order: 19
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [cronjobs, jobs, scheduling]
+prerequisites: [k8s-0070]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0071`"
+  - "CronJob `reporter` is already created for you"
+  - "Create a Job named `manual-report` from the CronJob's template"
+  - "The Job `manual-report` must complete successfully"
+
+hints:
+  - "`kubectl create job <name> --from=cronjob/<cj-name> -n <ns>` creates a Job from the CronJob's job template instantly."
+  - "After creating the Job, wait for it: `kubectl wait --for=condition=complete job/manual-report -n fl-k8s-0071 --timeout=120s`"
+  - "Use `kubectl get job manual-report -n fl-k8s-0071` to check the COMPLETIONS column."
+
+lifecycle:
+  namespaces: [fl-k8s-0071]
+  setup:
+    manifests: [setup/reporter.yaml]
+
+checks:
+  - id: cj-exists
+    type: k8s.resource-in-namespace
+    label: CronJob reporter exists in fl-k8s-0071
+    params: { kind: CronJob, name: reporter, namespace: fl-k8s-0071 }
+  - id: manual-job
+    type: k8s.resource-in-namespace
+    label: Job manual-report exists in fl-k8s-0071
+    params: { kind: Job, name: manual-report, namespace: fl-k8s-0071 }
+  - id: complete
+    type: k8s.job-complete
+    label: Job manual-report has completed successfully
+    params: { name: manual-report, namespace: fl-k8s-0071 }

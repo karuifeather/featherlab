@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0060
+type: task
+title: Application Startup Challenge
+summary: Build a Deployment with two ordered init containers and a shared volume that passes config to the main container.
+track: kubernetes
+level: 3
+order: 8
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [deployments, init-containers, emptydir, volumes, pod-lifecycle]
+prerequisites: [k8s-0059]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0060`"
+  - "Deployment name: `platform`"
+  - "Volume name: `config-vol` (emptyDir)"
+  - "Init container `config-loader` (image: `busybox:1.36`) writes `mode=production` to `/config/app.properties`"
+  - "Init container `db-check` (image: `busybox:1.36`) runs after `config-loader` and echoes `db ok`"
+  - "Main container `app` (image: `nginx:1.27`) mounts `config-vol` at `/etc/app`"
+  - "Deployment must roll out with 1 available replica"
+
+hints:
+  - "Init containers run in order: `config-loader` must appear before `db-check` in the `initContainers` list."
+  - "Only `config-loader` and `app` need to share the volume — `db-check` just prints a message."
+  - "Watch the pod's init progress with `kubectl get pod -n fl-k8s-0060 --watch`."
+
+lifecycle:
+  namespaces: [fl-k8s-0060]
+
+checks:
+  - id: init-config-loader
+    type: k8s.init-container
+    label: Deployment platform has an init container named config-loader
+    params: { kind: Deployment, name: platform, namespace: fl-k8s-0060, container: config-loader }
+  - id: init-db-check
+    type: k8s.init-container
+    label: Deployment platform has an init container named db-check
+    params: { kind: Deployment, name: platform, namespace: fl-k8s-0060, container: db-check }
+  - id: shared
+    type: k8s.shared-emptydir
+    label: Init container config-loader and main container app share an emptyDir volume
+    params:
+      { kind: Deployment, name: platform, namespace: fl-k8s-0060, containers: [config-loader, app] }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment platform rolled out with 1 available replica
+    params: { name: platform, namespace: fl-k8s-0060, replicas: 1 }

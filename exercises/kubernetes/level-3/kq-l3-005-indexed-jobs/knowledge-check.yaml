@@ -1,0 +1,111 @@
+schemaVersion: 1
+id: kq-k8s-l3-005
+activityType: knowledge-check
+title: Indexed Jobs
+summary: Check your understanding of Indexed Job completion mode and work queues using BATCH_JOB_COMPLETION_INDEX.
+track: kubernetes
+level: 3
+order: 17.8
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [jobs, batch, parallelism, completions, indexed]
+relatedLabs: [k8s-0068, k8s-0069]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the default completion mode for a Kubernetes Job?"
+    options:
+      - id: a
+        text: "Indexed"
+      - id: b
+        text: "NonIndexed"
+      - id: c
+        text: "Parallel"
+      - id: d
+        text: "Sequential"
+    correctAnswer: b
+    explanation: "The default `spec.completionMode` is `NonIndexed`. In this mode all completions are equivalent — Kubernetes does not assign a unique index to each Pod. The Job is complete when the required number of successful Pods is reached."
+    wrongExplanations:
+      a: "`Indexed` must be set explicitly; it assigns each Pod a unique index from 0 to completions-1."
+      c: "`Parallel` is not a valid `completionMode` value."
+      d: "`Sequential` is not a valid `completionMode` value."
+    tryCommand: kubectl explain job.spec.completionMode
+
+  - id: q2
+    type: single-choice
+    prompt: "In an Indexed Job, how does each Pod know which work item to process?"
+    options:
+      - id: a
+        text: "Kubernetes mounts a ConfigMap with the item's data automatically"
+      - id: b
+        text: "The Pod reads `BATCH_JOB_COMPLETION_INDEX` environment variable (0-based index)"
+      - id: c
+        text: "The Pod reads its own name and parses the trailing number"
+      - id: d
+        text: "The scheduler assigns items via a work queue ConfigMap"
+    correctAnswer: b
+    explanation: "Kubernetes injects the environment variable `BATCH_JOB_COMPLETION_INDEX` (and also mounts it at `/etc/pod-info/`) with a unique integer from 0 to completions-1. The container reads this variable to decide which item to process."
+    wrongExplanations:
+      a: "No ConfigMap is mounted automatically. The index is provided as an environment variable."
+      c: "While Pod names do include the index, parsing Pod names is fragile and not the intended approach."
+      d: "Kubernetes does not use a work queue for Indexed Jobs — the index variable IS the work assignment."
+
+  - id: q3
+    type: single-choice
+    prompt: "An Indexed Job has `completions: 5` and `parallelism: 3`. How many unique index values will be assigned in total?"
+    options:
+      - id: a
+        text: "3"
+      - id: b
+        text: "5"
+      - id: c
+        text: "8"
+      - id: d
+        text: "15"
+    correctAnswer: b
+    explanation: "The number of unique indices equals `completions`. With `completions: 5`, the indices are 0, 1, 2, 3, 4 — five values total. `parallelism: 3` means up to 3 Pods run concurrently, but each index is assigned exactly once."
+    wrongExplanations:
+      a: "`parallelism` controls concurrency, not the number of indices."
+      c: "Indices are not `completions + parallelism`."
+      d: "Indices are not `completions × parallelism`."
+
+  - id: q4
+    type: single-choice
+    prompt: "You create an Indexed Job with `completions: 3`. What are the `BATCH_JOB_COMPLETION_INDEX` values the Pods receive?"
+    options:
+      - id: a
+        text: "1, 2, 3"
+      - id: b
+        text: "0, 1, 2"
+      - id: c
+        text: "0, 1, 2, 3"
+      - id: d
+        text: "They are random"
+    correctAnswer: b
+    explanation: "Indexed Job indices are 0-based. With `completions: 3`, the assigned indices are 0, 1, and 2. This matches standard array indexing and makes it easy to slice a list: `items[index]`."
+    wrongExplanations:
+      a: "Indices start at 0, not 1."
+      c: "`completions: 3` creates indices 0 through 2, not 0 through 3 (which would be 4 indices)."
+      d: "Indices are deterministic, not random — each index from 0 to completions-1 is assigned exactly once."
+
+  - id: q5
+    type: single-choice
+    prompt: "Which `completionMode` should you choose when each Pod must process a specific, different item (e.g. files[0], files[1], …)?"
+    options:
+      - id: a
+        text: "NonIndexed — easier to set up"
+      - id: b
+        text: "Indexed — each Pod gets a unique index to look up its item"
+      - id: c
+        text: "Either mode works identically for this use case"
+      - id: d
+        text: "Parallel — designed for work distribution"
+    correctAnswer: b
+    explanation: "When each Pod needs to process a distinct item, `Indexed` completion mode is the right choice. The `BATCH_JOB_COMPLETION_INDEX` variable tells each Pod exactly which item is its responsibility, without external coordination."
+    wrongExplanations:
+      a: "NonIndexed treats all completions as interchangeable. With NonIndexed, there is no built-in way to assign a unique item per Pod."
+      c: "The modes are not equivalent for this use case. NonIndexed Pods do not know their position in a work list."
+      d: "`Parallel` is not a valid `completionMode` value. Parallelism is a separate field (`spec.parallelism`)."
+    tryCommand: kubectl explain job.spec.completionMode

@@ -1,0 +1,45 @@
+schemaVersion: 1
+id: k8s-0059
+type: task
+title: Diagnose Failed Initialization
+summary: A Deployment is stuck because its init container always exits with an error. Find the bug and fix it.
+track: kubernetes
+level: 3
+order: 7
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, init-containers, troubleshooting, pod-lifecycle]
+prerequisites: [k8s-0058]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0059`"
+  - "A Deployment named `app` is pre-created with a broken init container"
+  - "Fix the init container `precheck` so its command succeeds: `sh -c 'echo ready && exit 0'`"
+  - "Deployment must roll out with 1 available replica"
+
+hints:
+  - "`kubectl get pods -n fl-k8s-0059` shows the Pod stuck in `Init:CrashLoopBackOff` or `Init:Error`."
+  - "`kubectl logs <pod-name> -c precheck -n fl-k8s-0059` shows what the init container printed before it failed."
+  - 'Patch the Deployment''s init container command directly: `kubectl patch deployment app -n fl-k8s-0059 --type=json -p ''[{"op":"replace","path":"/spec/template/spec/initContainers/0/command","value":["sh","-c","echo ready && exit 0"]}]''`'
+
+lifecycle:
+  namespaces: [fl-k8s-0059]
+  setup:
+    manifests: [setup/app.yaml]
+
+checks:
+  - id: init
+    type: k8s.init-container
+    label: Deployment app has an init container named precheck
+    params: { kind: Deployment, name: app, namespace: fl-k8s-0059, container: precheck }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 available replica
+    params: { name: app, namespace: fl-k8s-0059, replicas: 1 }

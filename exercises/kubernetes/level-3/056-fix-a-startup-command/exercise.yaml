@@ -1,0 +1,46 @@
+schemaVersion: 1
+id: k8s-0056
+type: task
+title: Fix a Startup Command
+summary: A Pod's command has a typo that causes it to fail. Delete the Pod and recreate it with the corrected command.
+track: kubernetes
+level: 3
+order: 3
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [pods, restart-policy, troubleshooting, one-shot]
+prerequisites: [k8s-0055]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0056`"
+  - "A Pod named `worker` is pre-created with a broken command; inspect and fix it"
+  - "Pod name: `worker`"
+  - "Corrected command: `echo 'hello'`"
+  - "Pod must reach phase `Succeeded`"
+
+hints:
+  - "`kubectl logs worker -n fl-k8s-0056` or `kubectl describe pod worker -n fl-k8s-0056` shows the error from the bad command."
+  - "Pod specs are immutable. You must delete the Pod and create a new one with the corrected command."
+  - "After recreating, wait with `kubectl wait pod/worker -n fl-k8s-0056 --for=jsonpath={.status.phase}=Succeeded --timeout=60s`."
+
+lifecycle:
+  namespaces: [fl-k8s-0056]
+  setup:
+    manifests: [setup/worker.yaml]
+
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Pod worker exists in fl-k8s-0056
+    params: { kind: Pod, name: worker, namespace: fl-k8s-0056 }
+  - id: phase
+    type: k8s.pod-phase
+    label: Pod phase is Succeeded
+    params: { name: worker, namespace: fl-k8s-0056, phase: Succeeded }

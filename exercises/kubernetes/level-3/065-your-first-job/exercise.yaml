@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0065
+type: task
+title: Your First Job
+summary: Create a Kubernetes Job that runs a one-time command to completion using the batch/v1 API.
+track: kubernetes
+level: 3
+order: 13
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [jobs, batch]
+prerequisites: [k8s-0064]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0065`"
+  - "Job name: `hello-job`"
+  - "Container image: `busybox:1.36`"
+  - "Command: `sh -c 'echo hello from job'`"
+  - "Job must complete successfully"
+
+hints:
+  - "A Job uses `apiVersion: batch/v1` and `kind: Job`. The Pod template lives under `spec.template.spec` and must have `restartPolicy: Never` or `OnFailure` — the default `Always` is not allowed in a Job."
+  - "Create imperatively with `kubectl create job hello-job --image=busybox:1.36 -n fl-k8s-0065 -- sh -c 'echo hello from job'`. This sets `restartPolicy: Never` automatically."
+  - "Wait for completion with `kubectl wait --for=condition=complete job/hello-job -n fl-k8s-0065 --timeout=120s`, then confirm with `kubectl get job hello-job -n fl-k8s-0065`."
+
+lifecycle:
+  namespaces: [fl-k8s-0065]
+
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Job hello-job exists in fl-k8s-0065
+    params: { kind: Job, name: hello-job, namespace: fl-k8s-0065 }
+  - id: image
+    type: k8s.container-image
+    label: Job uses busybox:1.36
+    params:
+      kind: Job
+      name: hello-job
+      namespace: fl-k8s-0065
+      image: "busybox:1.36"
+  - id: complete
+    type: k8s.job-complete
+    label: Job hello-job has completed successfully
+    params: { name: hello-job, namespace: fl-k8s-0065 }

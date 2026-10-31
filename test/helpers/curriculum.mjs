@@ -75,6 +75,39 @@ export const CURRICULUM = Object.freeze({
     "k8s-0009", // Two Broken Workloads
     "k8s-0010", // Workload Recovery Mastery
   ],
+  3: [
+    // Circuit A — One-Time Pods and Init Containers (M5.5)
+    "k8s-0054", // Run a One-Time Pod
+    "k8s-0055", // Inspect a Completed Task
+    "k8s-0056", // Fix a Startup Command
+    "k8s-0057", // Initialize Before Starting
+    "k8s-0058", // Prepare Shared Files
+    "k8s-0059", // Diagnose Failed Initialization
+    "k8s-0060", // Application Startup Challenge
+    // Circuit B — Native Sidecars
+    "k8s-0061", // A Supporting Container
+    "k8s-0062", // Sidecar and Shared Files
+    "k8s-0063", // Startup Ordering with Native Sidecar
+    "k8s-0064", // Repair the Native Sidecar
+    // Circuit C — Jobs
+    "k8s-0065", // Your First Job
+    "k8s-0066", // Job Status and Logs
+    "k8s-0067", // Recover a Failed Job
+    "k8s-0068", // Multiple Completions and Parallelism
+    "k8s-0069", // Retry and Deadline Controls
+    // Circuit E — CronJobs (M5.5)
+    "k8s-0070", // Create a Scheduled Job
+    "k8s-0071", // Run the Template Now
+    "k8s-0072", // Suspend and Maintain a CronJob
+    "k8s-0073", // Repair a Broken Schedule
+    // Circuit F — DaemonSets and Workload Selection (M5.5)
+    "k8s-0074", // Meet the DaemonSet
+    "k8s-0075", // Maintain a Node-Local Helper
+    "k8s-0076", // Observe DaemonSet Scheduling
+    "k8s-0077", // Choose the Correct Controller
+    // Final Challenge (M5.5)
+    "k8s-0078", // Application Patterns Mastery
+  ],
 });
 
 export const CURRICULUM_ORDER = Object.freeze(Object.values(CURRICULUM).flat());

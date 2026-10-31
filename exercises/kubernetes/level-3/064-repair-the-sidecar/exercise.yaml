@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0064
+type: task
+title: Repair the Native Sidecar
+summary: Fix a Deployment whose native sidecar crashes immediately due to a bad command, preventing the Pod from becoming ready.
+track: kubernetes
+level: 3
+order: 12
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [deployments, init-containers, native-sidecar, troubleshooting]
+prerequisites: [k8s-0063]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0064`"
+  - "A Deployment named `backend` is already deployed — inspect it"
+  - "The native sidecar `monitor` (busybox:1.36) has a broken command that exits immediately"
+  - "Fix the sidecar command so it runs continuously (e.g. `sh -c 'while true; do sleep 30; done'`)"
+  - "Do not change the container image or remove the sidecar"
+  - "Deployment must roll out successfully after the fix"
+
+hints:
+  - "Run `kubectl describe deployment backend -n fl-k8s-0064` and look at the initContainers section. The `monitor` sidecar has a command that calls `exit 1`, which crashes immediately and puts the Pod into CrashLoopBackOff."
+  - 'Export the manifest with `kubectl get deployment backend -n fl-k8s-0064 -o yaml > backend.yaml`, change the `monitor` command to `["sh", "-c", "while true; do sleep 30; done"]`, then `kubectl apply -f backend.yaml`.'
+  - "After applying, watch progress with `kubectl rollout status deployment/backend -n fl-k8s-0064`. The Pod should become ready once the sidecar no longer crashes."
+
+lifecycle:
+  namespaces: [fl-k8s-0064]
+  setup:
+    manifests: [setup/app.yaml]
+
+checks:
+  - id: sidecar
+    type: k8s.init-container
+    label: Container monitor is a native sidecar in initContainers[]
+    params:
+      kind: Deployment
+      name: backend
+      namespace: fl-k8s-0064
+      container: monitor
+      image: "busybox:1.36"
+      nativeSidecar: true
+  - id: main-image
+    type: k8s.container-image
+    label: Main container app uses nginx:1.27
+    params:
+      kind: Deployment
+      name: backend
+      namespace: fl-k8s-0064
+      container: app
+      image: "nginx:1.27"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment backend is fully rolled out
+    params:
+      name: backend
+      namespace: fl-k8s-0064
+      replicas: 1

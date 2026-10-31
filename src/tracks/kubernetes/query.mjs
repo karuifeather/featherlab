@@ -86,6 +86,49 @@ export class KubernetesQuery {
     });
   }
 
+  /**
+   * Run `head -c 4096 <path>` inside a named container and return `{found, content}`.
+   * Path must be a validated absolute path (the caller performs content-load validation).
+   * `found` is false when exit code is 1 (file absent or unreadable). Other exit codes
+   * that indicate the container or pod is unavailable reject with EnvironmentError.
+   */
+  execFileContent({ podName, namespace, container, path }) {
+    return this.#memo(["execFileContent", podName, namespace, container, path], async () => {
+      const argv = [
+        "kubectl",
+        "exec",
+        podName,
+        "-n",
+        namespace,
+        "-c",
+        container,
+        REQUEST_TIMEOUT,
+        "--",
+        "head",
+        "-c",
+        "4096",
+        "--",
+        path,
+      ];
+      const result = await this.#runner.run(argv, { signal: this.#signal, timeoutMs: 15_000 });
+      if (result.exitCode === 0) return { found: true, content: result.stdout };
+      if (result.exitCode === 1) {
+        // kubectl's own failures (container not found, pod deleted) also exit 1.
+        // Distinguish them from `head` reporting a missing file by checking stderr.
+        if (result.stderr && /Error from server|^error:/im.test(result.stderr))
+          throw new EnvironmentError("Could not exec into pod.", {
+            reason: "unavailable",
+            details: { stderr: result.stderr.slice(0, 500) },
+          });
+        return { found: false, content: "" };
+      }
+      throw new EnvironmentError("Could not exec into pod.", {
+        reason: "unavailable",
+        details: { stderr: result.stderr.slice(0, 500) },
+      });
+    });
+  }
+
   #memo(key, load) {
     const id = JSON.stringify(key);
     if (!this.#cache.has(id)) this.#cache.set(id, load());

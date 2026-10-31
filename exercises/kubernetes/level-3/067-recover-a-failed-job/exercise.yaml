@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0067
+type: task
+title: Recover a Failed Job
+summary: Delete a failed Job and recreate it with a correct command and appropriate backoff limit.
+track: kubernetes
+level: 3
+order: 15
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [jobs, batch, troubleshooting, backoff-limit]
+prerequisites: [k8s-0066]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0067`"
+  - "A Job named `batch` is already failing — inspect it, then delete it"
+  - "Recreate Job `batch` with image `busybox:1.36`"
+  - "Command: `sh -c 'echo batch-done'`"
+  - "Set `backoffLimit: 2`"
+  - "Pod restartPolicy: `Never`"
+  - "Job must complete successfully"
+
+hints:
+  - "Run `kubectl describe job batch -n fl-k8s-0067` to see the failure reason. The current command is invalid. Jobs are immutable after creation — you cannot patch the pod template. Delete with `kubectl delete job batch -n fl-k8s-0067`."
+  - "Create the fixed job declaratively. Set `spec.backoffLimit: 2` in the Job manifest and use the correct command `sh -c 'echo batch-done'`."
+  - "Wait with `kubectl wait --for=condition=complete job/batch -n fl-k8s-0067 --timeout=120s`. A `backoffLimit: 2` means Kubernetes retries up to 2 times if the Pod fails before declaring the Job failed."
+
+lifecycle:
+  namespaces: [fl-k8s-0067]
+  setup:
+    manifests: [setup/broken.yaml]
+
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: Job batch exists in fl-k8s-0067
+    params: { kind: Job, name: batch, namespace: fl-k8s-0067 }
+  - id: config
+    type: k8s.job-config
+    label: Job batch has backoffLimit 2
+    params:
+      name: batch
+      namespace: fl-k8s-0067
+      backoffLimit: 2
+  - id: complete
+    type: k8s.job-complete
+    label: Job batch has completed successfully
+    params: { name: batch, namespace: fl-k8s-0067 }

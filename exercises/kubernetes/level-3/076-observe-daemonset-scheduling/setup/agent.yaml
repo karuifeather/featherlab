@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cluster-agent
+  namespace: fl-k8s-0076
+spec:
+  selector:
+    matchLabels:
+      app: cluster-agent
+  template:
+    metadata:
+      labels:
+        app: cluster-agent
+    spec:
+      containers:
+        - name: agent
+          image: nginx:1.27

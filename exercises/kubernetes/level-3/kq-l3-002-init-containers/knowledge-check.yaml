@@ -1,0 +1,129 @@
+schemaVersion: 1
+id: kq-k8s-l3-002
+activityType: knowledge-check
+title: Init Containers and Shared Volumes
+summary: Check your understanding of init container ordering, failure handling, and emptyDir volumes.
+track: kubernetes
+level: 3
+order: 8.5
+difficulty: beginner
+estimatedMinutes: 5
+tags: [init-containers, emptydir, volumes, pod-lifecycle]
+relatedLabs: [k8s-0057, k8s-0058, k8s-0059, k8s-0060]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "You have three init containers: `a`, `b`, and `c`, listed in that order. In what order do they run?"
+    options:
+      - id: a
+        text: All three run in parallel
+      - id: b
+        text: In the order `a`, then `b`, then `c`; each must exit 0 before the next starts
+      - id: c
+        text: "In reverse order: `c` first, then `b`, then `a`"
+      - id: d
+        text: The order depends on which one starts fastest
+    correctAnswer: b
+    explanation: "Init containers run sequentially in the order they appear in `spec.initContainers[]`. Each one must exit with code 0 before Kubernetes starts the next. Only after all init containers succeed does Kubernetes start the containers in `spec.containers[]`."
+    wrongExplanations:
+      a: "Unlike regular containers, init containers do not run in parallel — that is the defining guarantee of init containers."
+      c: "Kubernetes always uses the list order (first to last), not reversed."
+      d: "The order is determined by the list, not by race conditions or resource availability."
+
+  - id: q2
+    type: single-choice
+    prompt: "What happens when an init container exits with a non-zero code in a Deployment?"
+    options:
+      - id: a
+        text: The Deployment is immediately deleted
+      - id: b
+        text: Kubernetes retries the init container with exponential backoff until it succeeds or the pod is replaced
+      - id: c
+        text: The main container starts anyway, in degraded mode
+      - id: d
+        text: The Pod moves to Succeeded phase
+    correctAnswer: b
+    explanation: "When an init container fails, Kubernetes restarts the Pod (respecting the pod's `restartPolicy`) and retries the init container with exponential backoff. The pod shows `Init:CrashLoopBackOff`. The main container never starts until all init containers succeed."
+    wrongExplanations:
+      a: "A failing init container triggers retries, not deletion. The Deployment controller keeps the pod alive and retrying."
+      c: "The main container is completely blocked until all init containers exit 0 — there is no degraded-mode bypass."
+      d: "`Succeeded` phase requires all containers to exit 0; a crashing init container keeps the pod in a non-terminal state."
+
+  - id: q3
+    type: single-choice
+    prompt: "An `emptyDir` volume is mounted by an init container and the main container. When is the data in that volume lost?"
+    options:
+      - id: a
+        text: When the init container exits
+      - id: b
+        text: When the main container restarts
+      - id: c
+        text: When the Pod is deleted
+      - id: d
+        text: After 24 hours (Kubernetes garbage-collects it)
+    correctAnswer: c
+    explanation: "An `emptyDir` volume exists for the lifetime of the Pod. It survives container restarts within the Pod but is deleted when the Pod itself is deleted. It is not persistent across pod replacements."
+    wrongExplanations:
+      a: "The emptyDir survives the init container's exit — that is the whole point of using it to pass data to the main container."
+      b: "Container restarts do not destroy an emptyDir; the data persists across restarts within the same Pod."
+      d: "There is no time-based garbage collection for emptyDir volumes; they are tied to Pod lifetime."
+
+  - id: q4
+    type: single-choice
+    prompt: "How do you view the logs of an init container named `setup` in a pod named `app-xyz`?"
+    options:
+      - id: a
+        text: "`kubectl logs app-xyz --init-container=setup -n <ns>`"
+      - id: b
+        text: "`kubectl logs app-xyz -c setup -n <ns>`"
+      - id: c
+        text: "`kubectl describe pod app-xyz -n <ns> | grep setup`"
+      - id: d
+        text: "`kubectl exec app-xyz -c setup -- cat /var/log/setup.log`"
+    correctAnswer: b
+    explanation: "`kubectl logs <pod> -c <container>` works for both regular containers and init containers. The `-c` flag selects which container's logs to retrieve. Add `--previous` to see logs from the last failed attempt."
+    wrongExplanations:
+      a: "`--init-container` is not a valid `kubectl logs` flag; use `-c` for any container by name."
+      c: "`kubectl describe` shows events and status, not the container's stdout output."
+      d: "A completed or crashed init container is no longer running, so `kubectl exec` cannot connect to it."
+    tryCommand: kubectl logs <pod-name> -c setup -n <namespace>
+
+  - id: q5
+    type: single-choice
+    prompt: "Which field in a Deployment's pod template holds init containers?"
+    options:
+      - id: a
+        text: "`spec.template.spec.containers[]`"
+      - id: b
+        text: "`spec.template.initContainers[]`"
+      - id: c
+        text: "`spec.template.spec.initContainers[]`"
+      - id: d
+        text: "`spec.initContainers[]`"
+    correctAnswer: c
+    explanation: "Init containers go in `spec.template.spec.initContainers[]` — the same level as `spec.template.spec.containers[]`. The `spec.template` part is the pod template, and `spec` inside it is the pod spec."
+    wrongExplanations:
+      a: "`spec.template.spec.containers[]` is for regular (main) containers, not init containers."
+      b: "There is no `spec.template.initContainers[]` path; `initContainers` lives one level deeper, inside `spec.template.spec`."
+      d: "`spec.initContainers[]` is not a valid Deployment field; it would be inside the pod spec."
+
+  - id: q6
+    type: single-choice
+    prompt: "An init container writes a file to an emptyDir volume. The main container then restarts (crashes and is restarted by Kubernetes). Is the file still there?"
+    options:
+      - id: a
+        text: No — the emptyDir is wiped on every container restart
+      - id: b
+        text: Yes — the emptyDir persists across container restarts within the same Pod
+      - id: c
+        text: "Only if the main container has `restartPolicy: Never`"
+      - id: d
+        text: "Only if the volume is mounted with `readOnly: false`"
+    correctAnswer: b
+    explanation: "An emptyDir volume lives for the lifetime of the Pod, not the container. Container restarts do not clear it. The init container runs once, writes its files, and those files remain available to the main container even after it restarts."
+    wrongExplanations:
+      a: "Container restarts do not clear emptyDir volumes; only Pod deletion does."
+      c: "Restart policies apply to the Pod, not to individual containers, and do not affect volume persistence."
+      d: "`readOnly: false` is the default and affects write permissions in the container, not whether data persists."

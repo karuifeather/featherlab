@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-forwarder
+  namespace: fl-k8s-0075
+spec:
+  selector:
+    matchLabels:
+      app: log-forwarder
+  template:
+    metadata:
+      labels:
+        app: log-forwarder
+    spec:
+      containers:
+        - name: forwarder
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo forwarding; sleep 30; done"]

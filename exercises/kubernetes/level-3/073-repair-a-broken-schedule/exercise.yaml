@@ -1,0 +1,45 @@
+schemaVersion: 1
+id: k8s-0073
+type: task
+title: Restore a Suspended CronJob
+summary: Restore a suspended CronJob by updating its schedule and clearing the suspend flag.
+track: kubernetes
+level: 3
+order: 21
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [cronjobs, scheduling, troubleshooting]
+prerequisites: [k8s-0072]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0073`"
+  - "CronJob `metrics` is already created for you (currently suspended)"
+  - "Update its schedule to `*/10 * * * *` (every 10 minutes)"
+  - "Set `suspend: false` to resume scheduling"
+
+hints:
+  - '`kubectl patch cronjob metrics -n fl-k8s-0073 -p ''{"spec":{"schedule":"*/10 * * * *","suspend":false}}''`'
+  - "After patching, verify with `kubectl get cronjob metrics -n fl-k8s-0073` — SUSPEND should show `False` and SCHEDULE should show `*/10 * * * *`."
+  - "Alternatively use `kubectl edit cronjob metrics -n fl-k8s-0073` to update the `schedule` and `suspend` fields interactively."
+
+lifecycle:
+  namespaces: [fl-k8s-0073]
+  setup:
+    manifests: [setup/broken-cron.yaml]
+
+checks:
+  - id: config
+    type: k8s.cronjob-config
+    label: CronJob metrics has schedule "*/10 * * * *" and is not suspended
+    params:
+      name: metrics
+      namespace: fl-k8s-0073
+      schedule: "*/10 * * * *"
+      suspend: false

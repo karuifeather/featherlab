@@ -65,7 +65,7 @@ test("track progress counts every exercise once, in curriculum order", () =>
       exercises.map((e) => e.exerciseId),
       CURRICULUM_ORDER,
     );
-    assert.equal(new Set(exercises.map((e) => e.exerciseId)).size, 53);
+    assert.equal(new Set(exercises.map((e) => e.exerciseId)).size, 78);
     assert.equal(exercises.filter((e) => e.state === "completed").length, 3);
     assert.deepEqual(
       exercises.filter((e) => e.state === "completed").map((e) => e.level),

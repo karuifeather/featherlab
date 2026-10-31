@@ -1,0 +1,47 @@
+schemaVersion: 1
+id: k8s-0072
+type: task
+title: Suspend and Maintain a CronJob
+summary: Suspend a running CronJob for maintenance and update its job history limits in one operation.
+track: kubernetes
+level: 3
+order: 20
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [cronjobs, scheduling, maintenance]
+prerequisites: [k8s-0071]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0072`"
+  - "CronJob `cleanup` is already created for you"
+  - "Set `suspend: true` to stop new Jobs from being scheduled"
+  - "Set `successfulJobsHistoryLimit: 3`"
+  - "Set `failedJobsHistoryLimit: 1`"
+
+hints:
+  - '`kubectl patch cronjob cleanup -n fl-k8s-0072 -p ''{"spec":{"suspend":true,"successfulJobsHistoryLimit":3,"failedJobsHistoryLimit":1}}''`'
+  - "You can also use `kubectl edit cronjob cleanup -n fl-k8s-0072` and modify the three fields interactively."
+  - "Verify with `kubectl get cronjob cleanup -n fl-k8s-0072` — the SUSPEND column should show `True`."
+
+lifecycle:
+  namespaces: [fl-k8s-0072]
+  setup:
+    manifests: [setup/cleanup.yaml]
+
+checks:
+  - id: config
+    type: k8s.cronjob-config
+    label: CronJob cleanup is suspended with correct history limits
+    params:
+      name: cleanup
+      namespace: fl-k8s-0072
+      suspend: true
+      successfulJobsHistoryLimit: 3
+      failedJobsHistoryLimit: 1

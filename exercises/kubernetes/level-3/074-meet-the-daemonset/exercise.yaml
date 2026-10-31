@@ -1,0 +1,48 @@
+schemaVersion: 1
+id: k8s-0074
+type: task
+title: Meet the DaemonSet
+summary: Create a DaemonSet that runs one Pod on every eligible node and wait for it to be ready.
+track: kubernetes
+level: 3
+order: 22
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [daemonsets, node-agents, scheduling]
+prerequisites: [k8s-0073]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0074`"
+  - "DaemonSet name: `node-checker`"
+  - "Container image: `busybox:1.36`"
+  - "Command: `sh -c 'while true; do echo checking; sleep 30; done'`"
+  - "DaemonSet must be ready on all eligible nodes"
+
+hints:
+  - "A DaemonSet requires a `spec.selector.matchLabels` and a matching `spec.template.metadata.labels` to select its Pods."
+  - "After applying, use `kubectl rollout status daemonset/node-checker -n fl-k8s-0074` to wait for all Pods to be ready."
+  - "In a single-node kind cluster, `desired=1` is the expected outcome — one Pod per node."
+
+lifecycle:
+  namespaces: [fl-k8s-0074]
+
+checks:
+  - id: exists
+    type: k8s.resource-in-namespace
+    label: DaemonSet node-checker exists in fl-k8s-0074
+    params: { kind: DaemonSet, name: node-checker, namespace: fl-k8s-0074 }
+  - id: image
+    type: k8s.container-image
+    label: Container uses busybox:1.36
+    params: { kind: DaemonSet, name: node-checker, namespace: fl-k8s-0074, image: "busybox:1.36" }
+  - id: ready
+    type: k8s.daemonset-status
+    label: DaemonSet node-checker has all Pods ready
+    params: { name: node-checker, namespace: fl-k8s-0074 }

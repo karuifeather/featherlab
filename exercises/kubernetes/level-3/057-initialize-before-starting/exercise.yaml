@@ -1,0 +1,44 @@
+schemaVersion: 1
+id: k8s-0057
+type: task
+title: Initialize Before Starting
+summary: Create a Deployment with an init container that runs before the main container starts.
+track: kubernetes
+level: 3
+order: 5
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [deployments, init-containers, pod-lifecycle]
+prerequisites: [k8s-0056]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0057`"
+  - "Deployment name: `app`"
+  - "Init container name: `setup`, image: `busybox:1.36`, command: `sh -c 'echo init done && sleep 1'`"
+  - "Main container name: `app`, image: `nginx:1.27`"
+  - "Deployment must roll out with 1 available replica"
+
+hints:
+  - "In a Deployment's pod template, init containers go in `spec.initContainers[]`, not `spec.containers[]`."
+  - "Each init container must exit 0 before the next one starts, and before any container in `spec.containers[]` starts."
+  - "`kubectl describe pod <pod-name> -n fl-k8s-0057` shows init container status under `Init Containers`."
+
+lifecycle:
+  namespaces: [fl-k8s-0057]
+
+checks:
+  - id: init
+    type: k8s.init-container
+    label: Deployment app has an init container named setup
+    params: { kind: Deployment, name: app, namespace: fl-k8s-0057, container: setup }
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment app rolled out with 1 available replica
+    params: { name: app, namespace: fl-k8s-0057, replicas: 1 }
