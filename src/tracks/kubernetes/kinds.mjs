@@ -4,6 +4,8 @@
  * new kind, add one entry here.
  *
  * `podSpecPath` locates the PodSpec for kinds that run containers.
+ * `queryOnly` marks cluster-scoped kinds that may be queried by validators but never
+ * appear in exercise setup manifests (lifecycle.mjs rejects cluster-scoped manifest objects).
  */
 export const KINDS = Object.freeze({
   Pod: { resource: "pods", namespaced: true, podSpecPath: ["spec"] },
@@ -37,6 +39,13 @@ export const KINDS = Object.freeze({
   ConfigMap: { resource: "configmaps", namespaced: true },
   Secret: { resource: "secrets", namespaced: true },
   Namespace: { resource: "namespaces", namespaced: false },
+  // Level 4 additions — resource management and scheduling
+  ResourceQuota: { resource: "resourcequotas", namespaced: true },
+  LimitRange: { resource: "limitranges", namespaced: true },
+  HorizontalPodAutoscaler: { resource: "horizontalpodautoscalers.autoscaling", namespaced: true },
+  // Node is cluster-scoped and query-only: validators may read nodes but setup manifests cannot
+  // create or delete them (lifecycle.mjs already blocks all cluster-scoped objects in manifests).
+  Node: { resource: "nodes", namespaced: false, queryOnly: true },
 });
 
 /**

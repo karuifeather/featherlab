@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0093
+type: task
+title: Diagnose an Unschedulable Pod
+summary: Fix a Deployment whose pods are stuck Pending because the required nodeAffinity rule references a label no node has.
+track: kubernetes
+level: 4
+order: 15
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [scheduling, node-affinity, troubleshooting, pending]
+prerequisites: [k8s-0092]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0093`"
+  - "Deployment `blocked-app` has required nodeAffinity for `kubernetes.io/os In [linux]`"
+  - "Deployment `blocked-app` finishes rolling out with 1 available replica"
+
+hints:
+  - '`kubectl describe pods -n fl-k8s-0093` → look for "FailedScheduling" event and "0/1 nodes are available" message.'
+  - "`kubectl edit deployment blocked-app -n fl-k8s-0093` → change `key: disktype` to `key: kubernetes.io/os` and `values: [ssd]` to `values: [linux]`."
+  - "After editing: `kubectl rollout status deployment/blocked-app -n fl-k8s-0093 --timeout=120s`"
+
+lifecycle:
+  namespaces: [fl-k8s-0093]
+  setup:
+    manifests: [setup/blocked.yaml]
+
+checks:
+  - id: affinity
+    type: k8s.node-affinity
+    label: Deployment blocked-app has required node affinity for kubernetes.io/os In [linux]
+    params:
+      kind: Deployment
+      name: blocked-app
+      namespace: fl-k8s-0093
+      scheduling: required
+      key: kubernetes.io/os
+      operator: In
+      values: [linux]
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment blocked-app has rolled out with 1 replica
+    params:
+      name: blocked-app
+      namespace: fl-k8s-0093
+      replicas: 1

@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0087
+type: task
+title: A Pod's Node Assignment
+summary: Add a nodeSelector to a Deployment to restrict which node its pods run on.
+track: kubernetes
+level: 4
+order: 9
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [scheduling, nodes, node-selector, deployments]
+prerequisites: [k8s-0086]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0087`"
+  - "Deployment `beacon` has nodeSelector `kubernetes.io/os=linux`"
+  - "Deployment `beacon` finishes rolling out with 1 available replica"
+
+hints:
+  - "`nodeSelector` lives under `spec.template.spec.nodeSelector` in a Deployment, inside `spec.template.spec`."
+  - "`kubectl edit deployment beacon -n fl-k8s-0087` — add a `nodeSelector:` block under `spec.template.spec`."
+  - 'Or patch: `kubectl patch deployment beacon -n fl-k8s-0087 --type=merge -p=''{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/os":"linux"}}}}}''` then verify with `kubectl get pods -o wide`.'
+
+lifecycle:
+  namespaces: [fl-k8s-0087]
+  setup:
+    manifests: [setup/beacon.yaml]
+
+checks:
+  - id: selector
+    type: k8s.node-selector
+    label: Deployment beacon has nodeSelector kubernetes.io/os=linux
+    params:
+      kind: Deployment
+      name: beacon
+      namespace: fl-k8s-0087
+      selector:
+        kubernetes.io/os: linux
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment beacon has rolled out with 1 replica
+    params:
+      name: beacon
+      namespace: fl-k8s-0087
+      replicas: 1

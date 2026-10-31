@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beacon
+  namespace: fl-k8s-0087
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: beacon
+  template:
+    metadata:
+      labels:
+        app: beacon
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"

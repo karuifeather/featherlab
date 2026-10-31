@@ -1,0 +1,53 @@
+schemaVersion: 1
+id: k8s-0079
+type: task
+title: Your First Resource Request
+summary: Add a CPU resource request to a running Deployment's container.
+track: kubernetes
+level: 4
+order: 1
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [resources, deployments, containers]
+prerequisites: [k8s-0078]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0079`"
+  - "Container `app` of Deployment `tracker` has a CPU request of `100m`"
+  - "Deployment `tracker` finishes rolling out with 1 available replica"
+
+hints:
+  - "`kubectl set resources deployment tracker -c app --requests=cpu=100m -n fl-k8s-0079` sets the CPU request imperatively."
+  - "Alternatively, `kubectl edit deployment tracker -n fl-k8s-0079` lets you add the `resources.requests.cpu: 100m` field under the `app` container's spec."
+  - "CPU requests use millicores: `100m` means 0.1 cores. `kubectl explain deployment.spec.template.spec.containers.resources` shows the field structure."
+
+lifecycle:
+  namespaces: [fl-k8s-0079]
+  setup:
+    manifests: [setup/tracker.yaml]
+
+checks:
+  - id: cpu-request
+    type: k8s.container-resources
+    label: Container app has CPU request of 100m
+    params:
+      kind: Deployment
+      name: tracker
+      namespace: fl-k8s-0079
+      container: app
+      requests:
+        cpu: "100m"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment tracker has rolled out with 1 replica
+    params:
+      name: tracker
+      namespace: fl-k8s-0079
+      replicas: 1

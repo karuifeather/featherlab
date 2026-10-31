@@ -1,0 +1,50 @@
+schemaVersion: 1
+id: k8s-0088
+type: task
+title: Select an Eligible Node
+summary: Create a Deployment with a nodeSelector that targets a node label present in the cluster.
+track: kubernetes
+level: 4
+order: 10
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [scheduling, node-selector, deployments]
+prerequisites: [k8s-0087]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0088`"
+  - "Deployment `scanner` has nodeSelector `kubernetes.io/arch=amd64`"
+  - "Deployment `scanner` finishes rolling out with 2 available replicas"
+
+hints:
+  - "`kubectl create deployment scanner --image=nginx:1.27 --replicas=2 -n fl-k8s-0088` creates a base Deployment; then add the nodeSelector and resources via `kubectl edit`."
+  - "The kind cluster node has the label `kubernetes.io/arch=amd64` — this nodeSelector will match and pods will schedule."
+  - "Check node labels with `kubectl get node --show-labels` to confirm `kubernetes.io/arch=amd64` is present."
+
+lifecycle:
+  namespaces: [fl-k8s-0088]
+
+checks:
+  - id: selector
+    type: k8s.node-selector
+    label: Deployment scanner has nodeSelector kubernetes.io/arch=amd64
+    params:
+      kind: Deployment
+      name: scanner
+      namespace: fl-k8s-0088
+      selector:
+        kubernetes.io/arch: amd64
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment scanner has rolled out with 2 replicas
+    params:
+      name: scanner
+      namespace: fl-k8s-0088
+      replicas: 2

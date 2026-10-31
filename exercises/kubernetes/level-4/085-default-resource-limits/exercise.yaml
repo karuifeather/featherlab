@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0085
+type: task
+title: Default Resource Limits
+summary: Create a LimitRange that automatically injects default CPU and memory requests and limits into containers that do not specify them.
+track: kubernetes
+level: 4
+order: 7
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [limitrange, admission, defaults]
+prerequisites: [k8s-0084]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0085`"
+  - "LimitRange `default-limits` exists"
+  - "Container type has default cpu=`200m`, default memory=`128Mi`"
+  - "Container type has defaultRequest cpu=`100m`, defaultRequest memory=`64Mi`"
+  - "Container type has max cpu=`1`"
+
+hints:
+  - "LimitRanges use `apiVersion: v1`, `kind: LimitRange`. The `spec.limits` field is an array of limit entries."
+  - "Each entry has `type` (Container/Pod/PVC), `default`, `defaultRequest`, `max`, `min`."
+  - "`kubectl describe limitrange default-limits -n fl-k8s-0085` shows the configured values."
+
+lifecycle:
+  namespaces: [fl-k8s-0085]
+
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: LimitRange default-limits exists in fl-k8s-0085
+    params:
+      kind: LimitRange
+      name: default-limits
+      namespace: fl-k8s-0085
+  - id: defaults
+    type: k8s.limit-range
+    label: default-limits has correct Container defaults and max
+    params:
+      name: default-limits
+      namespace: fl-k8s-0085
+      limitType: Container
+      default:
+        cpu: "200m"
+        memory: "128Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "64Mi"
+      max:
+        cpu: "1"

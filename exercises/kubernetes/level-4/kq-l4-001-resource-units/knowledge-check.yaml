@@ -1,0 +1,131 @@
+schemaVersion: 1
+id: kq-k8s-l4-001
+activityType: knowledge-check
+title: Resource Units and Requests vs Limits
+summary: Check your understanding of CPU millicores, memory units, and the difference between resource requests and limits.
+track: kubernetes
+level: 4
+order: 3.5
+difficulty: beginner
+estimatedMinutes: 6
+tags: [resources, cpu, memory, units, requests, limits]
+relatedLabs: [k8s-0079, k8s-0080, k8s-0081]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "How many millicores equal 1 CPU core?"
+    options:
+      - id: a
+        text: "100m"
+      - id: b
+        text: "1000m"
+      - id: c
+        text: "10m"
+      - id: d
+        text: "500m"
+    correctAnswer: b
+    explanation: "1 CPU core = 1000 millicores (m). So 500m is half a core, 100m is one-tenth of a core, and 2000m is two cores."
+    wrongExplanations:
+      a: "100m is one-tenth of a core, not a full core."
+      c: "10m is one-hundredth of a core — a very small fraction."
+      d: "500m is half a core."
+    tryCommand: kubectl explain pod.spec.containers.resources
+
+  - id: q2
+    type: single-choice
+    prompt: "Which is larger: 1Mi or 1M?"
+    options:
+      - id: a
+        text: "They are equal."
+      - id: b
+        text: "1M is larger because the decimal prefix scales faster."
+      - id: c
+        text: "1Mi is larger: 1Mi = 1048576 bytes while 1M = 1000000 bytes."
+      - id: d
+        text: "1M is larger: 1M = 1000000 while 1Mi = 1024 bytes."
+    correctAnswer: c
+    explanation: "1Mi (mebibyte) uses a binary prefix: 1Mi = 2^20 = 1048576 bytes. 1M (megabyte) uses a decimal prefix: 1M = 10^6 = 1000000 bytes. 1Mi is roughly 4.9% larger than 1M."
+    wrongExplanations:
+      a: "They use different bases — binary (Mi) vs decimal (M) — and are not equal."
+      b: "The decimal prefix (M) is smaller, not larger, than the binary prefix (Mi) for the same magnitude."
+      d: "1Mi is not 1024 bytes; that is 1Ki (kibibyte). 1Mi = 1024 * 1024 = 1048576 bytes."
+    tryCommand: kubectl explain pod.spec.containers.resources.requests
+
+  - id: q3
+    type: single-choice
+    prompt: "What does a CPU request on a container control?"
+    options:
+      - id: a
+        text: "The maximum CPU the container can use before being throttled."
+      - id: b
+        text: "The amount of CPU reserved for scheduling; the container may use more if the node has spare capacity."
+      - id: c
+        text: "The exact CPU the container will always use, regardless of workload."
+      - id: d
+        text: "The CPU share applied only when the container is evicted and restarted."
+    correctAnswer: b
+    explanation: "A CPU request is a scheduling hint: the scheduler only places the Pod on nodes that have at least that much available CPU. At runtime, the container can burst above its request if the node is not fully utilized. The request is not a hard ceiling — that is the role of a CPU limit."
+    wrongExplanations:
+      a: "A CPU request is not a ceiling. The CPU limit is what triggers throttling when exceeded."
+      c: "CPU requests do not fix usage at a constant value; they set a minimum guarantee for scheduling."
+      d: "CPU requests are evaluated at scheduling time, not at eviction or restart time."
+
+  - id: q4
+    type: single-choice
+    prompt: "What happens when a container exceeds its CPU limit?"
+    options:
+      - id: a
+        text: "The container is OOMKilled."
+      - id: b
+        text: "The container is terminated and restarted immediately."
+      - id: c
+        text: "The container's CPU usage is throttled (capped at the limit)."
+      - id: d
+        text: "The Pod is evicted from the node."
+    correctAnswer: c
+    explanation: "CPU is a compressible resource. When a container exceeds its CPU limit, the Linux kernel's CFS bandwidth control throttles the container — it is paused until the next quota period. The container is not killed or evicted."
+    wrongExplanations:
+      a: "OOMKilled happens when a container exceeds its memory limit, not its CPU limit."
+      b: "Exceeding a CPU limit does not cause a container restart; only throttling occurs."
+      d: "Pod eviction is triggered by node memory pressure, not by exceeding a CPU limit."
+
+  - id: q5
+    type: single-choice
+    prompt: "What happens when a container exceeds its memory limit?"
+    options:
+      - id: a
+        text: "The container is throttled until it releases memory."
+      - id: b
+        text: "The container is OOMKilled by the kernel's out-of-memory killer."
+      - id: c
+        text: "The container's memory limit is automatically raised to fit the usage."
+      - id: d
+        text: "The container exits with code 0 and is restarted."
+    correctAnswer: b
+    explanation: "Memory is an incompressible resource. When a container exceeds its memory limit, the kernel's OOM killer terminates the process. Kubernetes records this as an OOMKilled container state, and the container is restarted according to the Pod's restartPolicy."
+    wrongExplanations:
+      a: "Memory cannot be throttled the way CPU can; exceeding the limit results in termination, not throttling."
+      c: "Kubernetes does not auto-adjust limits at runtime; the container is killed instead."
+      d: "An OOMKill uses exit code 137 (SIGKILL), not 0."
+
+  - id: q6
+    type: single-choice
+    prompt: "Which flag does `kubectl set resources` use to target a specific container?"
+    options:
+      - id: a
+        text: "--container"
+      - id: b
+        text: "-n"
+      - id: c
+        text: "-c"
+      - id: d
+        text: "--target"
+    correctAnswer: c
+    explanation: "`kubectl set resources deployment NAME -c CONTAINER_NAME` uses `-c` (short for `--containers`) to target a specific container. Without `-c`, the change applies to all containers in the Pod template."
+    wrongExplanations:
+      a: "The flag is `-c` or `--containers`, not `--container` (singular)."
+      b: "`-n` is the namespace flag, not a container selector."
+      d: "`--target` is not a valid flag for `kubectl set resources`."
+    tryCommand: kubectl set resources --help

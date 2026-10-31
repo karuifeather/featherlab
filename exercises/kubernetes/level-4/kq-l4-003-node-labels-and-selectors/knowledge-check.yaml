@@ -1,0 +1,133 @@
+schemaVersion: 1
+id: kq-k8s-l4-003
+activityType: knowledge-check
+title: Node Labels and nodeSelector
+summary: Check your understanding of how nodeSelector restricts Pod placement based on node labels.
+track: kubernetes
+level: 4
+order: 11.5
+difficulty: beginner
+estimatedMinutes: 6
+tags: [nodes, node-selector, scheduling, labels]
+relatedLabs: [k8s-0087, k8s-0088, k8s-0089]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Which field in a Pod spec restricts which nodes the Pod can be scheduled on?"
+    options:
+      - id: a
+        text: "spec.affinity.nodeAffinity"
+      - id: b
+        text: "spec.nodeName"
+      - id: c
+        text: "spec.nodeSelector"
+      - id: d
+        text: "spec.tolerations"
+    correctAnswer: c
+    explanation: "`spec.nodeSelector` is a map of key-value pairs. The scheduler only considers nodes whose labels include every pair in the selector. It is the simplest node placement constraint in Kubernetes."
+    wrongExplanations:
+      a: "`spec.affinity.nodeAffinity` provides richer placement rules (required and preferred), but it is a different, more complex field than `nodeSelector`."
+      b: "`spec.nodeName` bypasses the scheduler entirely and pins the Pod to one specific node by name."
+      d: "`spec.tolerations` allows a Pod to be scheduled on tainted nodes; it does not restrict placement to specific nodes."
+    tryCommand: kubectl explain pod.spec.nodeSelector
+
+  - id: q2
+    type: single-choice
+    prompt: "A Pod has a nodeSelector that matches no node in the cluster. What happens to the Pod?"
+    options:
+      - id: a
+        text: "The Pod is scheduled on a random node ignoring the selector."
+      - id: b
+        text: "The Pod remains in Pending state indefinitely."
+      - id: c
+        text: "The Pod is rejected and deleted by the API server."
+      - id: d
+        text: "The Pod runs in a degraded mode with no node assigned."
+    correctAnswer: b
+    explanation: "When no node satisfies a Pod's nodeSelector, the scheduler cannot place the Pod. The Pod stays in Pending state and a FailedScheduling event is recorded. It remains Pending until a matching node becomes available or the Pod is deleted."
+    wrongExplanations:
+      a: "The scheduler does not override nodeSelector constraints; it only places a Pod on a node that satisfies all constraints."
+      c: "The API server accepts the Pod object even if no matching node exists; only scheduling fails."
+      d: "Pods do not run in a degraded mode; they either schedule normally or stay Pending."
+
+  - id: q3
+    type: single-choice
+    prompt: "Which kubectl command shows the node each Pod is running on in a table with a NODE column?"
+    options:
+      - id: a
+        text: "kubectl get pods -o yaml"
+      - id: b
+        text: "kubectl get pods -o wide"
+      - id: c
+        text: "kubectl get pods --show-nodes"
+      - id: d
+        text: "kubectl top pods"
+    correctAnswer: b
+    explanation: "`kubectl get pods -o wide` adds extra columns including NODE (the node name) and IP to the default table output, making it the quickest way to see placement for multiple pods at once."
+    wrongExplanations:
+      a: "`-o yaml` outputs the full YAML, which does contain the node name, but it is not a concise table view."
+      c: "`--show-nodes` is not a valid flag for `kubectl get pods`."
+      d: "`kubectl top pods` shows CPU and memory usage, not node placement."
+    tryCommand: kubectl get pods -n NAMESPACE -o wide
+
+  - id: q4
+    type: single-choice
+    prompt: "Which flag makes `kubectl get node` display each node's labels?"
+    options:
+      - id: a
+        text: "-o wide"
+      - id: b
+        text: "--show-labels"
+      - id: c
+        text: "--labels"
+      - id: d
+        text: "-o labels"
+    correctAnswer: b
+    explanation: "`kubectl get node --show-labels` adds a LABELS column to the output, listing every label on each node. This is the quickest way to verify which node labels are available for use in a nodeSelector."
+    wrongExplanations:
+      a: "`-o wide` adds extra columns such as kernel version and container runtime, but not the full label set."
+      c: "`--labels` is not a valid flag for `kubectl get node`."
+      d: "`-o labels` is not a valid output format for `kubectl get`."
+    tryCommand: kubectl get node --show-labels
+
+  - id: q5
+    type: single-choice
+    prompt: "A Pod has nodeSelector: {disktype: ssd} but no node in the cluster has that label. Which event message appears on the Pod?"
+    options:
+      - id: a
+        text: "BackoffLimitExceeded — the Pod failed too many times."
+      - id: b
+        text: "FailedCreate — the ReplicaSet could not create the Pod."
+      - id: c
+        text: "FailedScheduling — 0/N nodes are available: N node(s) didn't match Pod's node affinity/selector."
+      - id: d
+        text: "NodeNotReady — all nodes are unhealthy."
+    correctAnswer: c
+    explanation: "The Kubernetes scheduler emits a FailedScheduling event on the Pod when it cannot find a suitable node. The message explains the reason — in this case, no node matched the nodeSelector. You can see it with `kubectl describe pod NAME`."
+    wrongExplanations:
+      a: "BackoffLimitExceeded is a Job event, not a scheduling event."
+      b: "FailedCreate appears on a ReplicaSet when it cannot create pods, typically due to quota or admission errors — not a scheduling failure."
+      d: "NodeNotReady would mean the node itself is not healthy; a missing label is a different kind of constraint failure."
+    tryCommand: kubectl describe pod NAME -n NAMESPACE
+
+  - id: q6
+    type: single-choice
+    prompt: "Can a Deployment with a nodeSelector be successfully created as a Kubernetes object even if no matching node exists?"
+    options:
+      - id: a
+        text: "No — the API server rejects the Deployment if no matching node is found."
+      - id: b
+        text: "Yes — the Deployment object is created; only its Pods remain Pending."
+      - id: c
+        text: "No — the Deployment is created but rolls back immediately to a previous version."
+      - id: d
+        text: "Yes — the Pods are scheduled anyway and run on the closest matching node."
+    correctAnswer: b
+    explanation: "The Kubernetes API server validates the Deployment's schema but does not check whether nodes matching the nodeSelector exist. The Deployment and its ReplicaSet are created successfully. The scheduler then tries to place each Pod and emits FailedScheduling events when no node matches."
+    wrongExplanations:
+      a: "The API server does not perform scheduler feasibility checks at admission time; nodeSelector validity is not evaluated there."
+      c: "Rollback is a Deployment feature for failed rollouts; a Pending pod does not trigger a rollback."
+      d: "The scheduler enforces nodeSelector strictly; it does not fall back to a 'closest match' node."
+    tryCommand: kubectl get deployment NAME -n NAMESPACE

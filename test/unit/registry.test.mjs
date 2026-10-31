@@ -126,6 +126,30 @@ test("the prerequisite graph is the designed curriculum, not one linear chain", 
     "k8s-0077": ["k8s-0076"],
     // Level 3: M5.5 Final Challenge.
     "k8s-0078": ["k8s-0077"],
+    // Level 4: M5.6 Circuit A — Resource Requests and Limits.
+    "k8s-0079": ["k8s-0078"],
+    "k8s-0080": ["k8s-0079"],
+    "k8s-0081": ["k8s-0080"],
+    // Level 4: M5.6 Circuit B — QoS, ResourceQuota, LimitRange.
+    "k8s-0082": ["k8s-0081"],
+    "k8s-0083": ["k8s-0082"],
+    "k8s-0084": ["k8s-0083"],
+    "k8s-0085": ["k8s-0084"],
+    "k8s-0086": ["k8s-0085"],
+    // Level 4: M5.6 Circuit C — Node Inspection and Placement.
+    "k8s-0087": ["k8s-0086"],
+    "k8s-0088": ["k8s-0087"],
+    "k8s-0089": ["k8s-0088"],
+    // Level 4: M5.6 Circuit E — Node Affinity.
+    "k8s-0090": ["k8s-0089"],
+    "k8s-0091": ["k8s-0090"],
+    "k8s-0092": ["k8s-0091"],
+    "k8s-0093": ["k8s-0092"],
+    // Level 4: M5.6 Circuit G — HPA and Mastery.
+    "k8s-0094": ["k8s-0093"],
+    "k8s-0095": ["k8s-0094"],
+    "k8s-0096": ["k8s-0095"],
+    "k8s-0097": ["k8s-0096"],
   });
 });
 

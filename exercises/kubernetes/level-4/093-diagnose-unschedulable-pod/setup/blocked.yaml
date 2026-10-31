@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blocked-app
+  namespace: fl-k8s-0093
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blocked-app
+  template:
+    metadata:
+      labels:
+        app: blocked-app
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: disktype
+                    operator: In
+                    values:
+                      - ssd
+      containers:
+        - name: app
+          image: nginx:1.27
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"

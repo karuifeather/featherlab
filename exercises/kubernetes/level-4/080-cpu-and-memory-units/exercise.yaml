@@ -1,0 +1,56 @@
+schemaVersion: 1
+id: k8s-0080
+type: task
+title: CPU and Memory Units
+summary: Create a Deployment with explicit CPU and memory requests and limits on a single container.
+track: kubernetes
+level: 4
+order: 2
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [resources, deployments, cpu, memory, units]
+prerequisites: [k8s-0079]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0080`"
+  - "Container `main` of Deployment `logger` requests `200m` CPU and `128Mi` memory"
+  - "Container `main` is limited to `500m` CPU and `256Mi` memory"
+  - "Deployment `logger` finishes rolling out with 1 available replica"
+
+hints:
+  - "CPU: `200m` is 200 millicores (0.2 cores). Limits cap usage; requests reserve capacity for scheduling."
+  - "Memory: `128Mi` is mebibytes (1 MiB = 2^20 bytes). Both requests and limits live under each container's `resources:` field."
+  - "`kubectl create deployment logger --image=busybox:1.36 -n fl-k8s-0080 -- sh -c 'sleep 3600'` creates the base Deployment, then add resources with `kubectl set resources`."
+
+lifecycle:
+  namespaces: [fl-k8s-0080]
+
+checks:
+  - id: resources
+    type: k8s.container-resources
+    label: Container main has correct CPU and memory requests and limits
+    params:
+      kind: Deployment
+      name: logger
+      namespace: fl-k8s-0080
+      container: main
+      requests:
+        cpu: "200m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment logger has rolled out with 1 replica
+    params:
+      name: logger
+      namespace: fl-k8s-0080
+      replicas: 1

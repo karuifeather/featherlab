@@ -1,0 +1,77 @@
+schemaVersion: 1
+id: k8s-0097
+type: task
+title: Master Scheduling Placement
+summary: Combine resource budgets, nodeSelector, and node affinity to build a Deployment that lands on the right node and scales cleanly.
+track: kubernetes
+level: 4
+order: 19
+difficulty: advanced
+estimatedMinutes: 20
+tags: [scheduling, node-affinity, node-selector, resources, mastery]
+prerequisites: [k8s-0096]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0097`"
+  - "Deployment `api-gateway` has nodeSelector `kubernetes.io/os=linux`"
+  - "Deployment `api-gateway` has required nodeAffinity for `kubernetes.io/arch In [amd64]`"
+  - "Container `gateway` has CPU request=`100m`, memory request=`64Mi`, CPU limit=`300m`, memory limit=`128Mi`"
+  - "Deployment `api-gateway` finishes rolling out with 2 available replicas"
+
+hints:
+  - "Use `kubectl get node --show-labels` to confirm both `kubernetes.io/os=linux` and `kubernetes.io/arch=amd64` are present."
+  - "Add `nodeSelector` and `affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution` to the pod template spec."
+  - "After applying: `kubectl rollout status deployment/api-gateway -n fl-k8s-0097 --timeout=120s`"
+
+lifecycle:
+  namespaces: [fl-k8s-0097]
+
+checks:
+  - id: selector
+    type: k8s.node-selector
+    label: Deployment api-gateway has nodeSelector kubernetes.io/os=linux
+    params:
+      kind: Deployment
+      name: api-gateway
+      namespace: fl-k8s-0097
+      selector:
+        kubernetes.io/os: linux
+  - id: affinity
+    type: k8s.node-affinity
+    label: Deployment api-gateway has required nodeAffinity for kubernetes.io/arch In [amd64]
+    params:
+      kind: Deployment
+      name: api-gateway
+      namespace: fl-k8s-0097
+      scheduling: required
+      key: kubernetes.io/arch
+      operator: In
+      values: [amd64]
+  - id: resources
+    type: k8s.container-resources
+    label: Container gateway has correct resource budget
+    params:
+      kind: Deployment
+      name: api-gateway
+      namespace: fl-k8s-0097
+      container: gateway
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "300m"
+        memory: "128Mi"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api-gateway has rolled out with 2 replicas
+    params:
+      name: api-gateway
+      namespace: fl-k8s-0097
+      replicas: 2

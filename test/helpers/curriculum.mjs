@@ -108,6 +108,32 @@ export const CURRICULUM = Object.freeze({
     // Final Challenge (M5.5)
     "k8s-0078", // Application Patterns Mastery
   ],
+  4: [
+    // Circuit A — Resource Requests and Limits (M5.6)
+    "k8s-0079", // Your First Resource Request
+    "k8s-0080", // CPU and Memory Units
+    "k8s-0081", // Per-Container Budgets
+    // Circuit B — QoS, ResourceQuota, LimitRange (M5.6)
+    "k8s-0082", // QoS Classes
+    "k8s-0083", // Budget a Namespace
+    "k8s-0084", // Why Was Creation Rejected?
+    "k8s-0085", // Default Resource Limits
+    "k8s-0086", // Repair a Constrained Workload
+    // Circuit C — Node Inspection and Placement (M5.6)
+    "k8s-0087", // A Pod's Node Assignment
+    "k8s-0088", // Select an Eligible Node
+    "k8s-0089", // Repair a Pending Deployment
+    // Circuit E — Node Affinity (M5.6)
+    "k8s-0090", // Required Node Affinity
+    "k8s-0091", // Preferred Node Affinity
+    "k8s-0092", // Pod Anti-Affinity for Spread
+    "k8s-0093", // Diagnose an Unschedulable Pod
+    // Circuit G — HPA and Mastery (M5.6)
+    "k8s-0094", // Your First HPA
+    "k8s-0095", // HPA with CPU Policy
+    "k8s-0096", // Investigate a Pending Pod
+    "k8s-0097", // Master Scheduling Placement
+  ],
 });
 
 export const CURRICULUM_ORDER = Object.freeze(Object.values(CURRICULUM).flat());

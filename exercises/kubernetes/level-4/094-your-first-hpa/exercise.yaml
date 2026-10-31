@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0094
+type: task
+title: Your First HPA
+summary: Create a HorizontalPodAutoscaler that targets a Deployment and configure minimum replicas, maximum replicas, and a CPU utilization target.
+track: kubernetes
+level: 4
+order: 16
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [hpa, autoscaling, deployments]
+prerequisites: [k8s-0093]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0094`"
+  - "HPA `app-server-hpa` exists in `fl-k8s-0094`"
+  - "HPA targets Deployment `app-server` with minReplicas=1, maxReplicas=5, targetCPU=80%"
+
+hints:
+  - "`kubectl autoscale deployment app-server --cpu-percent=80 --min=1 --max=5 --name=app-server-hpa -n fl-k8s-0094`"
+  - "Or use a HPA YAML: `apiVersion: autoscaling/v2`, `kind: HorizontalPodAutoscaler`."
+  - "Inspect: `kubectl describe hpa app-server-hpa -n fl-k8s-0094`"
+
+lifecycle:
+  namespaces: [fl-k8s-0094]
+  setup:
+    manifests: [setup/target-deploy.yaml]
+
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: HPA app-server-hpa exists in fl-k8s-0094
+    params:
+      kind: HorizontalPodAutoscaler
+      name: app-server-hpa
+      namespace: fl-k8s-0094
+  - id: config
+    type: k8s.hpa-config
+    label: app-server-hpa has correct configuration
+    params:
+      name: app-server-hpa
+      namespace: fl-k8s-0094
+      minReplicas: 1
+      maxReplicas: 5
+      targetRef:
+        kind: Deployment
+        name: app-server
+      cpuUtilization: 80

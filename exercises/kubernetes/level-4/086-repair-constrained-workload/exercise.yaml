@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0086
+type: task
+title: Repair a Constrained Workload
+summary: Fix a Deployment whose pods are rejected by a LimitRange maximum and set container resources within the namespace constraints.
+track: kubernetes
+level: 4
+order: 8
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [limitrange, resourcequota, troubleshooting, deployments]
+prerequisites: [k8s-0085]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0086`"
+  - "Container `app` of Deployment `server` has CPU limit `400m` and memory limit `200Mi`"
+  - "Deployment `server` finishes rolling out with 1 available replica"
+
+hints:
+  - "`kubectl get events -n fl-k8s-0086` shows the LimitRange violation error."
+  - "`kubectl set resources deployment server -c app --limits=cpu=400m,memory=200Mi -n fl-k8s-0086` applies the fix."
+  - "The LimitRange max is 500m CPU and 256Mi memory — your solution must be within those bounds."
+
+lifecycle:
+  namespaces: [fl-k8s-0086]
+  setup:
+    manifests: [setup/constrained.yaml]
+
+checks:
+  - id: resources
+    type: k8s.container-resources
+    label: Container app has CPU limit 400m and memory limit 200Mi
+    params:
+      kind: Deployment
+      name: server
+      namespace: fl-k8s-0086
+      container: app
+      limits:
+        cpu: "400m"
+        memory: "200Mi"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment server has rolled out with 1 replica
+    params:
+      name: server
+      namespace: fl-k8s-0086
+      replicas: 1

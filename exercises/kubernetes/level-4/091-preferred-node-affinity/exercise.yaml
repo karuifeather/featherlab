@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0091
+type: task
+title: Preferred Node Affinity
+summary: Create a Deployment that uses preferredDuringSchedulingIgnoredDuringExecution node affinity to softly prefer amd64 nodes.
+track: kubernetes
+level: 4
+order: 13
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [scheduling, node-affinity, preferred, deployments]
+prerequisites: [k8s-0090]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0091`"
+  - "Deployment `worker` has preferred nodeAffinity for `kubernetes.io/arch In [amd64]`"
+  - "Deployment `worker` finishes rolling out with 2 available replicas"
+
+hints:
+  - "`preferredDuringSchedulingIgnoredDuringExecution` is an array of `{weight, preference}` entries."
+  - "`weight` is 1–100 (use 10). `preference.matchExpressions` has the same structure as required rules."
+  - |
+    Example:
+    ```yaml
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                    - amd64
+    ```
+
+lifecycle:
+  namespaces: [fl-k8s-0091]
+
+checks:
+  - id: affinity
+    type: k8s.node-affinity
+    label: Deployment worker has preferred node affinity for kubernetes.io/arch In [amd64]
+    params:
+      kind: Deployment
+      name: worker
+      namespace: fl-k8s-0091
+      scheduling: preferred
+      key: kubernetes.io/arch
+      operator: In
+      values: [amd64]
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment worker has rolled out with 2 replicas
+    params:
+      name: worker
+      namespace: fl-k8s-0091
+      replicas: 2

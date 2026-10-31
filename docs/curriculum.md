@@ -5,12 +5,14 @@ introduced one or two at a time, practised again in different situations, and on
 combined or broken on purpose. Difficulty comes from growing independence and from combining
 familiar concepts, never from mechanisms the learner has not met yet.
 
-| Level | Theme                                                                  | Exercises                              | Status                         |
-| ----- | ---------------------------------------------------------------------- | -------------------------------------- | ------------------------------ |
-| 0     | Understand and operate core resources                                  | 10                                     | complete foundations course    |
-| 1     | Configure and manage workloads — deployment lifecycle                  | 18 (k8s-0019–0034, k8s-0003, k8s-0006) | M5.3 complete; M5.4+ to expand |
-| 2     | Configuration, health, security, and workload recovery                 | 25 (k8s-0035–0053, k8s-0004–0010)      | M5.4 complete; M5.5+ to expand |
-| 3+    | Scheduling, networking, storage, cluster administration, CKS hardening | none yet                               | planned                        |
+| Level | Theme                                                            | Exercises                               | Status                         |
+| ----- | ---------------------------------------------------------------- | --------------------------------------- | ------------------------------ |
+| 0     | Understand and operate core resources                            | 10                                      | complete foundations course    |
+| 1     | Configure and manage workloads — deployment lifecycle            | 18 (k8s-0019–0034, k8s-0003, k8s-0006)  | M5.3 complete; M5.4+ to expand |
+| 2     | Configuration, health, security, and workload recovery           | 25 (k8s-0035–0053, k8s-0004–0010)       | M5.4 complete; M5.5+ to expand |
+| 3     | Application patterns — init, sidecar, Jobs, CronJobs, DaemonSets | 25 (k8s-0054–0078) + 7 knowledge checks | M5.5 complete                  |
+| 4     | Resource management and scheduling                               | 19 (k8s-0079–0097) + 8 knowledge checks | M5.6 complete                  |
+| 5+    | Networking, storage, cluster administration, CKS hardening       | none yet                                | planned                        |
 
 All scenarios, statements, setup manifests, hints, solutions and validators are original
 FeatherLab content. They are not endorsed by the CNCF and do not reproduce certification exam
@@ -216,9 +218,138 @@ A prerequisite may never sit at a higher level than its dependent (content valid
 it). The Level 2 entry exercises require k8s-0034 (the Level 1 mastery lab); the recovery labs
 still require the Level 0 foundations challenge.
 
-Deliberately deferred to later levels: Services in depth, Jobs and CronJobs, scheduling
-(affinity, taints), storage, NetworkPolicy, RBAC, cluster administration (kubeadm, etcd,
-upgrades), and CKS hardening.
+Deliberately deferred to later levels: Services in depth, scheduling (affinity, taints), storage,
+NetworkPolicy, RBAC, cluster administration (kubeadm, etcd, upgrades), and CKS hardening.
+
+## Level 3: application patterns (M5.5)
+
+Twenty-five exercises cover init containers, native sidecar containers, Jobs and their retry
+controls, CronJobs, and DaemonSets. Seven interleaved knowledge checks cover the conceptual
+side of each topic.
+
+### Circuit A — Temporary Pods and Init Containers (k8s-0054 to k8s-0060)
+
+| Order | ID        | Title                               | Difficulty   | Prerequisites |
+| ----- | --------- | ----------------------------------- | ------------ | ------------- |
+| 1     | k8s-0054  | Run a One-Time Pod                  | intermediate | 0053          |
+| 2     | k8s-0055  | Inspect a Completed Task            | intermediate | 0054          |
+| 3     | k8s-0056  | Fix a Startup Command               | intermediate | 0055          |
+| 3.5   | kq-l3-001 | Temporary Pods and Restart Policies | — (check)    | 0056          |
+| 5     | k8s-0057  | Initialize Before Starting          | intermediate | 0056          |
+| 6     | k8s-0058  | Prepare Shared Files                | intermediate | 0057          |
+| 7     | k8s-0059  | Diagnose Failed Initialization      | intermediate | 0058          |
+| 8     | k8s-0060  | Application Startup Challenge       | intermediate | 0059          |
+| 8.5   | kq-l3-002 | Init Containers and Shared Volumes  | — (check)    | 0059          |
+
+### Circuit B — Native Sidecars (k8s-0061 to k8s-0064)
+
+| Order | ID        | Title                                | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------------------ | ------------ | ------------- |
+| 9     | k8s-0061  | A Supporting Container               | intermediate | 0060          |
+| 10    | k8s-0062  | Sidecar and Shared Files             | intermediate | 0061          |
+| 11    | k8s-0063  | Startup Ordering with Native Sidecar | intermediate | 0062          |
+| 12    | k8s-0064  | Repair the Native Sidecar            | intermediate | 0063          |
+| 12.5  | kq-l3-003 | Native Sidecars                      | — (check)    | 0063          |
+
+### Circuit C — Jobs (k8s-0065 to k8s-0069)
+
+| Order | ID        | Title                                | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------------------ | ------------ | ------------- |
+| 13    | k8s-0065  | Your First Job                       | intermediate | 0064          |
+| 14    | k8s-0066  | Job Status and Logs                  | intermediate | 0065          |
+| 15    | k8s-0067  | Recover a Failed Job                 | intermediate | 0066          |
+| 16    | k8s-0068  | Multiple Completions and Parallelism | intermediate | 0067          |
+| 17    | k8s-0069  | Retry and Deadline Controls          | intermediate | 0068          |
+| 17.5  | kq-l3-004 | Kubernetes Jobs                      | — (check)    | 0068          |
+| 17.8  | kq-l3-005 | Indexed Jobs                         | — (check)    | 0068          |
+
+### Circuit D — CronJobs (k8s-0070 to k8s-0073)
+
+| Order | ID        | Title                              | Difficulty   | Prerequisites |
+| ----- | --------- | ---------------------------------- | ------------ | ------------- |
+| 18    | k8s-0070  | Create a Scheduled Job             | intermediate | 0069          |
+| 19    | k8s-0071  | Run the Template Now               | intermediate | 0070          |
+| 20    | k8s-0072  | Suspend and Maintain a CronJob     | intermediate | 0071          |
+| 21    | k8s-0073  | Restore a Suspended CronJob        | intermediate | 0072          |
+| 21.5  | kq-l3-006 | CronJob Scheduling and Maintenance | — (check)    | 0072          |
+
+### Circuit E — DaemonSets and mastery (k8s-0074 to k8s-0078)
+
+| Order | ID        | Title                         | Difficulty   | Prerequisites |
+| ----- | --------- | ----------------------------- | ------------ | ------------- |
+| 22    | k8s-0074  | Meet the DaemonSet            | intermediate | 0073          |
+| 23    | k8s-0075  | Maintain a Node-Local Helper  | intermediate | 0074          |
+| 24    | k8s-0076  | Observe DaemonSet Scheduling  | intermediate | 0075          |
+| 25    | k8s-0077  | Choose the Correct Controller | intermediate | 0076          |
+| 26    | k8s-0078  | Application Patterns Mastery  | intermediate | 0077          |
+| 26.5  | kq-l3-007 | Level 3 Mixed Review          | — (check)    | 0077          |
+
+## Level 4: resource management and scheduling (M5.6)
+
+Nineteen exercises cover resource requests and limits, QoS classes, LimitRange, ResourceQuota,
+node selectors, node affinity, pod anti-affinity, HPA configuration, and scheduling diagnostics.
+Eight interleaved knowledge checks cover the conceptual side of each topic.
+
+### Circuit A — Resource Requests and Limits (k8s-0079 to k8s-0081)
+
+| Order | ID        | Title                                 | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------------------- | ------------ | ------------- |
+| 1     | k8s-0079  | Your First Resource Request           | beginner     | 0078          |
+| 2     | k8s-0080  | CPU and Memory Units                  | beginner     | 0079          |
+| 3     | k8s-0081  | Per-Container Budgets                 | intermediate | 0080          |
+| 3.5   | kq-l4-001 | Resource Units and Requests vs Limits | — (check)    | 0081          |
+
+### Circuit B — QoS, ResourceQuota, LimitRange (k8s-0082 to k8s-0086)
+
+| Order | ID        | Title                         | Difficulty   | Prerequisites |
+| ----- | --------- | ----------------------------- | ------------ | ------------- |
+| 4     | k8s-0082  | QoS Classes                   | intermediate | 0081          |
+| 5     | k8s-0083  | Budget a Namespace            | intermediate | 0082          |
+| 6     | k8s-0084  | Why Was Creation Rejected?    | intermediate | 0083          |
+| 6.5   | kq-l4-002 | QoS and Resource Policy       | — (check)    | 0084          |
+| 7     | k8s-0085  | Default Resource Limits       | intermediate | 0084          |
+| 8     | k8s-0086  | Repair a Constrained Workload | intermediate | 0085          |
+
+### Circuit C — Node Inspection and Placement (k8s-0087 to k8s-0089)
+
+| Order | ID        | Title                        | Difficulty   | Prerequisites |
+| ----- | --------- | ---------------------------- | ------------ | ------------- |
+| 9     | k8s-0087  | A Pod's Node Assignment      | beginner     | 0086          |
+| 10    | k8s-0088  | Select an Eligible Node      | intermediate | 0087          |
+| 11    | k8s-0089  | Repair a Pending Deployment  | intermediate | 0088          |
+| 11.5  | kq-l4-003 | Node Labels and nodeSelector | — (check)    | 0089          |
+| 12    | kq-l4-004 | Taints and Tolerations       | — (check)    | 0089          |
+
+### Circuit E — Node Affinity (k8s-0090 to k8s-0093)
+
+| Order | ID        | Title                           | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------------- | ------------ | ------------- |
+| 12    | k8s-0090  | Required Node Affinity          | intermediate | 0089          |
+| 13    | k8s-0091  | Preferred Node Affinity         | intermediate | 0090          |
+| 14    | k8s-0092  | Pod Anti-Affinity for Spread    | intermediate | 0091          |
+| 15    | k8s-0093  | Diagnose an Unschedulable Pod   | intermediate | 0092          |
+| 15.5  | kq-l4-005 | Node Affinity and Anti-Affinity | — (check)    | 0093          |
+
+### Circuit G — HPA and Mastery (k8s-0094 to k8s-0097)
+
+| Order | ID        | Title                       | Difficulty   | Prerequisites |
+| ----- | --------- | --------------------------- | ------------ | ------------- |
+| 16    | k8s-0094  | Your First HPA              | intermediate | 0093          |
+| 17    | k8s-0095  | HPA with CPU Policy         | intermediate | 0094          |
+| 17.5  | kq-l4-006 | HPA and Autoscaling         | — (check)    | 0095          |
+| 18    | k8s-0096  | Investigate a Pending Pod   | intermediate | 0095          |
+| 19    | k8s-0097  | Master Scheduling Placement | advanced     | 0096          |
+| 19.5  | kq-l4-007 | Resource Management Review  | — (check)    | 0097          |
+| 20    | kq-l4-008 | Scheduler Diagnostics       | — (check)    | 0097          |
+
+### Deferred topics
+
+Intentionally deferred to avoid unsafe cluster mutations on the single-node kind cluster:
+
+- **Live taint/toleration exercises** — tainting the kind control-plane node would block unrelated exercises. Covered as knowledge checks (kq-l4-004) instead.
+- **HPA behavioral scaling** — requires metrics-server, which is not installed in the default kind setup. HPA exercises grade configuration only (object existence + spec fields).
+- **TopologySpreadConstraints** — requires multiple nodes. Conceptually adjacent to anti-affinity; deferred.
+- **PriorityClass and preemption** — requires a workload that gets preempted; safely testable only with dedicated priority nodes.
 
 ## Ownership, setup and reset
 

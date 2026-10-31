@@ -1,0 +1,168 @@
+schemaVersion: 1
+id: kq-k8s-l4-008
+activityType: knowledge-check
+title: Scheduler Diagnostics
+summary: Test your ability to diagnose why pods are Pending — reading events, interpreting scheduler messages, and identifying the root cause.
+track: kubernetes
+level: 4
+order: 20
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [scheduling, troubleshooting, pending, events, diagnostics]
+relatedLabs: [k8s-0089, k8s-0093, k8s-0096]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "A pod is Pending. Which command gives the most useful diagnostic information for why?"
+    options:
+      - id: a
+        text: "`kubectl logs <pod> -n <ns>`"
+      - id: b
+        text: "`kubectl describe pod <pod> -n <ns>`"
+      - id: c
+        text: "`kubectl get pod <pod> -n <ns>`"
+      - id: d
+        text: "`kubectl top pod <pod> -n <ns>`"
+    correctAnswer: b
+    explanation: "`kubectl describe pod` prints the Events section, which shows the scheduler's reason for not placing the pod (e.g., 'Insufficient cpu', 'node(s) didn't match Pod's node affinity'). This is the primary diagnostic tool for Pending pods."
+    wrongExplanations:
+      a: "`kubectl logs` reads container stdout/stderr. A Pending pod has never started, so there are no logs."
+      c: "`kubectl get pod` shows the phase (Pending) and status columns, but not the scheduler's detailed reason."
+      d: "`kubectl top pod` reads live CPU and memory usage from metrics-server. A Pending pod has no running container to measure."
+    tryCommand: kubectl get events -A --field-selector reason=FailedScheduling
+
+  - id: q2
+    type: single-choice
+    prompt: "A pod's Events show: `0/1 nodes are available: 1 Insufficient cpu`. What caused this?"
+    options:
+      - id: a
+        text: The node's live CPU usage is too high
+      - id: b
+        text: The pod's CPU request exceeds the remaining allocatable CPU on all nodes
+      - id: c
+        text: The pod has no CPU limit set
+      - id: d
+        text: The node's kubelet is not running
+    correctAnswer: b
+    explanation: "'Insufficient cpu' means the scheduler found no node where the sum of existing pods' CPU requests plus this pod's CPU request fits within the node's allocatable CPU. The scheduler uses requests and allocatable capacity — not live usage."
+    wrongExplanations:
+      a: "The scheduler does not read live CPU usage. A node busy at 100% CPU (by `kubectl top`) can still schedule new pods if its allocatable capacity minus committed requests is sufficient."
+      c: "Missing CPU limits do not prevent scheduling. Only requests affect placement."
+      d: "If the kubelet were not running, the node would show NotReady, and the message would be different."
+
+  - id: q3
+    type: single-choice
+    prompt: "A pod's Events show: `0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector`. What is the fix?"
+    options:
+      - id: a
+        text: Add more nodes to the cluster
+      - id: b
+        text: Change the pod's nodeSelector or nodeAffinity to match a label the node actually has
+      - id: c
+        text: Remove the pod's resource requests
+      - id: d
+        text: Restart the kube-scheduler
+    correctAnswer: b
+    explanation: "This message means the pod's nodeSelector or nodeAffinity rules require a label (or label value) that no node in the cluster has. Fix it by either correcting the label selector in the pod spec to match an existing node label, or by adding the required label to the node."
+    wrongExplanations:
+      a: "Adding nodes only helps if the new nodes have the required labels. A fresh kind node has the same default labels."
+      c: "Resource requests affect 'Insufficient cpu/memory' errors, not affinity/selector mismatches."
+      d: "Restarting kube-scheduler does not change node labels or pod specs; the same mismatch would occur."
+    tryCommand: kubectl get node --show-labels
+
+  - id: q4
+    type: single-choice
+    prompt: "Which kubectl command shows all events across a namespace (not just one pod's events)?"
+    options:
+      - id: a
+        text: "`kubectl logs -n <ns> --all-containers`"
+      - id: b
+        text: "`kubectl get events -n <ns>`"
+      - id: c
+        text: "`kubectl describe namespace <ns>`"
+      - id: d
+        text: "`kubectl get pods -n <ns> -o wide`"
+    correctAnswer: b
+    explanation: "`kubectl get events -n <ns>` lists all events in the namespace. Adding `--sort-by=.lastTimestamp` shows the most recent events last. This is useful when multiple pods are failing and you want a unified view."
+    wrongExplanations:
+      a: "`kubectl logs` reads container output; it requires a running container and does not show scheduler events."
+      c: "`kubectl describe namespace` shows ResourceQuota usage, not pod scheduling events."
+      d: "`kubectl get pods -o wide` shows which node each pod is on (blank when Pending), but not the reason for Pending."
+    tryCommand: kubectl get events -n default --sort-by=.lastTimestamp
+
+  - id: q5
+    type: single-choice
+    prompt: "A Deployment creates Pods but all Pods are immediately Pending. The Deployment's own status shows 0/1 ready. Where do you look first?"
+    options:
+      - id: a
+        text: "`kubectl describe deployment` — check the Conditions section"
+      - id: b
+        text: "`kubectl describe pod <one-pending-pod>` — check the Events section"
+      - id: c
+        text: "`kubectl get replicaset -n <ns>` — check if the ReplicaSet exists"
+      - id: d
+        text: "`kubectl logs deployment/<name>` — check for application errors"
+    correctAnswer: b
+    explanation: "Scheduler events are attached to Pods, not to Deployments or ReplicaSets. `kubectl describe pod` on any one of the Pending pods shows the scheduler's reason in the Events section. Start there."
+    wrongExplanations:
+      a: "`kubectl describe deployment` shows rollout progress but its Events section reflects Deployment-level events (e.g., scaling), not individual pod scheduling failures."
+      c: "The ReplicaSet existing confirms the Deployment controller is working; it does not explain why pods are Pending."
+      d: "A Pending pod has never started — there is no container, no process, and therefore no logs."
+
+  - id: q6
+    type: single-choice
+    prompt: "`kubectl get pods -o wide` is useful for scheduling diagnostics because it shows:"
+    options:
+      - id: a
+        text: "The pod's CPU and memory usage"
+      - id: b
+        text: "The NODE column — which node each pod runs on, blank when the pod is Pending"
+      - id: c
+        text: "The pod's environment variables"
+      - id: d
+        text: "The pod's restart history"
+    correctAnswer: b
+    explanation: "The `-o wide` flag adds a NODE column. A Pending pod shows an empty NODE field, confirming the scheduler has not placed it. A Running pod shows the node name, which helps when diagnosing node-specific issues."
+    wrongExplanations:
+      a: "CPU and memory usage come from `kubectl top pods`, which reads from metrics-server."
+      c: "Environment variables are visible in `kubectl describe pod` or `kubectl exec` — not in `get pods -o wide`."
+      d: "Restart counts are in the RESTARTS column of the default `kubectl get pods` output — not a `-o wide` addition."
+
+  - id: q7
+    type: single-choice
+    prompt: "In `kubectl get events -n <ns>`, which event Reason indicates the scheduler could not place a pod?"
+    options:
+      - id: a
+        text: BackOff
+      - id: b
+        text: Unhealthy
+      - id: c
+        text: FailedScheduling
+      - id: d
+        text: FailedCreate
+    correctAnswer: c
+    explanation: "`FailedScheduling` is the event Reason emitted by the kube-scheduler when it cannot find a suitable node. The Message field contains the specific reason (Insufficient cpu, node affinity mismatch, etc.)."
+    wrongExplanations:
+      a: "`BackOff` (CrashLoopBackOff) means a container started but keeps crashing — it implies the pod was scheduled."
+      b: "`Unhealthy` means a liveness or readiness probe failed on a running container."
+      d: "`FailedCreate` is emitted by a ReplicaSet when it cannot create a pod — often due to a quota violation — not by the scheduler."
+
+  - id: q8
+    type: multiple-select
+    prompt: "A pod is stuck Pending with 'Insufficient cpu'. Which two conditions can independently cause this? (Select two.)"
+    options:
+      - id: a
+        text: The pod's CPU request exceeds the node's total allocatable CPU
+      - id: b
+        text: Other running pods' CPU requests have already consumed all remaining allocatable CPU on the node
+      - id: c
+        text: The namespace's ResourceQuota for CPU is exhausted
+      - id: d
+        text: The node's live CPU usage shown by `kubectl top node` is at 100%
+    correctAnswers: [a, b]
+    explanation: "The scheduler sums existing pods' CPU requests and compares the remainder to the new pod's request. Two independent causes of 'Insufficient cpu': (a) the request exceeds the node's total allocatable, or (b) existing pods' requests have used up all the allocatable capacity even if live usage is low."
+    wrongExplanations:
+      c: "A full ResourceQuota causes the ReplicaSet to emit a FailedCreate event (admission rejection before the pod object is created). The pod never reaches the scheduler and is never Pending."
+      d: "The scheduler does not read live CPU usage from `kubectl top`. A node at 100% live CPU usage can still accept new pods if enough allocatable capacity remains after summing committed requests."

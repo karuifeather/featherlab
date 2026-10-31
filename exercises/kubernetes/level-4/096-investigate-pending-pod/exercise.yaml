@@ -1,0 +1,57 @@
+schemaVersion: 1
+id: k8s-0096
+type: task
+title: Investigate a Pending Pod
+summary: Diagnose a Deployment whose pod is stuck Pending due to an excessive CPU request and fix it so the pod schedules.
+track: kubernetes
+level: 4
+order: 18
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [scheduling, pending, resources, troubleshooting]
+prerequisites: [k8s-0095]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0096`"
+  - "Container `app` of Deployment `greedy-app` has CPU request `200m`, CPU limit `500m`, memory request `64Mi`, memory limit `128Mi`"
+  - "Deployment `greedy-app` finishes rolling out with 1 replica"
+
+hints:
+  - "`kubectl describe pods -n fl-k8s-0096` → look for 'Insufficient cpu' in the Events section; `kubectl describe node` shows the 'Allocatable' CPU."
+  - "`kubectl set resources deployment greedy-app -c app --requests=cpu=200m,memory=64Mi --limits=cpu=500m,memory=128Mi -n fl-k8s-0096`"
+  - "After fixing: `kubectl rollout status deployment/greedy-app -n fl-k8s-0096 --timeout=120s`"
+
+lifecycle:
+  namespaces: [fl-k8s-0096]
+  setup:
+    manifests: [setup/over-requested.yaml]
+
+checks:
+  - id: resources
+    type: k8s.container-resources
+    label: greedy-app container app has correct resource budget
+    params:
+      kind: Deployment
+      name: greedy-app
+      namespace: fl-k8s-0096
+      container: app
+      requests:
+        cpu: "200m"
+        memory: "64Mi"
+      limits:
+        cpu: "500m"
+        memory: "128Mi"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment greedy-app has rolled out with 1 replica
+    params:
+      name: greedy-app
+      namespace: fl-k8s-0096
+      replicas: 1

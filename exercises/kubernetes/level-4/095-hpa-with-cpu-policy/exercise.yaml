@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0095
+type: task
+title: HPA with CPU Policy
+summary: Configure an HPA with a lower CPU utilization target so it scales out earlier under load.
+track: kubernetes
+level: 4
+order: 17
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [hpa, autoscaling, cpu, scaling-policy]
+prerequisites: [k8s-0094]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0095`"
+  - "HPA `web-hpa` exists in `fl-k8s-0095`"
+  - "HPA targets Deployment `web` with minReplicas=2, maxReplicas=10, targetCPU=60%"
+
+hints:
+  - "HPA target CPU is the average utilization across all pods; lower percentage = scales out sooner under load."
+  - "`kubectl autoscale deployment web --cpu-percent=60 --min=2 --max=10 --name=web-hpa -n fl-k8s-0095`"
+  - "Inspect: `kubectl describe hpa web-hpa -n fl-k8s-0095` — look at the 'Metrics:' and 'ScaleTarget:' fields."
+
+lifecycle:
+  namespaces: [fl-k8s-0095]
+  setup:
+    manifests: [setup/web-deploy.yaml]
+
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: HPA web-hpa exists in fl-k8s-0095
+    params:
+      kind: HorizontalPodAutoscaler
+      name: web-hpa
+      namespace: fl-k8s-0095
+  - id: config
+    type: k8s.hpa-config
+    label: web-hpa has correct configuration
+    params:
+      name: web-hpa
+      namespace: fl-k8s-0095
+      minReplicas: 2
+      maxReplicas: 10
+      targetRef:
+        kind: Deployment
+        name: web
+      cpuUtilization: 60

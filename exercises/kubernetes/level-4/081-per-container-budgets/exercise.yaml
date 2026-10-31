@@ -1,0 +1,70 @@
+schemaVersion: 1
+id: k8s-0081
+type: task
+title: Per-Container Budgets
+summary: Set resource requests and limits on one container of a multi-container Deployment without affecting the other.
+track: kubernetes
+level: 4
+order: 3
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [resources, multi-container, deployments, containers]
+prerequisites: [k8s-0080]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0081`"
+  - "Container `gateway` of Deployment `proxy` requests at least `150m` CPU"
+  - "Container `gateway` is limited to `96Mi` memory"
+  - "Container `sidecar` keeps its original CPU request `10m` and memory limit `32Mi`"
+  - "Deployment `proxy` finishes rolling out with 1 available replica"
+
+hints:
+  - "`kubectl set resources deployment proxy -c gateway --requests=cpu=150m --limits=memory=96Mi -n fl-k8s-0081` targets only the `gateway` container."
+  - "The `-c gateway` flag is critical — without it, `kubectl set resources` changes every container."
+  - "Verify both containers with `kubectl get deployment proxy -n fl-k8s-0081 -o jsonpath='{.spec.template.spec.containers[*].resources}'`."
+
+lifecycle:
+  namespaces: [fl-k8s-0081]
+  setup:
+    manifests: [setup/proxy.yaml]
+
+checks:
+  - id: gateway-resources
+    type: k8s.container-resources
+    label: Container gateway has CPU request 150m and memory limit 96Mi
+    params:
+      kind: Deployment
+      name: proxy
+      namespace: fl-k8s-0081
+      container: gateway
+      requests:
+        cpu: "150m"
+      limits:
+        memory: "96Mi"
+  - id: sidecar-unchanged
+    type: k8s.container-resources
+    label: Container sidecar retains original CPU request 10m and memory limit 32Mi
+    params:
+      kind: Deployment
+      name: proxy
+      namespace: fl-k8s-0081
+      container: sidecar
+      requests:
+        cpu: "10m"
+        memory: "16Mi"
+      limits:
+        memory: "32Mi"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment proxy has rolled out with 1 replica
+    params:
+      name: proxy
+      namespace: fl-k8s-0081
+      replicas: 1

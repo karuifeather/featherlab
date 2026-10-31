@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0083
+type: task
+title: Budget a Namespace
+summary: Create a ResourceQuota to cap total resource consumption in a namespace that already has a running workload.
+track: kubernetes
+level: 4
+order: 5
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [resourcequota, namespaces, admission]
+prerequisites: [k8s-0082]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0083`"
+  - "ResourceQuota `team-budget` exists in `fl-k8s-0083`"
+  - "`team-budget` has `requests.cpu=500m`, `requests.memory=512Mi`, `limits.cpu=2`, `limits.memory=2Gi`"
+
+hints:
+  - "`kubectl create quota team-budget --hard=requests.cpu=500m,requests.memory=512Mi,limits.cpu=2,limits.memory=2Gi -n fl-k8s-0083`"
+  - "Or use `kubectl apply -f` with a ResourceQuota YAML (`apiVersion: v1`, `kind: ResourceQuota`)."
+  - "Inspect with: `kubectl describe resourcequota team-budget -n fl-k8s-0083`"
+
+lifecycle:
+  namespaces: [fl-k8s-0083]
+  setup:
+    manifests: [setup/workloads.yaml]
+
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: ResourceQuota team-budget exists in fl-k8s-0083
+    params:
+      kind: ResourceQuota
+      name: team-budget
+      namespace: fl-k8s-0083
+  - id: limits
+    type: k8s.resource-quota
+    label: team-budget has correct hard limits
+    params:
+      name: team-budget
+      namespace: fl-k8s-0083
+      hard:
+        requests.cpu: "500m"
+        requests.memory: "512Mi"
+        limits.cpu: "2"
+        limits.memory: "2Gi"

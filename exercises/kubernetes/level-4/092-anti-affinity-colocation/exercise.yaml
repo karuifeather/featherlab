@@ -1,0 +1,64 @@
+schemaVersion: 1
+id: k8s-0092
+type: task
+title: Pod Anti-Affinity for Spread
+summary: Create a Deployment with preferred pod anti-affinity to spread replicas across nodes, and required node affinity to target Linux nodes.
+track: kubernetes
+level: 4
+order: 14
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [scheduling, pod-affinity, anti-affinity, deployments]
+prerequisites: [k8s-0091]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0092`"
+  - "Deployment `spread` has required nodeAffinity for `kubernetes.io/os In [linux]`"
+  - "Deployment `spread` finishes rolling out with 2 available replicas"
+
+hints:
+  - "Pod anti-affinity uses `spec.template.spec.affinity.podAntiAffinity`. Use `preferredDuringSchedulingIgnoredDuringExecution` (soft) so both pods schedule on a single-node cluster."
+  - "The `topologyKey: kubernetes.io/hostname` causes Kubernetes to prefer placing each replica on a different host."
+  - |
+    Example pod anti-affinity structure:
+    ```yaml
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: spread
+    ```
+
+lifecycle:
+  namespaces: [fl-k8s-0092]
+
+checks:
+  - id: affinity
+    type: k8s.node-affinity
+    label: Deployment spread has required node affinity for kubernetes.io/os In [linux]
+    params:
+      kind: Deployment
+      name: spread
+      namespace: fl-k8s-0092
+      scheduling: required
+      key: kubernetes.io/os
+      operator: In
+      values: [linux]
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment spread has rolled out with 2 replicas
+    params:
+      name: spread
+      namespace: fl-k8s-0092
+      replicas: 2

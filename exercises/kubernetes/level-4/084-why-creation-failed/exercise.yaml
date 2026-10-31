@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0084
+type: task
+title: Why Was Creation Rejected?
+summary: Diagnose a Deployment whose pods are rejected by a ResourceQuota and reduce the CPU limit to fit within the namespace budget.
+track: kubernetes
+level: 4
+order: 6
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [resourcequota, admission, troubleshooting, deployments]
+prerequisites: [k8s-0083]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0084`"
+  - "Container `app` of Deployment `api` has CPU limit `150m` and memory limit `256Mi`"
+  - "Deployment `api` finishes rolling out with 1 available replica"
+
+hints:
+  - "`kubectl get events -n fl-k8s-0084 | grep -i quota` shows the rejection reason."
+  - "`kubectl set resources deployment api -c app --limits=cpu=150m,memory=256Mi -n fl-k8s-0084` fixes the limit."
+  - "After fixing, `kubectl rollout status deployment/api -n fl-k8s-0084` confirms completion."
+
+lifecycle:
+  namespaces: [fl-k8s-0084]
+  setup:
+    manifests: [setup/quota-and-deployment.yaml]
+
+checks:
+  - id: cpu-limit
+    type: k8s.container-resources
+    label: Container app has CPU limit 150m and memory limit 256Mi
+    params:
+      kind: Deployment
+      name: api
+      namespace: fl-k8s-0084
+      container: app
+      limits:
+        cpu: "150m"
+        memory: "256Mi"
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api has rolled out with 1 replica
+    params:
+      name: api
+      namespace: fl-k8s-0084
+      replicas: 1

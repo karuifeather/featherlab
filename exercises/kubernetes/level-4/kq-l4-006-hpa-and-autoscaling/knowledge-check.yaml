@@ -1,0 +1,150 @@
+schemaVersion: 1
+id: kq-k8s-l4-006
+activityType: knowledge-check
+title: HPA and Autoscaling
+summary: Check your understanding of HorizontalPodAutoscaler configuration, metrics requirements, and how CPU-based scaling works.
+track: kubernetes
+level: 4
+order: 17.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [hpa, autoscaling, metrics, scaling]
+relatedLabs: [k8s-0094, k8s-0095]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What must be installed in a cluster for an HPA to actively scale pods based on CPU usage?"
+    options:
+      - id: a
+        text: kube-proxy
+      - id: b
+        text: metrics-server
+      - id: c
+        text: kube-scheduler
+      - id: d
+        text: cluster-autoscaler
+    correctAnswer: b
+    explanation: "The HPA controller reads pod resource metrics from the `metrics.k8s.io` API, which is implemented by metrics-server. Without it, the HPA cannot read CPU usage and shows `<unknown>` for current utilization."
+    wrongExplanations:
+      a: "kube-proxy handles network routing for Services; it has nothing to do with HPA scaling decisions."
+      c: "kube-scheduler is already part of the control plane and schedules pods; the HPA uses it indirectly to place new replicas, but the HPA itself needs metrics-server."
+      d: "cluster-autoscaler scales Nodes, not Pod replicas. The HPA scales pods within existing nodes."
+    tryCommand: kubectl api-resources | grep horizontalpodautoscaler
+
+  - id: q2
+    type: single-choice
+    prompt: "Which API group does HorizontalPodAutoscaler belong to?"
+    options:
+      - id: a
+        text: apps
+      - id: b
+        text: extensions
+      - id: c
+        text: autoscaling
+      - id: d
+        text: policy
+    correctAnswer: c
+    explanation: "HPA lives in the `autoscaling` API group (`autoscaling/v1`, `autoscaling/v2`). Run `kubectl api-resources | grep horizontalpodautoscaler` to confirm."
+    wrongExplanations:
+      a: "The `apps` group contains Deployments, ReplicaSets, StatefulSets, and DaemonSets."
+      b: "The `extensions` group is deprecated and no longer used for new resources."
+      d: "The `policy` group contains PodDisruptionBudget."
+    tryCommand: kubectl api-resources | grep horizontalpodautoscaler
+
+  - id: q3
+    type: single-choice
+    prompt: "In `kubectl autoscale deployment foo --min=2 --max=10 --cpu-percent=70`, what does `--cpu-percent=70` mean?"
+    options:
+      - id: a
+        text: Scale out when any single pod exceeds 70% CPU
+      - id: b
+        text: Keep average CPU utilization across all pods at 70% of their requests; scale out above, scale in below
+      - id: c
+        text: Limit each pod's CPU usage to 70% of the node's capacity
+      - id: d
+        text: Scale in when total cluster CPU drops below 70%
+    correctAnswer: b
+    explanation: "The HPA computes the ratio of current average CPU usage to the CPU *request* across all pods in the target Deployment. It scales out when that ratio exceeds the target and scales in when it falls below."
+    wrongExplanations:
+      a: "The HPA uses the *average* across all replicas, not the peak of any one pod."
+      c: "CPU limits (not HPA targets) constrain each pod's maximum CPU. The HPA target is about requests, not node capacity."
+      d: "The HPA acts on the pods it manages, not on cluster-wide CPU."
+
+  - id: q4
+    type: single-choice
+    prompt: "An HPA has `minReplicas: 2`. Load drops well below the CPU target. What replica count does the HPA maintain?"
+    options:
+      - id: a
+        text: 0 — the HPA scales down to zero when there is no load
+      - id: b
+        text: 1 — the HPA always keeps at least one replica
+      - id: c
+        text: 2 — the HPA never scales below minReplicas
+      - id: d
+        text: It depends on the Deployment's original replica count
+    correctAnswer: c
+    explanation: "`minReplicas` is a hard floor. No matter how low the CPU utilization drops, the HPA will not reduce the replica count below this value."
+    wrongExplanations:
+      a: "Scaling to zero requires KEDA or a custom controller. The standard HPA enforces minReplicas >= 1."
+      b: "The HPA respects whichever minReplicas you set — if you set 2, it keeps 2."
+      d: "The original replica count only sets the initial state. The HPA owns the replica count once it is active."
+
+  - id: q5
+    type: single-choice
+    prompt: "Which command shows each individual pod's live CPU and memory usage for pods in a namespace?"
+    options:
+      - id: a
+        text: "`kubectl describe hpa <name> -n <namespace>`"
+      - id: b
+        text: "`kubectl top pods -n <namespace>`"
+      - id: c
+        text: "`kubectl logs <pod> -n <namespace>`"
+      - id: d
+        text: "`kubectl get events -n <namespace>`"
+    correctAnswer: b
+    explanation: "`kubectl top pods` reads from the metrics-server and shows per-pod CPU and memory usage in real time. It requires metrics-server to be installed."
+    wrongExplanations:
+      a: "`kubectl describe hpa` shows the HPA's aggregate ratio (current / target utilization across all pods), not each pod's raw usage individually."
+      c: "`kubectl logs` reads stdout/stderr from a container; it does not show resource usage."
+      d: "`kubectl get events` shows scheduling and lifecycle events, not CPU metrics."
+    tryCommand: kubectl top pods -n default
+
+  - id: q6
+    type: single-choice
+    prompt: "What must be set on a Deployment's containers for CPU-based HPA scaling to work?"
+    options:
+      - id: a
+        text: CPU limits
+      - id: b
+        text: CPU requests
+      - id: c
+        text: Both CPU requests and limits
+      - id: d
+        text: Neither — the HPA measures absolute CPU time, not a percentage
+    correctAnswer: b
+    explanation: "The HPA expresses the target as a *percentage of the CPU request*. If a container has no CPU request, the HPA cannot compute a ratio and reports `<unknown>` for the current utilization."
+    wrongExplanations:
+      a: "Limits cap usage but are not used by the HPA formula. Only requests are required."
+      c: "Limits are not required for HPA to function; only requests are."
+      d: "The HPA uses a percentage of requests, not raw CPU time. A missing request breaks the calculation."
+
+  - id: q7
+    type: single-choice
+    prompt: "`kubectl describe hpa my-hpa` shows `unknown/70%` in the Metrics column. What does 'unknown' mean?"
+    options:
+      - id: a
+        text: The HPA has not yet received any traffic
+      - id: b
+        text: The HPA has already reached maxReplicas and stopped scaling
+      - id: c
+        text: Metrics are unavailable — either metrics-server is not running or the target containers have no CPU request
+      - id: d
+        text: The HPA is paused
+    correctAnswer: c
+    explanation: "'unknown' in the Metrics column means the HPA controller could not read current CPU utilization. The two most common causes are: metrics-server is not installed, or the target containers are missing a CPU request (so the percentage cannot be computed)."
+    wrongExplanations:
+      a: "Traffic volume does not affect whether the HPA can read metrics. No-traffic pods still report CPU usage through metrics-server."
+      b: "When maxReplicas is reached, the HPA shows the actual utilization value (e.g., 95/70%), not 'unknown'. 'unknown' means the metric itself could not be read."
+      d: "There is no built-in 'paused' state for HPA in standard Kubernetes; the HPA simply scales based on metrics when they are available."

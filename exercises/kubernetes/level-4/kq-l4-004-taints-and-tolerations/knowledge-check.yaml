@@ -1,0 +1,149 @@
+schemaVersion: 1
+id: kq-k8s-l4-004
+activityType: knowledge-check
+title: Taints and Tolerations
+summary: Check your understanding of how taints repel pods from nodes and how tolerations allow exceptions.
+track: kubernetes
+level: 4
+order: 12
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [taints, tolerations, scheduling, nodes]
+relatedLabs: []
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is a taint in Kubernetes?"
+    options:
+      - id: a
+        text: "A label on a Pod that requests a specific node."
+      - id: b
+        text: "A key/value/effect marker on a node that repels Pods that do not have a matching toleration."
+      - id: c
+        text: "A resource limit applied to all Pods on a node."
+      - id: d
+        text: "A scheduling weight that prefers one node over another."
+    correctAnswer: b
+    explanation: "A taint is applied to a node with `kubectl taint node NAME key=value:Effect`. It tells the scheduler to avoid placing Pods on that node unless the Pod has a matching toleration. Taints are node-side; tolerations are Pod-side."
+    wrongExplanations:
+      a: "A nodeSelector is the Pod-side field that requests a specific node. A taint is on the node, not the Pod."
+      c: "Resource limits are set per container, not per node. Taints are not related to resource limits."
+      d: "Preferring a node is done with node affinity using `preferredDuringSchedulingIgnoredDuringExecution`. Taints are a repulsion mechanism, not a weight."
+    tryCommand: kubectl describe node NAME | grep -A5 Taints
+
+  - id: q2
+    type: single-choice
+    prompt: "Which taint effect prevents new Pods without a matching toleration from being scheduled on the node, while leaving existing Pods running?"
+    options:
+      - id: a
+        text: "NoExecute"
+      - id: b
+        text: "PreferNoSchedule"
+      - id: c
+        text: "NoSchedule"
+      - id: d
+        text: "Unschedulable"
+    correctAnswer: c
+    explanation: "NoSchedule prevents new Pods (without a matching toleration) from being scheduled on the node. Pods already running on the node are not affected. NoExecute goes further and also evicts existing Pods that do not tolerate the taint."
+    wrongExplanations:
+      a: "NoExecute both prevents new scheduling AND evicts running Pods that lack the matching toleration."
+      b: "PreferNoSchedule is a soft constraint — the scheduler tries to avoid the node but will still place Pods there if no other node is available."
+      d: "Unschedulable is not a taint effect. A node can be marked unschedulable with `kubectl cordon`, which sets a different field."
+
+  - id: q3
+    type: single-choice
+    prompt: "A Pod has a toleration for a node's taint. What does that toleration guarantee?"
+    options:
+      - id: a
+        text: "The Pod will always be scheduled on that tainted node."
+      - id: b
+        text: "The Pod is allowed to be scheduled on the tainted node, but is not forced there."
+      - id: c
+        text: "The Pod will never be scheduled on any other node."
+      - id: d
+        text: "The Pod bypasses all other scheduling constraints for that node."
+    correctAnswer: b
+    explanation: "A toleration is a permission, not a directive. It removes the taint as a barrier so the scheduler may place the Pod on that node — but the final placement still depends on resource availability, nodeSelector, affinity rules, and other constraints. To force a Pod onto a specific node you also need a nodeSelector or node affinity targeting that node."
+    wrongExplanations:
+      a: "A toleration alone does not attract a Pod to the tainted node; it only removes the repulsion."
+      c: "Tolerating one node's taint has no effect on placement decisions for other nodes."
+      d: "Tolerations only waive the specific taint check; all other scheduling constraints still apply."
+
+  - id: q4
+    type: single-choice
+    prompt: "What does the `Exists` operator in a toleration entry do?"
+    options:
+      - id: a
+        text: "It matches only if the taint key and value are exactly equal."
+      - id: b
+        text: "It matches any taint with the specified key, regardless of the taint's value."
+      - id: c
+        text: "It matches only if the taint key is absent from the node."
+      - id: d
+        text: "It matches any taint on any node, ignoring the key entirely."
+    correctAnswer: b
+    explanation: "With operator `Exists`, only the taint's key (and optionally its effect) must match — the value is ignored. This is useful when the taint value varies between nodes but you want to tolerate all instances of a given key."
+    wrongExplanations:
+      a: "That describes the `Equal` operator, which requires both key and value to match."
+      c: "There is no operator that matches absent keys. `Exists` requires the key to be present on the node."
+      d: "An empty key with `operator: Exists` and no effect is the wildcard that matches all taints. A non-empty key with `Exists` only matches taints with that specific key."
+
+  - id: q5
+    type: single-choice
+    prompt: "Which taint effect evicts already-running Pods that do not have a matching toleration?"
+    options:
+      - id: a
+        text: "NoSchedule"
+      - id: b
+        text: "PreferNoSchedule"
+      - id: c
+        text: "NoExecute"
+      - id: d
+        text: "Evict"
+    correctAnswer: c
+    explanation: "NoExecute both blocks new scheduling and evicts running Pods that lack a matching toleration. If a Pod has a toleration with `tolerationSeconds`, it stays for that duration before being evicted. NoSchedule only affects new scheduling."
+    wrongExplanations:
+      a: "NoSchedule prevents new pods from being placed but does not evict running ones."
+      b: "PreferNoSchedule is a soft hint; it neither prevents scheduling nor evicts pods."
+      d: "'Evict' is not a valid taint effect. The valid effects are NoSchedule, PreferNoSchedule, and NoExecute."
+
+  - id: q6
+    type: single-choice
+    prompt: "How do you write a toleration that matches all taints on a node (a wildcard toleration)?"
+    options:
+      - id: a
+        text: 'key: "*" with operator: Equal'
+      - id: b
+        text: 'key: "" with operator: Exists (no effect field)'
+      - id: c
+        text: 'key: "" with operator: Equal and value: "*"'
+      - id: d
+        text: 'effect: "*" with operator: Exists'
+    correctAnswer: b
+    explanation: "An empty key combined with `operator: Exists` and no effect field is the wildcard toleration — it matches every taint regardless of key, value, or effect. This is what system components like `kube-proxy` use to run on all nodes, including ones with taints."
+    wrongExplanations:
+      a: 'The `Equal` operator requires a specific value to match. `key: "*"` is not treated as a wildcard; it is a literal key named `*`.'
+      c: '`operator: Equal` requires a literal value match. `value: "*"` is not a wildcard; it would look for a taint whose value is literally `*`.'
+      d: '`effect: "*"` is not valid syntax. To match all effects you omit the effect field, not set it to `*`.'
+
+  - id: q7
+    type: single-choice
+    prompt: "Where in the output of `kubectl describe node NAME` can you find a node's taints?"
+    options:
+      - id: a
+        text: "Under the Labels: section."
+      - id: b
+        text: "Under the Annotations: section."
+      - id: c
+        text: "Under the Taints: section."
+      - id: d
+        text: "Under the Conditions: section."
+    correctAnswer: c
+    explanation: "`kubectl describe node NAME` prints a dedicated `Taints:` field near the top of the output, listing each taint in `key=value:Effect` format. If the node has no taints, it shows `<none>`."
+    wrongExplanations:
+      a: "Labels are shown under their own `Labels:` section and are different from taints."
+      b: "Annotations store arbitrary metadata and are shown separately. Taints are a first-class node field."
+      d: "Conditions show the node's health status (Ready, MemoryPressure, etc.) and do not include taints."
+    tryCommand: kubectl describe node $(kubectl get node -o name | head -1) | grep -A5 Taints

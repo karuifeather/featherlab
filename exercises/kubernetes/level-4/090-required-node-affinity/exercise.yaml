@@ -1,0 +1,64 @@
+schemaVersion: 1
+id: k8s-0090
+type: task
+title: Required Node Affinity
+summary: Create a Deployment that uses requiredDuringSchedulingIgnoredDuringExecution node affinity to restrict scheduling to Linux nodes.
+track: kubernetes
+level: 4
+order: 12
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [scheduling, node-affinity, required, deployments]
+prerequisites: [k8s-0089]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0090`"
+  - "Deployment `cache` has required nodeAffinity for `kubernetes.io/os In [linux]`"
+  - "Deployment `cache` finishes rolling out with 1 available replica"
+
+hints:
+  - "Node affinity lives at `spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`."
+  - "The `nodeSelectorTerms` field is an array; each term has `matchExpressions` with `{key, operator, values}`."
+  - |
+    Example YAML structure:
+    ```yaml
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/os
+                  operator: In
+                  values:
+                    - linux
+    ```
+
+lifecycle:
+  namespaces: [fl-k8s-0090]
+
+checks:
+  - id: affinity
+    type: k8s.node-affinity
+    label: Deployment cache has required node affinity for kubernetes.io/os In [linux]
+    params:
+      kind: Deployment
+      name: cache
+      namespace: fl-k8s-0090
+      scheduling: required
+      key: kubernetes.io/os
+      operator: In
+      values: [linux]
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment cache has rolled out with 1 replica
+    params:
+      name: cache
+      namespace: fl-k8s-0090
+      replicas: 1

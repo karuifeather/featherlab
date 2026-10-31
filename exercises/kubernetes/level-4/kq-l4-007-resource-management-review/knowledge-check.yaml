@@ -1,0 +1,168 @@
+schemaVersion: 1
+id: kq-k8s-l4-007
+activityType: knowledge-check
+title: Resource Management Review
+summary: Review the full resource management theme — QoS classes, ResourceQuota, LimitRange, and how to read resource usage.
+track: kubernetes
+level: 4
+order: 19.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [resources, qos, limitrange, resourcequota, review]
+relatedLabs: [k8s-0079, k8s-0080, k8s-0082, k8s-0083, k8s-0085]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Which QoS class is evicted first under memory pressure?"
+    options:
+      - id: a
+        text: Guaranteed — evicted first because it uses the most resources
+      - id: b
+        text: BestEffort — evicted first because it makes no resource promises
+      - id: c
+        text: Burstable — evicted first because it exceeds its requests
+      - id: d
+        text: All classes are evicted in the order they were created
+    correctAnswer: b
+    explanation: "Eviction order (first to last): BestEffort → Burstable → Guaranteed. BestEffort pods make no resource promises and are the lowest priority. Guaranteed pods have equal requests and limits and are evicted last."
+    wrongExplanations:
+      a: "Guaranteed pods are the last to be evicted, not the first. They have equal requests and limits and represent the highest QoS priority."
+      c: "Burstable pods are evicted before Guaranteed but after BestEffort."
+      d: "The kubelet uses QoS class (and then memory usage relative to request) to choose eviction order, not creation order."
+
+  - id: q2
+    type: single-choice
+    prompt: "A container has `requests.cpu: 500m` but no limits set. What QoS class does the pod receive?"
+    options:
+      - id: a
+        text: Guaranteed
+      - id: b
+        text: BestEffort
+      - id: c
+        text: Burstable
+      - id: d
+        text: Throttled
+    correctAnswer: c
+    explanation: "A pod is Burstable when at least one container has a request or limit, but requests and limits are not equal on all containers across all resources. Having a CPU request without a limit qualifies as Burstable."
+    wrongExplanations:
+      a: "Guaranteed requires every container to have equal requests and limits for both CPU and memory. Missing limits disqualifies it."
+      b: "BestEffort means no requests or limits at all on any container. This pod has a CPU request, so it is not BestEffort."
+      d: "Throttled is not a QoS class. CPU throttling is a runtime behavior that occurs when a container exceeds its CPU limit."
+
+  - id: q3
+    type: single-choice
+    prompt: "Which command creates a ResourceQuota from a YAML file?"
+    options:
+      - id: a
+        text: "`kubectl create quota -f quota.yaml`"
+      - id: b
+        text: "`kubectl apply -f quota.yaml`"
+      - id: c
+        text: "`kubectl set quota -f quota.yaml`"
+      - id: d
+        text: "`kubectl quota apply quota.yaml`"
+    correctAnswer: b
+    explanation: "`kubectl apply -f quota.yaml` creates or updates any Kubernetes object from a manifest file, including ResourceQuota. `kubectl create quota` works for imperative creation but does not take `-f`."
+    wrongExplanations:
+      a: "`kubectl create quota` is an imperative command; it uses flags like `--hard=` rather than `-f`."
+      c: "`kubectl set quota` is not a valid kubectl command."
+      d: "`kubectl quota` is not a valid kubectl subcommand."
+
+  - id: q4
+    type: single-choice
+    prompt: "Which resource object injects default CPU and memory values into pods that do not specify them?"
+    options:
+      - id: a
+        text: ResourceQuota
+      - id: b
+        text: LimitRange
+      - id: c
+        text: PodDisruptionBudget
+      - id: d
+        text: HorizontalPodAutoscaler
+    correctAnswer: b
+    explanation: "LimitRange can set `default` (limit) and `defaultRequest` values for containers. When a pod is created without explicit resources, the admission controller injects these defaults. ResourceQuota only enforces totals; it does not inject defaults."
+    wrongExplanations:
+      a: "ResourceQuota enforces total resource budgets for a namespace but does not inject values into individual pod specs."
+      c: "PodDisruptionBudget controls voluntary disruptions during maintenance; it has nothing to do with resource defaults."
+      d: "HPA scales replica counts; it does not affect pod resource specifications."
+
+  - id: q5
+    type: single-choice
+    prompt: "What does `kubectl describe namespace <name>` show about resources?"
+    options:
+      - id: a
+        text: The list of all pods running in the namespace
+      - id: b
+        text: The resource quotas applied to the namespace and their current usage vs. hard limits
+      - id: c
+        text: The CPU and memory usage of the namespace in real time (per-node breakdown)
+      - id: d
+        text: Only the namespace labels and annotations
+    correctAnswer: b
+    explanation: "`kubectl describe namespace` prints any ResourceQuota objects in that namespace along with each quota's current Used and Hard values — giving a quick overview of resource consumption against the budget. It also shows Resource Limits (LimitRange) if one is set."
+    wrongExplanations:
+      a: "Pod listings come from `kubectl get pods -n <namespace>`, not from describing the namespace."
+      c: "Real-time CPU/memory usage requires `kubectl top pods` or `kubectl top nodes`, which read from metrics-server. There is no per-node breakdown in namespace output."
+      d: "Namespace descriptions include ResourceQuota and LimitRange sections, not just labels and annotations."
+    tryCommand: kubectl describe namespace default
+
+  - id: q6
+    type: single-choice
+    prompt: "A pod is `OOMKilled` repeatedly. Which change to the Deployment fixes the root cause?"
+    options:
+      - id: a
+        text: Increase the CPU request
+      - id: b
+        text: Increase the memory limit
+      - id: c
+        text: Decrease the memory request
+      - id: d
+        text: Add a liveness probe
+    correctAnswer: b
+    explanation: "OOMKilled means the container's memory usage exceeded its memory limit, so the kernel killed it. Increasing the memory limit gives the container more headroom. Increasing the request alone does not help — limits cap actual usage."
+    wrongExplanations:
+      a: "OOMKilled is a memory problem, not a CPU problem. Changing the CPU request has no effect."
+      c: "Decreasing the memory request makes scheduling easier (less capacity reserved), but does not raise the limit at which the container is killed."
+      d: "A liveness probe restarts the container after it fails, but the underlying OOM condition would immediately kill it again."
+
+  - id: q7
+    type: single-choice
+    prompt: "`kubectl top nodes` shows a node at 95% CPU *usage*, but existing pods have only committed 200m in CPU *requests* out of 4000m allocatable. A new pod needs a `500m` CPU request. What does the scheduler decide?"
+    options:
+      - id: a
+        text: The pod stays Pending — the scheduler rejects nodes where live CPU usage is too high
+      - id: b
+        text: The pod schedules normally — the scheduler uses CPU requests vs. remaining allocatable, not live usage
+      - id: c
+        text: The pod schedules but is immediately throttled to 500m
+      - id: d
+        text: The pod schedules only if it has a CPU limit under 500m
+    correctAnswer: b
+    explanation: "The Kubernetes scheduler compares the pod's CPU *request* against the node's *allocatable* CPU minus the sum of all running pods' CPU *requests* (200m + 500m = 700m, which is well under 4000m allocatable). It does not read live CPU usage from metrics-server. High live usage shown by `kubectl top` does not prevent scheduling."
+    wrongExplanations:
+      a: "The scheduler is metrics-blind; it uses committed requests, not real-time usage. A node pegged at 95% live CPU can still accept new pods if allocatable minus committed requests allows it."
+      c: "Throttling occurs at runtime when a container exceeds its CPU limit, and is unrelated to scheduling."
+      d: "CPU limits do not affect scheduling decisions. Only requests are considered."
+
+  - id: q8
+    type: single-choice
+    prompt: "Which kubectl command shows resource requests and limits for all pods in a namespace?"
+    options:
+      - id: a
+        text: "`kubectl get pods -n <ns>`"
+      - id: b
+        text: "`kubectl describe pods -n <ns>`"
+      - id: c
+        text: "`kubectl top pods -n <ns>`"
+      - id: d
+        text: "`kubectl get resourcequota -n <ns>`"
+    correctAnswer: b
+    explanation: "`kubectl describe pods` prints the full pod spec, including the `Limits` and `Requests` section for each container. `kubectl get pods` shows only basic status columns, and `kubectl top pods` shows live usage (not the declared requests/limits)."
+    wrongExplanations:
+      a: "`kubectl get pods` shows status, restarts, and age — not resource specifications."
+      c: "`kubectl top pods` shows live CPU and memory usage, not the requested/limited values in the spec."
+      d: "`kubectl get resourcequota` shows the namespace budget and how much of it is used — not individual pod specs."
+    tryCommand: kubectl describe pods -n default

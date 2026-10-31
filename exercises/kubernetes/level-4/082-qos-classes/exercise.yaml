@@ -1,0 +1,63 @@
+schemaVersion: 1
+id: k8s-0082
+type: task
+title: QoS Classes
+summary: Create a Pod with Guaranteed QoS class by setting equal CPU and memory requests and limits on every container.
+track: kubernetes
+level: 4
+order: 4
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [resources, qos, pods]
+prerequisites: [k8s-0081]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0082`"
+  - "Pod `qos-guaranteed` is Running"
+  - "Pod `qos-guaranteed` has QoS class `Guaranteed`"
+  - "Container `app` has CPU request and limit both `100m`, memory request and limit both `64Mi`"
+
+hints:
+  - "QoS class `Guaranteed` requires every container to have CPU AND memory requests equal to their limits. Missing one field breaks it."
+  - "`kubectl run qos-guaranteed --image=busybox:1.36 -n fl-k8s-0082 -- sh -c 'sleep 3600'` creates the bare Pod; then use `kubectl edit` or apply a YAML with resources."
+  - "After creating: `kubectl get pod qos-guaranteed -n fl-k8s-0082 -o jsonpath='{.status.qosClass}'`"
+
+lifecycle:
+  namespaces: [fl-k8s-0082]
+
+checks:
+  - id: running
+    type: k8s.pod-phase
+    label: Pod qos-guaranteed is Running
+    params:
+      name: qos-guaranteed
+      namespace: fl-k8s-0082
+      phase: Running
+  - id: qos
+    type: k8s.pod-qos-class
+    label: Pod qos-guaranteed has QoS class Guaranteed
+    params:
+      name: qos-guaranteed
+      namespace: fl-k8s-0082
+      qosClass: Guaranteed
+  - id: resources
+    type: k8s.container-resources
+    label: Container app has CPU 100m and memory 64Mi for both requests and limits
+    params:
+      kind: Pod
+      name: qos-guaranteed
+      namespace: fl-k8s-0082
+      container: app
+      requests:
+        cpu: "100m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "64Mi"

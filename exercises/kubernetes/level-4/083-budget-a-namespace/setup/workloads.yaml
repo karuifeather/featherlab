@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: existing-app
+  namespace: fl-k8s-0083
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: existing-app
+  template:
+    metadata:
+      labels:
+        app: existing-app
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"

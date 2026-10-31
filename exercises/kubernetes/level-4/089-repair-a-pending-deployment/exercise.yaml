@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0089
+type: task
+title: Repair a Pending Deployment
+summary: Fix a Deployment whose pods are stuck Pending due to an unsatisfiable nodeSelector.
+track: kubernetes
+level: 4
+order: 11
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [scheduling, node-selector, troubleshooting, pending]
+prerequisites: [k8s-0088]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0089`"
+  - "Deployment `stuck-app` has nodeSelector `kubernetes.io/os=linux`"
+  - "Deployment `stuck-app` finishes rolling out with 1 available replica"
+
+hints:
+  - "`kubectl describe pods -n fl-k8s-0089` shows the scheduling failure in the Events section — look for '0/1 nodes are available'."
+  - "`kubectl edit deployment stuck-app -n fl-k8s-0089` — change `windows` to `linux` in the nodeSelector."
+  - 'Or patch it: `kubectl patch deployment stuck-app -n fl-k8s-0089 --type=merge -p=''{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/os":"linux"}}}}}''`'
+
+lifecycle:
+  namespaces: [fl-k8s-0089]
+  setup:
+    manifests: [setup/stuck-app.yaml]
+
+checks:
+  - id: selector
+    type: k8s.node-selector
+    label: Deployment stuck-app has nodeSelector kubernetes.io/os=linux
+    params:
+      kind: Deployment
+      name: stuck-app
+      namespace: fl-k8s-0089
+      selector:
+        kubernetes.io/os: linux
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment stuck-app has rolled out with 1 replica
+    params:
+      name: stuck-app
+      namespace: fl-k8s-0089
+      replicas: 1

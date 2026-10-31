@@ -1,0 +1,156 @@
+schemaVersion: 1
+id: kq-k8s-l4-005
+activityType: knowledge-check
+title: Node Affinity and Anti-Affinity
+summary: Test your understanding of nodeAffinity scheduling modes, operators, podAntiAffinity, and how to diagnose unschedulable pods.
+track: kubernetes
+level: 4
+order: 15.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [node-affinity, pod-affinity, anti-affinity, scheduling]
+relatedLabs: [k8s-0090, k8s-0091, k8s-0092, k8s-0093]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the key difference between `nodeSelector` and node affinity?"
+    options:
+      - id: a
+        text: "nodeSelector can only select nodes by name; node affinity can select by any label"
+      - id: b
+        text: "nodeSelector performs exact key=value matches only; node affinity supports operators like `In`, `NotIn`, `Exists`, `DoesNotExist`, `Gt`, `Lt` and has required/preferred scheduling modes"
+      - id: c
+        text: "nodeSelector applies to all workloads; node affinity only applies to Deployments"
+      - id: d
+        text: "nodeSelector is applied at pod creation only; node affinity is re-evaluated continuously"
+    correctAnswer: b
+    explanation: "`nodeSelector` is a simple map of label key=value pairs — it only supports exact matches. Node affinity provides richer expression using operators (`In`, `NotIn`, `Exists`, `DoesNotExist`, `Gt`, `Lt`) and offers two scheduling modes: `requiredDuringSchedulingIgnoredDuringExecution` (hard constraint) and `preferredDuringSchedulingIgnoredDuringExecution` (soft preference)."
+    wrongExplanations:
+      a: "Both `nodeSelector` and node affinity can match any node label, not just the node name. The difference is the expressiveness of the matching logic."
+      c: "Both `nodeSelector` and node affinity apply to any Pod spec, regardless of the workload type (Deployment, StatefulSet, DaemonSet, standalone Pod, etc.)."
+      d: "The `IgnoredDuringExecution` suffix in both `requiredDuring...` and `preferredDuring...` means affinity rules are NOT re-evaluated after a pod is scheduled. If a node's labels change, running pods are not evicted."
+    docRef: "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity"
+
+  - id: q2
+    type: single-choice
+    prompt: "A Deployment uses `requiredDuringSchedulingIgnoredDuringExecution` node affinity for a label that no node has. What happens to its pods?"
+    options:
+      - id: a
+        text: "The pods are scheduled on a random node and the affinity rule is ignored"
+      - id: b
+        text: "The pods stay in the Pending state — no matching node is found"
+      - id: c
+        text: "The Deployment is rejected at creation with a validation error"
+      - id: d
+        text: "The pods run on any node for 5 minutes, then are evicted when the rule is re-evaluated"
+    correctAnswer: b
+    explanation: "`requiredDuringSchedulingIgnoredDuringExecution` is a hard constraint. If the scheduler cannot find a node that satisfies the rule, the pod is not placed and stays Pending. No error is returned at creation time — the Deployment object is created successfully, but the pods wait for a matching node."
+    wrongExplanations:
+      a: "Required affinity is never silently ignored. The scheduler actively enforces the rule and will not place the pod on a non-matching node."
+      c: "Kubernetes does not validate at creation time whether any node currently satisfies the affinity rule. The Deployment is accepted; the scheduler handles placement later."
+      d: "The `IgnoredDuringExecution` suffix means running pods are NOT evicted if node labels change. Pods that are already Pending continue waiting — they are not given a grace period on a non-matching node."
+    tryCommand: kubectl get pods -n fl-k8s-0093
+    docRef: "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity"
+
+  - id: q3
+    type: single-choice
+    prompt: "Which YAML path holds the `matchExpressions` for a required nodeAffinity rule in a Deployment's pod template?"
+    options:
+      - id: a
+        text: "`spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.matchExpressions`"
+      - id: b
+        text: "`spec.template.spec.nodeSelector.matchExpressions`"
+      - id: c
+        text: "`spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[].matchExpressions`"
+      - id: d
+        text: "`spec.template.spec.affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[].matchExpressions`"
+    correctAnswer: c
+    explanation: "In a Deployment's pod template, affinity lives under `spec.template.spec.affinity`. The full path to match expressions for a required nodeAffinity rule is `spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[].matchExpressions`. The `nodeSelectorTerms` array allows multiple OR-combined terms; `matchExpressions` within each term are AND-combined."
+    wrongExplanations:
+      a: "This path skips `spec.template` — required for a Deployment's pod template — and also omits `nodeSelectorTerms`."
+      b: "`nodeSelector` does not have a `matchExpressions` field. It only accepts a flat key=value map. `matchExpressions` is specific to node affinity."
+      d: "The `nodeAffinity` key is required between `affinity` and `requiredDuringSchedulingIgnoredDuringExecution`. Without it, the path is invalid."
+    docRef: "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity"
+
+  - id: q4
+    type: single-choice
+    prompt: "You want a required nodeAffinity rule that matches nodes which do NOT have the label key `gpu` at all. Which operator should you use?"
+    options:
+      - id: a
+        text: "`NotIn`"
+      - id: b
+        text: "`Exists`"
+      - id: c
+        text: "`DoesNotExist`"
+      - id: d
+        text: "`NotEqual`"
+    correctAnswer: c
+    explanation: "`DoesNotExist` matches nodes where the specified label key is entirely absent. It requires no `values` field. Use it when you want to target nodes that have never had the label, regardless of value — for example, nodes without a `gpu` label at all."
+    wrongExplanations:
+      a: "`NotIn` matches nodes where the label key exists but its value is NOT in the given list. If the label key is absent from the node, `NotIn` still matches — but `DoesNotExist` is the precise way to express 'this key must not be present'."
+      b: "`Exists` is the opposite: it matches nodes that DO have the label key, regardless of value."
+      d: "`NotEqual` is not a valid Kubernetes nodeAffinity operator. The valid operators are `In`, `NotIn`, `Exists`, `DoesNotExist`, `Gt`, and `Lt`."
+    docRef: "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity"
+
+  - id: q5
+    type: single-choice
+    prompt: "What `topologyKey` would you use in a pod anti-affinity rule to spread replicas across different physical nodes?"
+    options:
+      - id: a
+        text: "`kubernetes.io/zone`"
+      - id: b
+        text: "`kubernetes.io/hostname`"
+      - id: c
+        text: "`kubernetes.io/node`"
+      - id: d
+        text: "`topology.kubernetes.io/region`"
+    correctAnswer: b
+    explanation: "`kubernetes.io/hostname` is automatically assigned to every node and holds the node's hostname as a unique value. Using it as `topologyKey` in pod anti-affinity tells the scheduler to treat each node as a separate topology domain — so two replicas with this anti-affinity rule prefer (or require) different nodes."
+    wrongExplanations:
+      a: "`kubernetes.io/zone` spreads pods across availability zones (different physical data centers). It is useful for zone-level HA but not for spreading across nodes within a zone. Many clusters (including kind) do not set this label."
+      c: "`kubernetes.io/node` is not a standard Kubernetes label. The correct node-identity label is `kubernetes.io/hostname`."
+      d: "`topology.kubernetes.io/region` spreads across cloud regions — an even coarser boundary than zones. It is not the right key for node-level spreading."
+    docRef: "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity"
+
+  - id: q6
+    type: single-choice
+    prompt: "A Deployment has 2 replicas and uses `requiredDuringSchedulingIgnoredDuringExecution` pod anti-affinity with `topologyKey: kubernetes.io/hostname`. The cluster has only one node. What happens?"
+    options:
+      - id: a
+        text: "Both replicas schedule on the single node — required pod anti-affinity is relaxed when no alternative exists"
+      - id: b
+        text: "The first replica schedules; the second stays Pending because no second node exists to satisfy the required anti-affinity"
+      - id: c
+        text: "The Deployment is rejected at creation because the cluster is too small"
+      - id: d
+        text: "Both replicas schedule on the single node and a warning event is generated"
+    correctAnswer: b
+    explanation: "Required pod anti-affinity is a hard constraint. The first replica schedules normally. The second replica needs a different hostname (node), but only one node exists — so the scheduler cannot satisfy the anti-affinity rule and leaves the second pod Pending indefinitely. This is why exercises on a single-node cluster use **preferred** pod anti-affinity instead."
+    wrongExplanations:
+      a: "Required pod anti-affinity is never relaxed by the scheduler. If the constraint cannot be satisfied, the pod stays Pending — it is not placed on a violating node."
+      c: "Kubernetes does not validate cluster topology at creation time. The Deployment is created successfully; only the pod placement step fails."
+      d: "The scheduler does not silently violate a required constraint and generate a warning. The pod stays Pending until the constraint can be satisfied."
+    docRef: "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity"
+
+  - id: q7
+    type: single-choice
+    prompt: "A pod is stuck Pending and you want to find out why it cannot be scheduled. Which command shows the most useful diagnostic information?"
+    options:
+      - id: a
+        text: "`kubectl logs <pod> -n <ns>`"
+      - id: b
+        text: "`kubectl get pod <pod> -n <ns> -o yaml`"
+      - id: c
+        text: "`kubectl describe pod <pod> -n <ns>`"
+      - id: d
+        text: "`kubectl top pod <pod> -n <ns>`"
+    correctAnswer: c
+    explanation: "`kubectl describe pod` shows the Events section, which contains the `FailedScheduling` event with the reason the scheduler could not place the pod — for example, `0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector.` This is the fastest path to diagnosing scheduling failures."
+    wrongExplanations:
+      a: "`kubectl logs` requires the container to have started. A Pending pod has no running container, so `kubectl logs` returns an error or empty output."
+      b: "`kubectl get pod -o yaml` shows the pod spec and status, but the status of a Pending pod contains little detail about why scheduling failed. The Events are in `kubectl describe`, not in the YAML output."
+      d: "`kubectl top pod` shows live CPU and memory usage from the metrics server. A Pending pod has no usage to report, and this command will fail or show nothing for it."
+    tryCommand: kubectl describe pod -n fl-k8s-0093
+    docRef: "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity"

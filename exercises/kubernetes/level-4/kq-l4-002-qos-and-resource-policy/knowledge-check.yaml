@@ -1,0 +1,152 @@
+schemaVersion: 1
+id: kq-k8s-l4-002
+activityType: knowledge-check
+title: QoS and Resource Policy
+summary: Check your understanding of QoS classes, ResourceQuota enforcement, and LimitRange defaults.
+track: kubernetes
+level: 4
+order: 6.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [qos, resource-quota, limit-range, admission]
+relatedLabs: [k8s-0082, k8s-0083, k8s-0084]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Which QoS class is least likely to be evicted under node memory pressure?"
+    options:
+      - id: a
+        text: "BestEffort"
+      - id: b
+        text: "Burstable"
+      - id: c
+        text: "Guaranteed"
+      - id: d
+        text: "Critical"
+    correctAnswer: c
+    explanation: "Kubernetes evicts pods in order of QoS class: BestEffort first, then Burstable, and Guaranteed last. A Guaranteed pod has equal requests and limits for all containers, so the scheduler and kubelet treat it as highest priority under node pressure."
+    wrongExplanations:
+      a: "BestEffort pods (no requests or limits) are evicted first — they have the lowest priority."
+      b: "Burstable pods (requests set but not equal to limits) are evicted after BestEffort but before Guaranteed."
+      d: "'Critical' is not a Kubernetes QoS class. The three classes are BestEffort, Burstable, and Guaranteed."
+    tryCommand: kubectl get pod NAME -o jsonpath='{.status.qosClass}'
+
+  - id: q2
+    type: single-choice
+    prompt: "What is required for every container in a Pod to achieve the Guaranteed QoS class?"
+    options:
+      - id: a
+        text: "Every container must have a CPU request set; memory is optional."
+      - id: b
+        text: "Every container must have requests equal to limits for both CPU and memory."
+      - id: c
+        text: "The Pod must have a PriorityClass set to system-cluster-critical."
+      - id: d
+        text: "The Pod must use a static CPU policy on the node."
+    correctAnswer: b
+    explanation: "Guaranteed QoS requires that every container (including init containers) has both CPU and memory requests equal to their limits. If requests are omitted but limits are set, Kubernetes defaults requests to the limits — so the Pod is still Guaranteed. What matters is the effective equality of requests and limits."
+    wrongExplanations:
+      a: "Both CPU and memory must have requests equal to limits. CPU alone is not sufficient."
+      c: "PriorityClass affects Pod scheduling priority but does not determine QoS class."
+      d: "Static CPU policy is a kubelet configuration that affects CPU pinning, not QoS classification."
+    tryCommand: kubectl describe pod NAME | grep QoS
+
+  - id: q3
+    type: single-choice
+    prompt: "What does a ResourceQuota enforce?"
+    options:
+      - id: a
+        text: "It reserves physical capacity on nodes for the namespace."
+      - id: b
+        text: "It limits admission of new resources when adding them would exceed the quota."
+      - id: c
+        text: "It automatically throttles running containers when the namespace is near its limit."
+      - id: d
+        text: "It prevents pods from using more CPU than defined, at runtime."
+    correctAnswer: b
+    explanation: "A ResourceQuota is an admission control mechanism. When a new resource (Pod, Service, PersistentVolumeClaim, etc.) would push usage over the quota, the API server rejects the creation request. It does not reserve physical node capacity or affect running pods."
+    wrongExplanations:
+      a: "ResourceQuota operates at the API level, not at the node level. It does not reserve node capacity."
+      c: "ResourceQuota does not throttle running containers; it only blocks new admissions."
+      d: "Per-container CPU enforcement is done by limits and the CFS bandwidth controller, not ResourceQuota."
+    tryCommand: kubectl describe resourcequota -n NAMESPACE
+
+  - id: q4
+    type: single-choice
+    prompt: "A Deployment's pods fail with 'forbidden: exceeded quota'. Where should you look first to diagnose the problem?"
+    options:
+      - id: a
+        text: "The node's available CPU and memory."
+      - id: b
+        text: "The container's resource requests."
+      - id: c
+        text: "The namespace's ResourceQuota usage with `kubectl describe resourcequota -n NS`."
+      - id: d
+        text: "The Deployment's rollout history."
+    correctAnswer: c
+    explanation: "The 'exceeded quota' message means the namespace's ResourceQuota is blocking new pod admissions. `kubectl describe resourcequota -n NS` shows the quota limits alongside the current usage so you can see which resource is exhausted."
+    wrongExplanations:
+      a: "Node capacity is a scheduling concern; 'exceeded quota' is an admission error from the API server."
+      b: "While high requests could contribute, the first step is to see what quota is exhausted via `kubectl describe resourcequota`."
+      d: "Rollout history tracks template changes, not quota failures."
+
+  - id: q5
+    type: single-choice
+    prompt: "When does a LimitRange apply its default requests and limits to a Pod?"
+    options:
+      - id: a
+        text: "When the Deployment is created."
+      - id: b
+        text: "When the Deployment is updated."
+      - id: c
+        text: "When each Pod is admitted to the namespace by the API server."
+      - id: d
+        text: "When the kubelet schedules the Pod onto a node."
+    correctAnswer: c
+    explanation: "LimitRange defaults are applied by the LimitRanger admission controller when a Pod object is submitted to the API server — specifically at Pod admission time. The Deployment itself does not trigger this; only the Pod creation request does."
+    wrongExplanations:
+      a: "Creating a Deployment does not create Pods directly; the Deployment controller creates ReplicaSets which create Pods. LimitRange defaults are applied to each Pod at admission, not to the Deployment."
+      b: "Updating a Deployment triggers a rolling update, which creates new Pods. Each new Pod gets defaults at admission, but it is the Pod admission that matters, not the Deployment update."
+      d: "Scheduling happens after admission. LimitRange runs before the Pod is stored in etcd."
+    tryCommand: kubectl describe limitrange -n NAMESPACE
+
+  - id: q6
+    type: single-choice
+    prompt: "A LimitRange is added to a namespace where pods are already running. Do those running pods receive the new default limits?"
+    options:
+      - id: a
+        text: "Yes — the kubelet applies the new limits within 60 seconds."
+      - id: b
+        text: "Yes — but only after the pods are manually deleted and recreated."
+      - id: c
+        text: "No — LimitRange defaults apply only to pods admitted after the LimitRange was created."
+      - id: d
+        text: "No — LimitRange only applies to newly created Deployments."
+    correctAnswer: c
+    explanation: "LimitRange defaults are applied at Pod admission time. Pods that already exist were admitted before the LimitRange was created, so they were not subject to it. Only pods created after the LimitRange is in place receive the defaults."
+    wrongExplanations:
+      a: "The kubelet does not retroactively apply LimitRange changes to running containers."
+      b: "Deleting and recreating creates *new* pods — the original running pods never receive the defaults. And the new pods exist; the question asks about the original ones. Option c states the rule correctly."
+      d: "LimitRange applies to all Pod admissions in the namespace, not just those from Deployments."
+
+  - id: q7
+    type: single-choice
+    prompt: "Which command shows a ResourceQuota's current usage alongside its limits?"
+    options:
+      - id: a
+        text: "`kubectl get resourcequota NAME -n NS -o wide`"
+      - id: b
+        text: "`kubectl describe resourcequota NAME -n NS`"
+      - id: c
+        text: "`kubectl top quota NAME -n NS`"
+      - id: d
+        text: "`kubectl get events -n NS --field-selector reason=ExceededQuota`"
+    correctAnswer: b
+    explanation: "`kubectl describe resourcequota NAME -n NS` prints a table with each resource's hard limit and current usage side by side, making it the fastest way to see what is consumed and what headroom remains."
+    wrongExplanations:
+      a: "`kubectl get resourcequota` shows the hard limits but not current usage in the default output; `describe` is needed for usage."
+      c: "`kubectl top` is for node and pod metrics, not quota objects."
+      d: "Events can show quota denial reasons, but they do not show current usage vs. limits."
+    tryCommand: kubectl describe resourcequota -n NAMESPACE

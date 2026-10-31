@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ns-limits
+  namespace: fl-k8s-0086
+spec:
+  limits:
+    - type: Container
+      max:
+        cpu: "500m"
+        memory: "256Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "32Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: fl-k8s-0086
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "2"
+              memory: "512Mi"

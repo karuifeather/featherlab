@@ -1335,6 +1335,358 @@ const execFile = {
   },
 };
 
+// ─── Level 4: Resource Management & Scheduling validators ─────────────────────
+
+/**
+ * k8s.pod-qos-class — passes when the Pod's status.qosClass matches the expected value.
+ * Kubernetes sets this field at admission: Guaranteed, Burstable, or BestEffort.
+ * Combine with k8s.pod-ready to prove the pod is actually running with that class.
+ */
+const podQosClass = resourceValidator({
+  type: "k8s.pod-qos-class",
+  kinds: ["Pod"],
+  params: {
+    qosClass: {
+      type: "string",
+      required: true,
+      enum: ["Guaranteed", "Burstable", "BestEffort"],
+    },
+  },
+  evaluate(pod, p, ref) {
+    const actual = pod.status?.qosClass ?? "(not set)";
+    return {
+      passed: actual === p.qosClass,
+      feedback:
+        actual === p.qosClass
+          ? `${describe(ref)} has QoS class ${p.qosClass}.`
+          : `${describe(ref)} has QoS class ${actual}; expected ${p.qosClass}.`,
+      details: { qosClass: actual },
+    };
+  },
+});
+
+/**
+ * k8s.resource-quota — checks that a ResourceQuota's hard limits include the expected
+ * entries (compared as Kubernetes quantities). Only the listed fields are graded.
+ * Also verifies the ResourceQuota exists and is not being deleted — a learner cannot
+ * pass by deleting the quota.
+ */
+const resourceQuota = resourceValidator({
+  type: "k8s.resource-quota",
+  kinds: ["ResourceQuota"],
+  params: {
+    hard: {
+      type: "object",
+      required: true,
+      values: QUANTITY_SPEC,
+    },
+  },
+  evaluate(quota, p, ref) {
+    const actual = quota.spec?.hard ?? {};
+    const wrong = [];
+    for (const [key, expected] of Object.entries(p.hard)) {
+      const actualVal = actual[key];
+      if (!sameQuantity(actualVal, expected))
+        wrong.push(
+          actualVal === undefined
+            ? `"${key}" is not set`
+            : `"${key}" is ${actualVal} (expected ${expected})`,
+        );
+    }
+    return {
+      passed: wrong.length === 0,
+      feedback:
+        wrong.length === 0
+          ? `${describe(ref)} has the required hard limits.`
+          : `${describe(ref)} hard limits are incorrect: ${wrong.join("; ")}.`,
+      details: { hard: actual },
+    };
+  },
+});
+
+const LIMIT_RANGE_TYPE = {
+  type: "string",
+  required: true,
+  enum: ["Container", "Pod", "PersistentVolumeClaim"],
+};
+
+/**
+ * k8s.limit-range — checks that a LimitRange has at least one limit of the given type
+ * with the expected min, max, default, and/or defaultRequest values.
+ * Only provided fields are checked; others are ignored.
+ */
+const limitRange = {
+  type: "k8s.limit-range",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(
+      p,
+      ["name", "namespace", "limitType", "min", "max", "default", "defaultRequest"],
+      problems,
+    );
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(p.limitType, LIMIT_RANGE_TYPE, "limitType", problems);
+    for (const field of ["min", "max", "default", "defaultRequest"]) {
+      if (p[field] !== undefined)
+        check(p[field], { type: "object", values: QUANTITY_SPEC }, field, problems);
+    }
+    const defined = ["min", "max", "default", "defaultRequest"].filter((f) => p[f] !== undefined);
+    if (defined.length === 0)
+      problems.add("", "set at least one of min, max, default, defaultRequest");
+  },
+  async run(p, ctx) {
+    const ref = { kind: "LimitRange", name: p.name, namespace: p.namespace };
+    const lr = await ctx.query.get(ref);
+    if (!lr)
+      return {
+        passed: false,
+        feedback: `LimitRange "${p.name}" in namespace "${p.namespace}" was not found.`,
+      };
+    if (lr.metadata?.deletionTimestamp)
+      return { passed: false, feedback: `LimitRange "${p.name}" is being deleted.` };
+    const limits = (lr.spec?.limits ?? []).filter((l) => l.type === p.limitType);
+    if (limits.length === 0)
+      return {
+        passed: false,
+        feedback: `LimitRange "${p.name}" has no limit of type "${p.limitType}".`,
+      };
+    const wrong = [];
+    const limit = limits[0];
+    for (const [field, map] of [
+      ["min", limit.min],
+      ["max", limit.max],
+      ["default", limit.default],
+      ["defaultRequest", limit.defaultRequest],
+    ]) {
+      if (p[field] === undefined) continue;
+      for (const [resource, expected] of Object.entries(p[field])) {
+        const actual = map?.[resource];
+        if (!sameQuantity(actual, expected))
+          wrong.push(
+            actual === undefined
+              ? `${field}.${resource} is not set`
+              : `${field}.${resource} is ${actual} (expected ${expected})`,
+          );
+      }
+    }
+    return {
+      passed: wrong.length === 0,
+      feedback:
+        wrong.length === 0
+          ? `LimitRange "${p.name}" has the required ${p.limitType} limits.`
+          : `LimitRange "${p.name}" ${p.limitType} limits are incorrect: ${wrong.join("; ")}.`,
+      details: { limits },
+    };
+  },
+};
+
+/**
+ * k8s.node-selector — passes when the named workload's Pod template has a nodeSelector
+ * containing all expected key=value pairs.
+ */
+const nodeSelector = resourceValidator({
+  type: "k8s.node-selector",
+  kinds: KIND_NAMES.filter((k) => KINDS[k].podSpecPath && k !== "Pod"),
+  params: { selector: STRING_MAP },
+  evaluate(resource, p, ref) {
+    const actual = podSpecOf(resource, ref.kind)?.nodeSelector ?? {};
+    const wrong = Object.entries(p.selector).filter(([k, v]) => actual[k] !== v);
+    return {
+      passed: wrong.length === 0,
+      feedback:
+        wrong.length === 0
+          ? `${describe(ref)} has the required nodeSelector.`
+          : wrong
+              .map(([k]) =>
+                actual[k] === undefined
+                  ? `nodeSelector key "${k}" is missing`
+                  : `nodeSelector "${k}" is "${actual[k]}"`,
+              )
+              .join("; ") + ".",
+      details: { actual },
+    };
+  },
+});
+
+/**
+ * k8s.pod-tolerations — passes when the Pod template has tolerations for all the listed
+ * key/operator/effect combinations. Each entry in `tolerations` must have at least `key`
+ * and `effect`; `operator` defaults to "Equal" if omitted; `value` is optional.
+ */
+const podTolerations = resourceValidator({
+  type: "k8s.pod-tolerations",
+  kinds: KIND_NAMES.filter((k) => KINDS[k].podSpecPath),
+  params: {
+    tolerations: {
+      type: "array",
+      required: true,
+      minItems: 1,
+      items: {
+        type: "object",
+        open: true,
+        properties: {
+          key: { type: "string", minLength: 1, maxLength: 317 },
+          operator: { type: "string", enum: ["Equal", "Exists"] },
+          value: { type: "string", maxLength: 253 },
+          effect: { type: "string", enum: ["NoSchedule", "PreferNoSchedule", "NoExecute", ""] },
+        },
+      },
+    },
+  },
+  evaluate(resource, p, ref) {
+    const actual = podSpecOf(resource, ref.kind)?.tolerations ?? [];
+    const missing = p.tolerations.filter((expected) => {
+      return !actual.some((t) => {
+        if (expected.key !== undefined && t.key !== expected.key) return false;
+        const op = expected.operator ?? "Equal";
+        if (t.operator !== op && !(t.operator === undefined && op === "Equal")) return false;
+        if (op === "Equal" && expected.value !== undefined && t.value !== expected.value)
+          return false;
+        if (expected.effect !== undefined && expected.effect !== "" && t.effect !== expected.effect)
+          return false;
+        return true;
+      });
+    });
+    return {
+      passed: missing.length === 0,
+      feedback:
+        missing.length === 0
+          ? `${describe(ref)} has the required tolerations.`
+          : `${describe(ref)} is missing toleration(s): ${missing.map((t) => `key="${t.key ?? "*"}" effect="${t.effect ?? "*"}"`).join(", ")}.`,
+      details: { actual },
+    };
+  },
+});
+
+/**
+ * k8s.node-affinity — passes when the workload's Pod template has a nodeAffinity rule of
+ * the specified scheduling type (required or preferred). Checks that at least one
+ * nodeSelectorTerm (for required) or preference (for preferred) uses the given key and
+ * operator. This verifies intentional configuration, not that placement actually occurred;
+ * pair with k8s.rollout-complete to confirm the workload scheduled.
+ */
+const nodeAffinity = resourceValidator({
+  type: "k8s.node-affinity",
+  kinds: KIND_NAMES.filter((k) => KINDS[k].podSpecPath && k !== "Pod"),
+  params: {
+    scheduling: {
+      type: "string",
+      required: true,
+      enum: ["required", "preferred"],
+    },
+    key: { type: "string", required: true, minLength: 1, maxLength: 317 },
+    operator: {
+      type: "string",
+      required: true,
+      enum: ["In", "NotIn", "Exists", "DoesNotExist", "Gt", "Lt"],
+    },
+    values: {
+      type: "array",
+      items: { type: "string", maxLength: 253 },
+    },
+  },
+  evaluate(resource, p, ref) {
+    const affinity = podSpecOf(resource, ref.kind)?.affinity?.nodeAffinity;
+    if (!affinity) return { passed: false, feedback: `${describe(ref)} has no nodeAffinity.` };
+
+    const matchExpr = (expr) =>
+      expr.key === p.key &&
+      expr.operator === p.operator &&
+      (p.values === undefined || p.values.every((v) => (expr.values ?? []).includes(v)));
+
+    if (p.scheduling === "required") {
+      const terms =
+        affinity.requiredDuringSchedulingIgnoredDuringExecution?.nodeSelectorTerms ?? [];
+      const found = terms.some((term) => (term.matchExpressions ?? []).some(matchExpr));
+      return {
+        passed: found,
+        feedback: found
+          ? `${describe(ref)} has the required node affinity rule.`
+          : `${describe(ref)} has no required node affinity matching key="${p.key}" operator="${p.operator}".`,
+      };
+    }
+    const prefs = affinity.preferredDuringSchedulingIgnoredDuringExecution ?? [];
+    const found = prefs.some((pref) => (pref.preference?.matchExpressions ?? []).some(matchExpr));
+    return {
+      passed: found,
+      feedback: found
+        ? `${describe(ref)} has the required preferred node affinity rule.`
+        : `${describe(ref)} has no preferred node affinity matching key="${p.key}" operator="${p.operator}".`,
+    };
+  },
+});
+
+/**
+ * k8s.hpa-config — checks static HPA spec fields. Only the listed fields are graded.
+ * Does not claim metrics work: pair with k8s.resource-exists to prove the HPA exists.
+ */
+const hpaConfig = resourceValidator({
+  type: "k8s.hpa-config",
+  kinds: ["HorizontalPodAutoscaler"],
+  params: {
+    minReplicas: { type: "integer", min: 1, max: 1000 },
+    maxReplicas: { type: "integer", min: 1, max: 1000 },
+    targetRef: {
+      type: "object",
+      properties: {
+        kind: { type: "string", required: true, minLength: 1, maxLength: 63 },
+        name: NAME,
+      },
+    },
+    cpuUtilization: { type: "integer", min: 1, max: 1000 },
+  },
+  refine(p, problems) {
+    const fields = ["minReplicas", "maxReplicas", "targetRef", "cpuUtilization"];
+    if (fields.every((f) => p[f] === undefined)) problems.add("", "set at least one HPA field");
+    if (p.minReplicas !== undefined && p.maxReplicas !== undefined && p.minReplicas > p.maxReplicas)
+      problems.add("minReplicas", "minReplicas must be <= maxReplicas");
+  },
+  evaluate(hpa, p, ref) {
+    const spec = hpa.spec ?? {};
+    const failures = [];
+    const fmt = (actual, expected) =>
+      `${actual === undefined ? "(not set)" : actual} — expected ${expected}`;
+    if (p.minReplicas !== undefined && (spec.minReplicas ?? 1) !== p.minReplicas)
+      failures.push(`minReplicas: ${fmt(spec.minReplicas, p.minReplicas)}`);
+    if (p.maxReplicas !== undefined && spec.maxReplicas !== p.maxReplicas)
+      failures.push(`maxReplicas: ${fmt(spec.maxReplicas, p.maxReplicas)}`);
+    if (p.targetRef !== undefined) {
+      const tr = spec.scaleTargetRef ?? {};
+      if (p.targetRef.kind && tr.kind !== p.targetRef.kind)
+        failures.push(`scaleTargetRef.kind: ${fmt(tr.kind, p.targetRef.kind)}`);
+      if (p.targetRef.name && tr.name !== p.targetRef.name)
+        failures.push(`scaleTargetRef.name: ${fmt(tr.name, p.targetRef.name)}`);
+    }
+    if (p.cpuUtilization !== undefined) {
+      // autoscaling/v2 stores CPU target in spec.metrics[]; autoscaling/v1 uses
+      // spec.targetCPUUtilizationPercentage. Check both representations.
+      const v1cpu = spec.targetCPUUtilizationPercentage;
+      const v2metrics = (spec.metrics ?? []).find(
+        (m) => m.type === "Resource" && m.resource?.name === "cpu",
+      );
+      const v2cpu =
+        v2metrics?.resource?.target?.averageUtilization ??
+        v2metrics?.resource?.target?.averageValue;
+      const actual = v1cpu ?? v2cpu;
+      if (actual !== p.cpuUtilization)
+        failures.push(`CPU utilization target: ${fmt(actual, p.cpuUtilization)}`);
+    }
+    return {
+      passed: failures.length === 0,
+      feedback:
+        failures.length === 0
+          ? `${describe(ref)} has the required configuration.`
+          : `${describe(ref)} has incorrect configuration: ${failures.join("; ")}.`,
+    };
+  },
+});
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -1371,4 +1723,12 @@ export const kubernetesValidators = Object.freeze([
   daemonSetStatus,
   sharedEmptyDir,
   execFile,
+  // Level 4 validators
+  podQosClass,
+  resourceQuota,
+  limitRange,
+  nodeSelector,
+  podTolerations,
+  nodeAffinity,
+  hpaConfig,
 ]);

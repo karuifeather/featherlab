@@ -60,19 +60,21 @@ test("launcher offers the Kubernetes track, in curriculum order across four leve
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kubernetes" })).toBeVisible();
   await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
-  // Level 0 is open by default. Expand Level 1, Level 2 and Level 3 so the full
-  // list of 78 labs is in the DOM and can be addressed by index.
+  // Level 0 is open by default. Expand Level 1–4 so the full
+  // list of 97 labs is in the DOM and can be addressed by index.
   const levelHeaders = page.locator(".level-header");
   await expect(page.locator(".level-label")).toHaveText([
     "Level 0",
     "Level 1",
     "Level 2",
     "Level 3",
+    "Level 4",
   ]);
   await levelHeaders.nth(1).click(); // expand Level 1
   await levelHeaders.nth(2).click(); // expand Level 2
   await levelHeaders.nth(3).click(); // expand Level 3
-  await expect(lessons()).toHaveCount(78);
+  await levelHeaders.nth(4).click(); // expand Level 4
+  await expect(lessons()).toHaveCount(97);
   // Backend order, not id order: k8s-0011..k8s-0014 come before k8s-0002.
   await expect(lessons().nth(0)).toContainText("Your first Pod");
   await expect(lessons().nth(1)).toContainText("Inspect a Pod");
@@ -81,6 +83,7 @@ test("launcher offers the Kubernetes track, in curriculum order across four leve
   await expect(lessons().nth(10)).toContainText("Meet the ReplicaSet");
   await expect(lessons().nth(17)).toContainText("RollingUpdate vs Recreate");
   await expect(lessons().nth(77)).toContainText("Application Patterns Mastery");
+  await expect(lessons().nth(96)).toContainText("Master Scheduling Placement");
 });
 
 test("locked exercises explain which prerequisite unlocks them", async () => {
