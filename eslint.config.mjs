@@ -14,6 +14,8 @@ export default [
       "playwright-report/**",
       ".husky/_/**",
       ".claude/**",
+      "website/dist/**",
+      "website/node_modules/**",
     ],
   },
   {
