@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0104
+type: task
+title: Find the Backends
+summary: Inspect EndpointSlices to discover the Pods backing a Service, then scale the Deployment to reach 2 ready backends.
+track: kubernetes
+level: 5
+order: 7
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, endpointslices, backends, scale]
+prerequisites: [k8s-0103]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0104`"
+  - "Deployment `store` has exactly 2 available replicas"
+  - "Service `store` has at least 2 ready endpoints"
+  - "Service `store` selector matches the store Deployment"
+
+hints:
+  - "Check the current state: `kubectl get deploy store -n fl-k8s-0104` — how many replicas are ready?"
+  - "Inspect EndpointSlices: `kubectl get endpointslices -l kubernetes.io/service-name=store -n fl-k8s-0104 -o wide`"
+  - "Scale the Deployment: `kubectl scale deployment store --replicas=2 -n fl-k8s-0104`"
+
+lifecycle:
+  namespaces: [fl-k8s-0104]
+  setup:
+    manifests: [setup/store.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment store has 2 available replicas
+    params:
+      name: store
+      namespace: fl-k8s-0104
+      replicas: 2
+  - id: routes
+    type: k8s.service-selects
+    label: Service store routes to the store Deployment
+    params:
+      name: store
+      namespace: fl-k8s-0104
+      workload: { kind: Deployment, name: store }
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service store has at least 2 ready endpoints
+    params:
+      name: store
+      namespace: fl-k8s-0104
+      minReady: 2

@@ -1,0 +1,150 @@
+schemaVersion: 1
+id: kq-k8s-l5-007
+activityType: knowledge-check
+title: "Level 5 Mixed Review: Services, DNS & Traffic Routing"
+summary: Retrieval practice across all Level 5 topics — Services, EndpointSlices, DNS, Service types, blue/green, and canary deployments.
+track: kubernetes
+level: 5
+order: 27.5
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, dns, endpointslices, blue-green, canary, nodeport, clusterip, mixed-review]
+relatedLabs: [k8s-0098, k8s-0108, k8s-0112, k8s-0117, k8s-0124]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "You run `kubectl get svc -n app` and see `TYPE: ClusterIP, CLUSTER-IP: 10.96.45.2, EXTERNAL-IP: <none>`. A developer asks why they can't reach the Service from their laptop browser. What do you tell them?"
+    options:
+      - id: a
+        text: The Service is broken; ClusterIP Services should always have an external IP
+      - id: b
+        text: A ClusterIP is reachable only from inside the cluster. Use NodePort, LoadBalancer, or kubectl port-forward to reach it externally
+      - id: c
+        text: The developer needs to add an Ingress rule to convert the ClusterIP to an external IP
+      - id: d
+        text: The Service needs a DNS name before it can be reached externally
+    correctAnswer: b
+    explanation: "ClusterIP Services are cluster-internal. `EXTERNAL-IP: <none>` is expected and correct. To expose the Service externally, you change the type to NodePort or LoadBalancer, put an Ingress in front of it, or use `kubectl port-forward` for temporary development access."
+    wrongExplanations:
+      a: "ClusterIP Services are designed to have no external IP. `<none>` is the normal, expected state — not a sign of a broken Service."
+      c: "Ingress does not convert a ClusterIP to an external IP — it adds HTTP routing rules in front of the Service. The ClusterIP stays as-is; the Ingress controller proxies traffic to it."
+      d: "All Kubernetes Services automatically get DNS names. The DNS name is for in-cluster resolution and does not give the Service external reachability."
+
+  - id: q2
+    type: single-choice
+    prompt: "A Service has `Endpoints: <none>`. You check the Pods and find 3 Pods in state Running. What should you check next?"
+    options:
+      - id: a
+        text: Whether the Pods have a `readinessGates` entry that has not been fulfilled
+      - id: b
+        text: Whether the Service's `spec.selector` labels match the labels on the running Pods
+      - id: c
+        text: Whether the namespace has a NetworkPolicy blocking endpoint registration
+      - id: d
+        text: "Whether the Pods are using `hostNetwork: true`"
+    correctAnswer: b
+    explanation: "The most common cause of `Endpoints: <none>` on Running Pods is a selector mismatch. Compare `kubectl get svc <name> -o jsonpath='{.spec.selector}'` against `kubectl get pods --show-labels`. Even a typo (`app=backend` vs `app=backends`) silently produces no endpoints."
+    wrongExplanations:
+      a: "ReadinessGates are an advanced feature. A readiness gate that has not been fulfilled would make the Pod not Ready, which does cause it to be excluded from endpoints — but checking the selector mismatch is the far more common first step."
+      c: "NetworkPolicies control traffic flow; they do not prevent the endpoint controller from registering Pod IPs. Endpoints are registered based on labels and readiness, not network access."
+      d: "`hostNetwork: true` makes the Pod use the node's network namespace but does not prevent the endpoint controller from selecting it. The Pod would appear as a node IP endpoint."
+    tryCommand: kubectl get svc <name> -o jsonpath='{.spec.selector}' && kubectl get pods --show-labels -n <namespace>
+
+  - id: q3
+    type: single-choice
+    prompt: "A Pod in namespace `checkout` sends a request to `http://inventory/api/v1/stock`. The `inventory` Service is in namespace `catalog`. What happens?"
+    options:
+      - id: a
+        text: The request succeeds because all Services are globally reachable by short name
+      - id: b
+        text: The request fails with a DNS resolution error because `inventory` alone resolves only within `checkout`
+      - id: c
+        text: Kubernetes automatically forwards the request to `catalog` because both namespaces are in the same cluster
+      - id: d
+        text: The request succeeds only if a NetworkPolicy allows it
+    correctAnswer: b
+    explanation: "The short name `inventory` resolves by appending the Pod's search domains, starting with `inventory.checkout.svc.cluster.local`. There is no Service named `inventory` in `checkout`, so DNS returns NXDOMAIN. To reach the Service in `catalog`, the URL must use `http://inventory.catalog/api/v1/stock` or the full FQDN."
+    wrongExplanations:
+      a: "Service DNS names are namespace-scoped. A short name resolves only within the same namespace via the search path."
+      c: "Kubernetes does not automatically forward requests between namespaces. The application must use the correct cross-namespace DNS name."
+      d: "NetworkPolicies would block or allow the connection at the network layer, but the request would first fail at DNS before even attempting a TCP connection. NetworkPolicy is not the cause of this failure."
+
+  - id: q4
+    type: single-choice
+    prompt: "You want to observe which version of your application (blue or green) is currently receiving traffic. Which command tells you most directly?"
+    options:
+      - id: a
+        text: "`kubectl describe deployment web-green`"
+      - id: b
+        text: "`kubectl get endpoints web -n <namespace>` and compare the IPs to Pod IPs from each Deployment"
+      - id: c
+        text: "`kubectl rollout history deployment/web`"
+      - id: d
+        text: "`kubectl get configmap -n <namespace>` to find the traffic routing config"
+    correctAnswer: b
+    explanation: "`kubectl get endpoints web` shows which Pod IPs the Service is currently routing to. Cross-referencing those IPs with `kubectl get pods -l version=blue -o wide` and `kubectl get pods -l version=green -o wide` immediately reveals which Deployment's Pods are in the endpoint list — i.e., which version is live."
+    wrongExplanations:
+      a: "`kubectl describe deployment web-green` shows the green Deployment's status. That tells you green is ready, but not whether the Service is pointing to green."
+      c: "`kubectl rollout history` shows past rollout records for a specific Deployment, not which version a shared Service is currently routing to."
+      d: "There is no standard ConfigMap that tracks which version a Service routes to. The source of truth is the Service's selector and the resulting endpoints."
+    tryCommand: kubectl get endpoints web -n <namespace> -o wide
+
+  - id: q5
+    type: single-choice
+    prompt: "An EndpointSlice for Service `api` shows three endpoints, but only two are `conditions.ready: true`. How does kube-proxy handle the not-ready endpoint?"
+    options:
+      - id: a
+        text: kube-proxy removes the not-ready endpoint from its routing rules; new connections only go to the two ready endpoints
+      - id: b
+        text: kube-proxy sends 50% less traffic to the not-ready endpoint as a penalty
+      - id: c
+        text: kube-proxy treats all endpoints equally; readiness conditions are informational only
+      - id: d
+        text: kube-proxy removes all endpoints until all three are ready again
+    correctAnswer: a
+    explanation: "kube-proxy reads EndpointSlice conditions and only installs routing rules for endpoints where `conditions.ready: true` (and `conditions.terminating` is not true). The not-ready endpoint is excluded from the load balancing pool. Clients only reach the two ready Pods."
+    wrongExplanations:
+      b: "kube-proxy does not implement traffic reduction or penalties. An endpoint is either in the routing pool (ready) or not."
+      c: "readiness conditions are not informational only. kube-proxy actively uses them to decide which endpoints to route to."
+      d: "kube-proxy does not block all traffic when any endpoint is not ready. Available endpoints continue to serve traffic; only the not-ready one is excluded."
+
+  - id: q6
+    type: single-choice
+    prompt: "You set up a canary with 1 canary replica and 4 stable replicas behind one Service. After 500 requests you count 112 that hit the canary. Is this result consistent with correct canary setup?"
+    options:
+      - id: a
+        text: No — with 1 out of 5 replicas, exactly 100 requests should hit the canary
+      - id: b
+        text: Yes — 112 is within the expected statistical variance for a 20% canary over 500 requests
+      - id: c
+        text: No — the canary is receiving too much traffic; the stable Deployment must have lost replicas
+      - id: d
+        text: Yes, but only if the canary image is identical to the stable image
+    correctAnswer: b
+    explanation: "1 canary out of 5 total replicas means the expected hit rate is 20% (1/5). Over 500 requests, the expected count is 100. A binomial distribution with n=500, p=0.2 has standard deviation ≈ 8.9. 112 is within ~1.3 standard deviations of the mean — entirely normal statistical variation. No action is needed."
+    wrongExplanations:
+      a: "Exact counts require perfectly deterministic round-robin routing. Real kube-proxy routing has randomness; 100 is the expected mean, not a guarantee."
+      c: "Receiving 112 instead of 100 is normal variance. Checking the stable Deployment's replica count is not warranted for a result this close to the expected value."
+      d: "Canary deployments are designed to test a different (new) image. The question of statistical validity is independent of whether images match."
+
+  - id: q7
+    type: single-choice
+    prompt: "You need a Service that routes cluster-internal clients to individual Pod IPs for a StatefulSet (so each client can address a specific Pod by a stable DNS name). Which Service type is appropriate?"
+    options:
+      - id: a
+        text: "ClusterIP with `spec.clusterIP: None` (headless)"
+      - id: b
+        text: "NodePort with `externalTrafficPolicy: Local`"
+      - id: c
+        text: "LoadBalancer with `spec.loadBalancerIP` set to a fixed address"
+      - id: d
+        text: ExternalName pointing to the StatefulSet's pod hostname
+    correctAnswer: a
+    explanation: "A headless Service (`spec.clusterIP: None`) tells CoreDNS to return individual Pod A records instead of a single virtual IP. StatefulSet Pods get stable DNS names like `<pod-name>.<svc>.<namespace>.svc.cluster.local`. This lets clients address specific Pods by name — essential for databases and quorum-based systems."
+    wrongExplanations:
+      b: "NodePort is for external access. `externalTrafficPolicy: Local` preserves client source IPs; it does not help with per-Pod DNS addressing within the cluster."
+      c: "LoadBalancer routes to a pool of endpoints through a single external IP. It does not provide per-Pod DNS names and cannot address individual Pods."
+      d: "ExternalName creates a CNAME alias to an external hostname. It does not provide per-Pod internal addressing for a StatefulSet."
+    tryCommand: kubectl get svc <headless-svc> -n <namespace> -o jsonpath='{.spec.clusterIP}'

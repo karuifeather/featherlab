@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0113
+type: task
+title: ExternalName Service
+summary: Create an ExternalName Service that maps a cluster-internal DNS name to an external hostname, acting as a CNAME alias for services outside the cluster.
+track: kubernetes
+level: 5
+order: 16
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [dns, services, externalname, cname, networking]
+prerequisites: [k8s-0112]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0113`"
+  - "Service `external-api` exists in `fl-k8s-0113`"
+  - "Service `external-api` has type `ExternalName` with `externalName: api.example.com`"
+
+hints:
+  - "ExternalName Services cannot be created with `kubectl expose`. Use a YAML manifest with `type: ExternalName` and `externalName: api.example.com`."
+  - "An ExternalName Service has no selector, no clusterIP, and no endpoints — it is purely a DNS CNAME record."
+  - "Check the result: `kubectl get svc external-api -n fl-k8s-0113 -o yaml | grep -A2 externalName`"
+
+lifecycle:
+  namespaces: [fl-k8s-0113]
+  setup:
+    manifests: [setup/client.yaml]
+
+checks:
+  - id: exists
+    type: k8s.resource-exists
+    label: Service external-api exists in fl-k8s-0113
+    params:
+      kind: Service
+      name: external-api
+      namespace: fl-k8s-0113
+  - id: spec
+    type: k8s.service-spec
+    label: Service external-api is type ExternalName pointing to api.example.com
+    params:
+      name: external-api
+      namespace: fl-k8s-0113
+      type: ExternalName
+      externalName: api.example.com

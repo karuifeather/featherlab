@@ -1,0 +1,113 @@
+schemaVersion: 1
+id: kq-k8s-l5-002
+activityType: knowledge-check
+title: EndpointSlices and Backend Readiness
+summary: Explore how Kubernetes tracks ready backends through EndpointSlices and why Pod readiness gates traffic routing.
+track: kubernetes
+level: 5
+order: 11.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [endpointslices, endpoints, readiness, backend, discovery]
+relatedLabs: [k8s-0104, k8s-0105, k8s-0106, k8s-0107, k8s-0108]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is an EndpointSlice in Kubernetes?"
+    options:
+      - id: a
+        text: A load balancer rule that distributes traffic across nodes
+      - id: b
+        text: A controller-managed object that tracks the network endpoints (IP:port pairs) for a Service
+      - id: c
+        text: A CRD that replaces Deployments for stateless workloads
+      - id: d
+        text: A slice of a Persistent Volume allocated to a Service
+    correctAnswer: b
+    explanation: "EndpointSlices are namespaced objects managed by the EndpointSlice controller. Each slice holds up to 100 endpoints (Pod IP:port pairs) for a given Service, along with readiness conditions for each endpoint. They replaced the older Endpoints API for scalability."
+    wrongExplanations:
+      a: "Load balancer rules live inside kube-proxy (iptables or ipvs). EndpointSlices are the data source kube-proxy reads to build those rules."
+      c: "EndpointSlices have nothing to do with workload scheduling. They are purely a networking discovery mechanism."
+      d: "EndpointSlices are a networking concept entirely unrelated to storage or PersistentVolumes."
+    tryCommand: kubectl get endpointslices -n <namespace>
+
+  - id: q2
+    type: single-choice
+    prompt: "Which label does the EndpointSlice controller add to every EndpointSlice so that kube-proxy can find all slices for a given Service?"
+    options:
+      - id: a
+        text: "`app.kubernetes.io/managed-by`"
+      - id: b
+        text: "`kubernetes.io/service-name`"
+      - id: c
+        text: "`service.kubernetes.io/headless`"
+      - id: d
+        text: "`endpointslice.kubernetes.io/managed-by`"
+    correctAnswer: b
+    explanation: "The EndpointSlice controller sets `kubernetes.io/service-name=<service-name>` on every slice it creates. This label is how kube-proxy and other consumers filter the slices belonging to one Service. You can list them with `kubectl get endpointslices -l kubernetes.io/service-name=<svc>`."
+    wrongExplanations:
+      a: "`app.kubernetes.io/managed-by` is a common convention label for tools like Helm, not specific to EndpointSlices."
+      c: "`service.kubernetes.io/headless` does not exist as a standard label."
+      d: "`endpointslice.kubernetes.io/managed-by` is a label the controller sets to identify itself as the manager, but it is not how slices are linked to a Service by name."
+    tryCommand: kubectl get endpointslices -l kubernetes.io/service-name=<svc> -n <namespace>
+
+  - id: q3
+    type: single-choice
+    prompt: "An EndpointSlice has an endpoint with `conditions.ready: false` and `conditions.terminating: true`. What does this mean?"
+    options:
+      - id: a
+        text: The Pod passed its readiness probe but is being deleted
+      - id: b
+        text: The Pod failed all readiness probes and is being evicted
+      - id: c
+        text: The Pod is starting up and has not yet passed its first readiness probe
+      - id: d
+        text: The Pod is ready but its node is draining
+    correctAnswer: a
+    explanation: "`conditions.terminating: true` means the Pod has received a SIGTERM (it is in the process of being deleted). At that point kube-proxy stops routing new connections to it by default. `conditions.ready` on a terminating Pod reflects the last known readiness state before termination began."
+    wrongExplanations:
+      b: "A Pod that fails readiness probes shows `conditions.ready: false` and `conditions.terminating: false`. Eviction is a separate event and does not cause the terminating flag."
+      c: "A Pod that has not yet passed its first readiness probe shows `conditions.ready: false, conditions.serving: false, conditions.terminating: false`."
+      d: "Node draining triggers graceful Pod termination, which would set `conditions.terminating: true`, but the ready flag reflects the Pod's own readiness probe state, not the node's drain status."
+    tryCommand: kubectl get endpointslices -n <namespace> -o yaml
+
+  - id: q4
+    type: single-choice
+    prompt: "A Deployment has 3 replicas. All 3 Pods are Running but one Pod's readiness probe continuously fails. How many endpoints appear as ready in the EndpointSlice?"
+    options:
+      - id: a
+        text: "3 — all running Pods are endpoints regardless of readiness"
+      - id: b
+        text: "0 — if any Pod's probe fails, the entire Service's endpoints are cleared"
+      - id: c
+        text: "2 — only the two Pods passing the readiness probe appear as ready endpoints"
+      - id: d
+        text: "1 — the oldest Pod is always the single active endpoint"
+    correctAnswer: c
+    explanation: "The EndpointSlice controller sets `conditions.ready: true` only for Pods that are Running and passing their readiness probe. A Pod that fails its readiness probe is kept in the slice with `conditions.ready: false` and is excluded from traffic by kube-proxy. The other two Pods are still ready endpoints."
+    wrongExplanations:
+      a: "Running status and readiness are separate. A Running Pod with a failing readiness probe is not a ready endpoint; kube-proxy will not route traffic to it."
+      b: "One Pod's probe failure does not affect the other Pods' endpoint status. Only the failing Pod's endpoint is marked not ready."
+      d: "Kubernetes does not designate a single 'primary' endpoint or use Pod age for traffic routing."
+    tryCommand: kubectl get endpointslices -n <namespace> -o jsonpath='{.items[*].endpoints[*].conditions}'
+
+  - id: q5
+    type: single-choice
+    prompt: "You create a Service but `kubectl get endpointslices -l kubernetes.io/service-name=mysvc -n demo` returns nothing. What is the most likely cause?"
+    options:
+      - id: a
+        text: "The Service has `spec.clusterIP: None` (headless), so no EndpointSlice is created"
+      - id: b
+        text: EndpointSlices are only created after the first HTTP request reaches the Service
+      - id: c
+        text: No Pods in the namespace match the Service's selector, so the controller has created no slice yet
+      - id: d
+        text: The EndpointSlice controller only runs in clusters with more than one node
+    correctAnswer: c
+    explanation: "The EndpointSlice controller creates a slice when it first finds at least one Pod matching the Service selector. If the selector matches nothing, the controller has no endpoints to publish and may not yet have created a slice. Once a matching Pod becomes Ready, a slice appears."
+    wrongExplanations:
+      a: "Headless Services also get EndpointSlices. The difference is that headless EndpointSlices power DNS A records for individual Pods, not kube-proxy rules."
+      b: "EndpointSlices are created proactively by the controller watching Pod state — not lazily on the first request."
+      d: "The EndpointSlice controller runs in all standard Kubernetes clusters regardless of node count, including single-node kind clusters."

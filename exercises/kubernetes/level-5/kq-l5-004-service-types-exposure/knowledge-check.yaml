@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l5-004
+activityType: knowledge-check
+title: Service Types and Exposure
+summary: Understand when to use ClusterIP, NodePort, LoadBalancer, and ExternalName, and what each type actually provides.
+track: kubernetes
+level: 5
+order: 18.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [services, nodeport, loadbalancer, clusterip, externalname, exposure]
+relatedLabs: [k8s-0114, k8s-0115]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Which Service type makes a Service reachable only from within the cluster on a virtual IP?"
+    options:
+      - id: a
+        text: NodePort
+      - id: b
+        text: LoadBalancer
+      - id: c
+        text: ClusterIP
+      - id: d
+        text: ExternalName
+    correctAnswer: c
+    explanation: "ClusterIP is the default Service type. It allocates a virtual IP that is only routable inside the cluster. External clients cannot reach it directly. It is appropriate for services that are only called by other workloads in the same cluster."
+    wrongExplanations:
+      a: "NodePort extends ClusterIP by also opening a high-numbered port on every node, making the Service reachable from outside the cluster via `<NodeIP>:<NodePort>`."
+      b: "LoadBalancer extends NodePort by additionally requesting a cloud or external load balancer that forwards external traffic to the NodePort. It is the primary way to expose services externally in cloud environments."
+      d: "ExternalName does not allocate a ClusterIP at all; it is purely a DNS alias to an external hostname."
+
+  - id: q2
+    type: single-choice
+    prompt: "A NodePort Service is created without specifying `spec.ports[].nodePort`. What port does it use?"
+    options:
+      - id: a
+        text: "Port 80 or 443 depending on the application"
+      - id: b
+        text: "The same port as `spec.ports[].port` (the ClusterIP port)"
+      - id: c
+        text: "A random port from the 30000–32767 range, allocated by Kubernetes"
+      - id: d
+        text: "Port 8080, the default fallback for NodePort Services"
+    correctAnswer: c
+    explanation: "When `nodePort` is not specified, Kubernetes allocates a free port from the 30000–32767 range. This default range avoids conflicts with well-known ports (0–1023) and ephemeral ports. You can pin it to a specific value in that range by setting `spec.ports[].nodePort` explicitly."
+    wrongExplanations:
+      a: "Port 80 and 443 are privileged ports. kube-proxy uses iptables/ipvs rules on non-privileged ports; the NodePort range starts at 30000 by default."
+      b: "The `spec.ports[].port` (ClusterIP port) and `nodePort` are independent fields. The NodePort is always in the 30000–32767 range."
+      d: "There is no default of 8080. The specific value is always allocated from the configured NodePort range."
+    tryCommand: kubectl get svc <name> -n <namespace> -o jsonpath='{.spec.ports[*].nodePort}'
+
+  - id: q3
+    type: single-choice
+    prompt: "You create a LoadBalancer Service in a bare-metal kind cluster (no cloud provider). The Service stays in `<pending>` for the `EXTERNAL-IP` column. Why?"
+    options:
+      - id: a
+        text: LoadBalancer Services require a namespace with the label `cloud=enabled`
+      - id: b
+        text: LoadBalancer Services rely on a cloud provider controller to provision an external IP; without one, the IP is never assigned
+      - id: c
+        text: The Service needs a public ClusterIP before it can request an external IP
+      - id: d
+        text: kind clusters do not support Services of any type other than ClusterIP
+    correctAnswer: b
+    explanation: "A LoadBalancer Service sends a request to the cloud provider controller (e.g., AWS CCM, GCP CCM) to provision an external load balancer. In a bare-metal or kind cluster with no cloud provider controller, no component fulfills that request and the EXTERNAL-IP stays `<pending>`. Tools like MetalLB can fill this role in bare-metal setups."
+    wrongExplanations:
+      a: "No such label requirement exists. LoadBalancer Services do not check namespace labels."
+      c: "All LoadBalancer Services already have a ClusterIP. The pending state is about the external IP provisioning, not the ClusterIP."
+      d: "kind clusters fully support NodePort and LoadBalancer Service types; the load balancer IP just never gets assigned without a provider or addon like MetalLB."
+
+  - id: q4
+    type: single-choice
+    prompt: "A developer uses `kubectl port-forward svc/api 8080:80` to test their local code against a cluster Service. Which statement best describes this approach?"
+    options:
+      - id: a
+        text: Port-forward creates a NodePort rule on the node; it is equivalent to a NodePort Service
+      - id: b
+        text: Port-forward opens a tunnel through the Kubernetes API server to a Pod; it is a debugging tool, not a production traffic path
+      - id: c
+        text: Port-forward is the recommended production method for exposing an internal API to developers
+      - id: d
+        text: Port-forward modifies the Service spec to add a temporary NodePort
+    correctAnswer: b
+    explanation: "`kubectl port-forward` establishes an authenticated tunnel from your local machine through the Kubernetes API server to a selected Pod. It is designed for debugging and development access. It terminates when the kubectl process exits, handles only one connection at a time gracefully, and is not suited for multi-user or sustained production traffic."
+    wrongExplanations:
+      a: "Port-forward does not create iptables rules or NodePort allocations. It runs entirely through the API server websocket tunnel."
+      c: "Port-forward is explicitly a development/debugging tool. Production exposure uses NodePort, LoadBalancer, or an Ingress resource."
+      d: "Port-forward does not modify the Service spec. The Service is unchanged; the tunnel is ephemeral and exists only in your kubectl process."
+    tryCommand: kubectl port-forward svc/<name> 8080:80 -n <namespace>
+
+  - id: q5
+    type: single-choice
+    prompt: "You have four Service types to choose from. Which one should you use to provide a DNS alias inside the cluster for a managed database endpoint (`db.us-east.rds.amazonaws.com`) without proxying traffic?"
+    options:
+      - id: a
+        text: ClusterIP with a custom selector matching the database Pods
+      - id: b
+        text: "NodePort with `externalTrafficPolicy: Local`"
+      - id: c
+        text: "ExternalName with `spec.externalName: db.us-east.rds.amazonaws.com`"
+      - id: d
+        text: LoadBalancer to forward traffic from the cluster to the RDS endpoint
+    correctAnswer: c
+    explanation: "ExternalName creates a DNS alias: queries for the Service's cluster-internal name return a CNAME pointing to `spec.externalName`. No traffic is proxied by kube-proxy. Applications in the cluster can refer to the database by a stable in-cluster DNS name (e.g., `db.production.svc.cluster.local`) and remain decoupled from the actual cloud endpoint hostname."
+    wrongExplanations:
+      a: "A ClusterIP Service with a selector targets Pods inside the cluster. An RDS endpoint is outside the cluster and has no Pods to select."
+      b: "NodePort is for exposing cluster-internal Services to external clients, not for aliasing external services. `externalTrafficPolicy` controls source IP preservation, not external DNS aliasing."
+      d: "A LoadBalancer Service exposes cluster Pods to external traffic. It does not forward cluster-internal traffic to an external service endpoint."
+    tryCommand: kubectl get svc <name> -n <namespace> -o yaml

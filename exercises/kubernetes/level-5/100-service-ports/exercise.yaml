@@ -1,0 +1,61 @@
+schemaVersion: 1
+id: k8s-0100
+type: task
+title: Service Ports
+summary: Fix a misconfigured Service so it maps port 8080 to the container's port 80.
+track: kubernetes
+level: 5
+order: 3
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [services, clusterip, ports, targetport]
+prerequisites: [k8s-0099]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0100`"
+  - "Deployment `api` runs `nginx:1.27` with label `app=api`"
+  - "Service `api` exposes port `8080` and routes traffic to container port `80`"
+  - "Service `api` selector matches the `api` Deployment"
+
+hints:
+  - "Check the current Service config: `kubectl get svc api -n fl-k8s-0100 -o yaml`. Notice the `port` and `targetPort` fields."
+  - "The Service port (what clients connect to) is 8080. The targetPort (what the container listens on) is 80. These are two separate fields."
+  - "Edit the Service: `kubectl edit svc api -n fl-k8s-0100`. Change `port: 80` to `port: 8080` and set `targetPort: 80`."
+
+lifecycle:
+  namespaces: [fl-k8s-0100]
+  setup:
+    manifests: [setup/api.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api has 1 available replica
+    params:
+      name: api
+      namespace: fl-k8s-0100
+      replicas: 1
+  - id: service-ports
+    type: k8s.service-spec
+    label: Service api exposes port 8080 → targetPort 80
+    params:
+      name: api
+      namespace: fl-k8s-0100
+      type: ClusterIP
+      ports:
+        - port: 8080
+          targetPort: 80
+  - id: routes
+    type: k8s.service-selects
+    label: Service api routes to the api Deployment
+    params:
+      name: api
+      namespace: fl-k8s-0100
+      workload: { kind: Deployment, name: api }

@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0109
+type: task
+title: Resolve a Service
+summary: Use nslookup inside a Pod to look up a Service by its cluster-internal DNS name and understand the FQDN format.
+track: kubernetes
+level: 5
+order: 12
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [dns, services, nslookup, clusterip, networking]
+prerequisites: [k8s-0108]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0109`"
+  - "Deployment `api` runs `nginx:1.27` with label `app=api` and 1 available replica"
+  - "Service `api` is ClusterIP and routes to the `api` Deployment on port 80"
+  - "DNS name `api.fl-k8s-0109` resolves inside the cluster"
+
+hints:
+  - "Run `kubectl exec grader-client -n fl-k8s-0109 -- nslookup api.fl-k8s-0109.svc.cluster.local` to verify DNS resolution using the fully qualified domain name."
+  - "The fully qualified name is `api.fl-k8s-0109.svc.cluster.local`. The short form `api` also resolves inside the same namespace because of DNS search paths."
+  - "Create the Service first: `kubectl expose deployment api --port=80 --target-port=80 -n fl-k8s-0109`"
+
+lifecycle:
+  namespaces: [fl-k8s-0109]
+  setup:
+    manifests: [setup/api.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api has 1 available replica
+    params:
+      name: api
+      namespace: fl-k8s-0109
+      replicas: 1
+  - id: routes
+    type: k8s.service-selects
+    label: Service api routes to the api Deployment
+    params:
+      name: api
+      namespace: fl-k8s-0109
+      workload: { kind: Deployment, name: api }
+  - id: dns
+    type: k8s.dns-resolve
+    label: DNS name api.fl-k8s-0109 resolves inside the cluster
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0109
+      hostname: api.fl-k8s-0109

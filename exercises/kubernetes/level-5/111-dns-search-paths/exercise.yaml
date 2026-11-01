@@ -1,0 +1,66 @@
+schemaVersion: 1
+id: k8s-0111
+type: task
+title: DNS Search Paths
+summary: Inspect /etc/resolv.conf inside a Pod to understand how Kubernetes configures DNS search domains that make short Service names work within a namespace.
+track: kubernetes
+level: 5
+order: 14
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [dns, services, resolv-conf, search-domains, networking]
+prerequisites: [k8s-0110]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0111`"
+  - "Deployment `metrics` runs `nginx:1.27` with label `app=metrics` and 1 available replica"
+  - "Service `metrics` is ClusterIP and routes to the `metrics` Deployment on port 80"
+  - "At least 1 ready endpoint behind Service `metrics`"
+  - "DNS name `metrics.fl-k8s-0111` resolves inside the cluster"
+
+hints:
+  - "Create the Service: `kubectl expose deployment metrics --port=80 --target-port=80 -n fl-k8s-0111`"
+  - "Inspect search paths: `kubectl exec grader-client -n fl-k8s-0111 -- cat /etc/resolv.conf`"
+  - "The search list includes `fl-k8s-0111.svc.cluster.local` which allows the short name `metrics` to resolve within the same namespace."
+
+lifecycle:
+  namespaces: [fl-k8s-0111]
+  setup:
+    manifests: [setup/metrics.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment metrics has 1 available replica
+    params:
+      name: metrics
+      namespace: fl-k8s-0111
+      replicas: 1
+  - id: routes
+    type: k8s.service-selects
+    label: Service metrics routes to the metrics Deployment
+    params:
+      name: metrics
+      namespace: fl-k8s-0111
+      workload: { kind: Deployment, name: metrics }
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service metrics has at least 1 ready endpoint
+    params:
+      name: metrics
+      namespace: fl-k8s-0111
+      minReady: 1
+  - id: dns
+    type: k8s.dns-resolve
+    label: DNS name metrics.fl-k8s-0111 resolves inside the cluster
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0111
+      hostname: metrics.fl-k8s-0111

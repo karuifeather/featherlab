@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l5-005
+activityType: knowledge-check
+title: Blue/Green Deployment Strategies
+summary: Understand how blue/green deployments work in Kubernetes using Service selector switching, and how to roll back instantly.
+track: kubernetes
+level: 5
+order: 22.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [blue-green, deployment, selectors, rollback, traffic-switching]
+relatedLabs: [k8s-0116, k8s-0117, k8s-0118, k8s-0119]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the defining characteristic of a blue/green deployment in Kubernetes?"
+    options:
+      - id: a
+        text: Two Deployments run simultaneously; a Service selector is updated to switch all traffic from one to the other
+      - id: b
+        text: Traffic is gradually shifted from one Pod to another by incrementally changing replica counts
+      - id: c
+        text: Two namespaces run identical workloads; a DNS entry is switched between them
+      - id: d
+        text: A single Deployment rolls out new Pods and terminates old ones in sequence
+    correctAnswer: a
+    explanation: "In a Kubernetes blue/green deployment, you maintain two complete Deployments (blue=current, green=new). The Service selector determines which Deployment receives traffic. Cutting over is a single atomic update to the selector — all traffic shifts at once with zero old-version requests in flight after the switch."
+    wrongExplanations:
+      b: "Gradually shifting traffic via replica counts describes a canary deployment, not blue/green. Blue/green is an all-or-nothing switch."
+      c: "Blue/green is possible at the namespace level, but the standard Kubernetes approach uses a single namespace with two Deployments and one Service. DNS switching is not the standard mechanism."
+      d: "A rolling update (single Deployment, incremental Pod replacement) is a different strategy. Blue/green always has two complete sets of Pods alive simultaneously."
+
+  - id: q2
+    type: single-choice
+    prompt: "You have a blue Deployment with label `version=blue` and a green Deployment with label `version=green`. The Service currently has `selector: {app: web, version: blue}`. How do you switch all traffic to green?"
+    options:
+      - id: a
+        text: "`kubectl scale deployment web-blue --replicas=0`"
+      - id: b
+        text: '`kubectl patch svc web -p ''{"spec":{"selector":{"app":"web","version":"green"}}}''`'
+      - id: c
+        text: Delete the blue Deployment and let the Service fall back to green automatically
+      - id: d
+        text: "`kubectl set image deployment/web-blue nginx=new-image`"
+    correctAnswer: b
+    explanation: "Patching the Service selector from `version: blue` to `version: green` is the blue/green switch. kube-proxy updates its rules almost immediately and new connections go to the green Pods. The blue Deployment remains intact (for instant rollback) but receives no new traffic."
+    wrongExplanations:
+      a: "Scaling blue to 0 replicas removes the endpoints but does not redirect traffic to green; the Service selector still points to `version=blue`, so it would have zero endpoints and refuse connections."
+      c: "The Service does not automatically fall back to green when blue is deleted. The selector explicitly picks blue; deleting blue leaves the Service with zero endpoints."
+      d: "`kubectl set image` changes the image on the blue Deployment — it does not switch traffic to the green Deployment. This would trigger a rolling update of blue, defeating the purpose of blue/green."
+    tryCommand: kubectl patch svc web -n <namespace> -p '{"spec":{"selector":{"app":"web","version":"green"}}}'
+
+  - id: q3
+    type: single-choice
+    prompt: "After switching the Service to green you discover a critical bug. What is the fastest way to restore service to the blue version?"
+    options:
+      - id: a
+        text: Scale the green Deployment to 0 and wait for blue to automatically become active
+      - id: b
+        text: "Patch the Service selector back to `version: blue`"
+      - id: c
+        text: Run `kubectl rollout undo deployment/web-green`
+      - id: d
+        text: Delete the green Deployment and redeploy it with the old image
+    correctAnswer: b
+    explanation: "Because the blue Deployment is still running with its Pods intact, rollback is a single Service selector patch from `version: green` back to `version: blue`. Traffic shifts instantly. This is one of the key advantages of blue/green over rolling updates — rollback is as fast as the initial cutover."
+    wrongExplanations:
+      a: "Scaling green to 0 does not automatically redirect traffic to blue. The Service selector still points to green; with zero green Pods, the Service would have no endpoints."
+      c: "`kubectl rollout undo` applies to the Deployment's own Pod template history. It would change the green Deployment's Pod image, not switch traffic back to blue."
+      d: "Deleting and redeploying green takes minutes and risks a gap in service. Patching the selector takes seconds."
+    tryCommand: kubectl patch svc web -n <namespace> -p '{"spec":{"selector":{"app":"web","version":"blue"}}}'
+
+  - id: q4
+    type: single-choice
+    prompt: "What is the primary cost of a blue/green deployment compared to a standard rolling update?"
+    options:
+      - id: a
+        text: Blue/green requires Ingress; rolling updates work with any Service type
+      - id: b
+        text: Blue/green requires twice the compute resources while both versions run simultaneously
+      - id: c
+        text: Blue/green cannot be used with StatefulSets or databases
+      - id: d
+        text: Blue/green always causes a brief period of zero available endpoints during the switch
+    correctAnswer: b
+    explanation: "During the period between deploying green and cutting over (and during retention of blue post-switch for rollback), both Deployments run at full replica count. This temporarily doubles compute resources. For most stateless web workloads this cost is acceptable, but it matters for resource-constrained clusters."
+    wrongExplanations:
+      a: "Blue/green works with any Service type that supports selector-based routing — no Ingress required. Ingress would be an additional layer, but it is not necessary."
+      c: "Blue/green can be used with StatefulSets or other workloads; it does require separate handling for database schema migrations. The statement 'cannot be used' is too strong."
+      d: "The Service selector switch is near-instantaneous. There is no gap with zero endpoints; kube-proxy updates before new connections arrive in practice."
+
+  - id: q5
+    type: single-choice
+    prompt: "How do you verify that the Service endpoints have switched from blue to green after patching the selector?"
+    options:
+      - id: a
+        text: "`kubectl describe deployment web-green` — check the Available replicas count"
+      - id: b
+        text: "`kubectl get endpoints web -n <namespace>` — confirm that the listed IPs belong to the green Pods"
+      - id: c
+        text: "`kubectl logs svc/web` — check recent access log entries"
+      - id: d
+        text: "`kubectl rollout status svc/web` — confirm the Service rollout is complete"
+    correctAnswer: b
+    explanation: "`kubectl get endpoints web` shows the Pod IP:port pairs the Service is currently routing to. After switching the selector to `version: green`, these IPs should match the green Pod IPs (`kubectl get pods -l version=green -o wide`). If they match, the switch is complete."
+    wrongExplanations:
+      a: "The Deployment's Available count tells you the green Pods are healthy, but not that the Service is pointing to them. The selector patch is what connects them."
+      c: "Services do not have logs. `kubectl logs` reads container stdout; it works on Pods, not Services."
+      d: "`kubectl rollout status` applies to Deployments, DaemonSets, and StatefulSets — not Services. Services have no rollout concept."
+    tryCommand: kubectl get endpoints web -n <namespace>

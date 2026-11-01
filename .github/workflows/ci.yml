@@ -73,6 +73,10 @@ jobs:
             files: test/integration/level2-circuit.test.mjs
           - suite: level-3
             files: test/integration/level3-circuit.test.mjs
+          - suite: level-4
+            files: test/integration/level4-circuit.test.mjs
+          - suite: level-5
+            files: test/integration/level5-circuit.test.mjs
           - suite: lifecycle-and-misc
             files: >-
               test/integration/lifecycle.test.mjs

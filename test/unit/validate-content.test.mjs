@@ -30,7 +30,7 @@ test("the packaged exercises are valid", () => {
   const result = validateContent();
   assert.deepEqual(result.problems, []);
   assert.equal(result.ok, true);
-  assert.equal(result.count, 97);
+  assert.equal(result.count, 124);
 });
 
 test("valid content passes", () => {
@@ -220,7 +220,7 @@ function cli(...args) {
 test("CLI: exits 0 for the packaged content, without docker or kind on PATH", () => {
   const out = cli();
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /Validated 97 exercises: OK/);
+  assert.match(out.stdout, /Validated 124 exercises: OK/);
 });
 
 test("CLI: exits non-zero and prints file, property and message for bad content", () => {

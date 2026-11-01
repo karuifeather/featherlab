@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0112
+type: task
+title: Headless Service
+summary: "Create a headless Service (clusterIP: None) so that DNS returns individual Pod IPs instead of a single virtual IP, enabling direct Pod addressing."
+track: kubernetes
+level: 5
+order: 15
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [dns, services, headless, clusterip, statefulset, networking]
+prerequisites: [k8s-0111]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0112`"
+  - "Deployment `db` runs `nginx:1.27` with label `app=db` and 2 available replicas"
+  - "Service `db-headless` has `clusterIP: None` and routes to the `db` Deployment"
+  - "DNS name `db-headless.fl-k8s-0112` resolves inside the cluster"
+
+hints:
+  - "A headless Service is created with `clusterIP: None` in the spec — you cannot set this with `kubectl expose`, you need a YAML manifest."
+  - "The selector still works the same way; the difference is that DNS returns A records for each ready Pod IP instead of a single VIP."
+  - "Test with: `kubectl run tmp --restart=Never --rm -it --image=busybox:1.36 -n fl-k8s-0112 -- nslookup db-headless.fl-k8s-0112.svc.cluster.local`"
+
+lifecycle:
+  namespaces: [fl-k8s-0112]
+  setup:
+    manifests: [setup/db.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment db has 2 available replicas
+    params:
+      name: db
+      namespace: fl-k8s-0112
+      replicas: 2
+  - id: headless-spec
+    type: k8s.service-spec
+    label: Service db-headless has clusterIP None
+    params:
+      name: db-headless
+      namespace: fl-k8s-0112
+      clusterIP: "None"
+  - id: routes
+    type: k8s.service-selects
+    label: Service db-headless routes to the db Deployment
+    params:
+      name: db-headless
+      namespace: fl-k8s-0112
+      workload: { kind: Deployment, name: db }
+  - id: dns
+    type: k8s.dns-resolve
+    label: DNS name db-headless.fl-k8s-0112 resolves inside the cluster
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0112
+      hostname: db-headless.fl-k8s-0112

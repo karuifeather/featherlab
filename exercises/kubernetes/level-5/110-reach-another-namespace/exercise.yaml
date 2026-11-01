@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: k8s-0110
+type: task
+title: Reach Another Namespace
+summary: Send an HTTP request from one namespace to a Service in a different namespace using the cross-namespace DNS name.
+track: kubernetes
+level: 5
+order: 13
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [dns, services, cross-namespace, clusterip, networking]
+prerequisites: [k8s-0109]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespaces: `fl-k8s-0110` (client) and `fl-k8s-0110-app` (application)"
+  - "Deployment `catalog` runs in `fl-k8s-0110-app` with `nginx:1.27` and 2 available replicas"
+  - "Service `catalog` in `fl-k8s-0110-app` routes to the `catalog` Deployment on port 80"
+  - "DNS name `catalog.fl-k8s-0110-app` resolves from `fl-k8s-0110`"
+  - "HTTP request from `fl-k8s-0110` to `catalog.fl-k8s-0110-app:80` returns an nginx response"
+
+hints:
+  - "Within the same namespace `api` resolves fine. From a different namespace you must use `catalog.fl-k8s-0110-app` — the namespace suffix is required."
+  - "The grader client is in `fl-k8s-0110`. The Service is in `fl-k8s-0110-app`. Use the name `catalog.fl-k8s-0110-app` to reach it."
+  - "Create the Service: `kubectl expose deployment catalog --port=80 --target-port=80 -n fl-k8s-0110-app`"
+
+lifecycle:
+  namespaces: [fl-k8s-0110, fl-k8s-0110-app]
+  setup:
+    manifests: [setup/catalog.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment catalog has 2 available replicas in fl-k8s-0110-app
+    params:
+      name: catalog
+      namespace: fl-k8s-0110-app
+      replicas: 2
+  - id: routes
+    type: k8s.service-selects
+    label: Service catalog routes to the catalog Deployment
+    params:
+      name: catalog
+      namespace: fl-k8s-0110-app
+      workload: { kind: Deployment, name: catalog }
+  - id: dns
+    type: k8s.dns-resolve
+    label: DNS name catalog.fl-k8s-0110-app resolves from fl-k8s-0110
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0110
+      hostname: catalog.fl-k8s-0110-app
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request to catalog.fl-k8s-0110-app returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0110
+      host: catalog.fl-k8s-0110-app
+      port: 80
+      contains: nginx

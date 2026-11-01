@@ -1,0 +1,59 @@
+schemaVersion: 1
+id: k8s-0123
+type: task
+title: Debug DNS
+summary: Diagnose why a client in one namespace cannot reach a Service in another, then verify the correct cross-namespace DNS name resolves.
+track: kubernetes
+level: 5
+order: 26
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [dns, services, cross-namespace, troubleshooting]
+prerequisites: [k8s-0122]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0123`: Pod `grader-client` is the client used for DNS and HTTP checks"
+  - "Namespace `fl-k8s-0123-svc`: Deployment `search` has 1 ready replica"
+  - "From `fl-k8s-0123`, hostname `search.fl-k8s-0123-svc` resolves via DNS and returns an nginx response"
+
+hints:
+  - "DNS search paths only include the Pod's own namespace. From `fl-k8s-0123`, the name `search` alone will not resolve — you need `search.fl-k8s-0123-svc`."
+  - "Check your client Pod's search paths: `kubectl exec grader-client -n fl-k8s-0123 -- cat /etc/resolv.conf`"
+  - "Run nslookup from the client: `kubectl exec grader-client -n fl-k8s-0123 -- nslookup search.fl-k8s-0123-svc.svc.cluster.local`"
+
+lifecycle:
+  namespaces: [fl-k8s-0123, fl-k8s-0123-svc]
+  setup:
+    manifests: [setup/search.yaml]
+
+checks:
+  - id: search-ready
+    type: k8s.rollout-complete
+    label: Deployment search has 1 available replica
+    params:
+      name: search
+      namespace: fl-k8s-0123-svc
+      replicas: 1
+  - id: dns
+    type: k8s.dns-resolve
+    label: Hostname search.fl-k8s-0123-svc resolves from fl-k8s-0123
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0123
+      hostname: search.fl-k8s-0123-svc
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request to search.fl-k8s-0123-svc:80 returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0123
+      host: search.fl-k8s-0123-svc
+      port: 80
+      contains: nginx

@@ -1,0 +1,60 @@
+schemaVersion: 1
+id: k8s-0105
+type: task
+title: Multiple Backends
+summary: Scale a Deployment to 3 replicas and confirm all 3 appear as ready endpoints, then verify HTTP traffic flows through the Service.
+track: kubernetes
+level: 5
+order: 8
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, clusterip, endpoints, scale, http-probe]
+prerequisites: [k8s-0104]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0105`"
+  - "Deployment `worker` has 3 available replicas"
+  - "Service `worker` has at least 3 ready endpoints"
+  - "HTTP request through Service `worker` returns a response containing `nginx`"
+
+hints:
+  - "Scale the Deployment: `kubectl scale deployment worker --replicas=3 -n fl-k8s-0105`"
+  - "Wait for the rollout: `kubectl rollout status deployment/worker -n fl-k8s-0105 --timeout=120s`"
+  - "Check EndpointSlices: `kubectl get endpointslices -l kubernetes.io/service-name=worker -n fl-k8s-0105`"
+
+lifecycle:
+  namespaces: [fl-k8s-0105]
+  setup:
+    manifests: [setup/worker.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment worker has 3 available replicas
+    params:
+      name: worker
+      namespace: fl-k8s-0105
+      replicas: 3
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service worker has at least 3 ready endpoints
+    params:
+      name: worker
+      namespace: fl-k8s-0105
+      minReady: 3
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service worker returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0105
+      host: worker.fl-k8s-0105
+      port: 80
+      contains: nginx

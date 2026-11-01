@@ -1,0 +1,79 @@
+schemaVersion: 1
+id: k8s-0108
+type: task
+title: Restore a Broken Service
+summary: Fix two bugs in a Service — a wrong targetPort and verify HTTP traffic flows after correction.
+track: kubernetes
+level: 5
+order: 11
+difficulty: advanced
+estimatedMinutes: 15
+tags: [services, clusterip, ports, targetport, troubleshooting, http-probe]
+prerequisites: [k8s-0107]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0108`"
+  - "Deployment `inventory` has 2 available replicas"
+  - "Service `inventory` exposes port 9090 and routes to container port 80"
+  - "Service `inventory` selector matches the inventory Deployment"
+  - "Service `inventory` has at least 2 ready endpoints"
+  - "HTTP request through Service `inventory` on port 9090 returns a response containing `nginx`"
+
+hints:
+  - "There are two issues: (1) the targetPort is wrong, (2) no endpoints."
+  - "Check the Service: `kubectl get svc inventory -n fl-k8s-0108 -o yaml`"
+  - "The Service exposes port 9090 but routes to targetPort 9090 — nginx listens on port 80. Fix with `kubectl edit svc inventory -n fl-k8s-0108`."
+
+lifecycle:
+  namespaces: [fl-k8s-0108]
+  setup:
+    manifests: [setup/inventory.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment inventory has 2 available replicas
+    params:
+      name: inventory
+      namespace: fl-k8s-0108
+      replicas: 2
+  - id: service-ports
+    type: k8s.service-spec
+    label: Service inventory exposes port 9090 → targetPort 80
+    params:
+      name: inventory
+      namespace: fl-k8s-0108
+      type: ClusterIP
+      ports:
+        - port: 9090
+          targetPort: 80
+  - id: routes
+    type: k8s.service-selects
+    label: Service inventory routes to the inventory Deployment
+    params:
+      name: inventory
+      namespace: fl-k8s-0108
+      workload: { kind: Deployment, name: inventory }
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service inventory has at least 2 ready endpoints
+    params:
+      name: inventory
+      namespace: fl-k8s-0108
+      minReady: 2
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service inventory port 9090 returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0108
+      host: inventory.fl-k8s-0108
+      port: 9090
+      contains: nginx

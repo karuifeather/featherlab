@@ -56,12 +56,12 @@ const environmentConfirm = () => page.locator('[data-testid="environment-confirm
 const lesson = (title) =>
   lessons().filter({ has: page.locator(".lesson-title").getByText(title, { exact: true }) });
 
-test("launcher offers the Kubernetes track, in curriculum order across four levels", async () => {
+test("launcher offers the Kubernetes track, in curriculum order across five levels", async () => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kubernetes" })).toBeVisible();
   await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
-  // Level 0 is open by default. Expand Level 1–4 so the full
-  // list of 97 labs is in the DOM and can be addressed by index.
+  // Level 0 is open by default. Expand Level 1–5 so the full
+  // list of 124 labs is in the DOM and can be addressed by index.
   const levelHeaders = page.locator(".level-header");
   await expect(page.locator(".level-label")).toHaveText([
     "Level 0",
@@ -69,12 +69,14 @@ test("launcher offers the Kubernetes track, in curriculum order across four leve
     "Level 2",
     "Level 3",
     "Level 4",
+    "Level 5",
   ]);
   await levelHeaders.nth(1).click(); // expand Level 1
   await levelHeaders.nth(2).click(); // expand Level 2
   await levelHeaders.nth(3).click(); // expand Level 3
   await levelHeaders.nth(4).click(); // expand Level 4
-  await expect(lessons()).toHaveCount(97);
+  await levelHeaders.nth(5).click(); // expand Level 5
+  await expect(lessons()).toHaveCount(124);
   // Backend order, not id order: k8s-0011..k8s-0014 come before k8s-0002.
   await expect(lessons().nth(0)).toContainText("Your first Pod");
   await expect(lessons().nth(1)).toContainText("Inspect a Pod");
@@ -84,6 +86,8 @@ test("launcher offers the Kubernetes track, in curriculum order across four leve
   await expect(lessons().nth(17)).toContainText("RollingUpdate vs Recreate");
   await expect(lessons().nth(77)).toContainText("Application Patterns Mastery");
   await expect(lessons().nth(96)).toContainText("Master Scheduling Placement");
+  await expect(lessons().nth(97)).toContainText("Your First Service");
+  await expect(lessons().nth(123)).toContainText("Services and DNS Mastery");
 });
 
 test("locked exercises explain which prerequisite unlocks them", async () => {

@@ -1,0 +1,70 @@
+schemaVersion: 1
+id: k8s-0099
+type: task
+title: Connect to a Service
+summary: Use a temporary client Pod to send an HTTP request through a ClusterIP Service and confirm the application responds.
+track: kubernetes
+level: 5
+order: 2
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, clusterip, connectivity, wget, client-pod]
+prerequisites: [k8s-0098]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0099`"
+  - "Deployment `backend` runs `nginx:1.27` with label `app=backend` and 1 available replica"
+  - "Service `backend` is ClusterIP and routes to the `backend` Deployment on port 80"
+  - "HTTP request through the Service returns a response containing `nginx`"
+
+hints:
+  - "First verify the Service exists and has endpoints: `kubectl get svc backend -n fl-k8s-0099` and `kubectl describe svc backend -n fl-k8s-0099`. The Endpoints field must not be empty (`<none>`)."
+  - "Run a temporary client Pod in the same namespace: `kubectl run client --restart=Never --image=busybox:1.36 -n fl-k8s-0099 --rm -it -- wget -qO- http://backend:80/`"
+  - "The Service name `backend` resolves within the same namespace because Kubernetes DNS provides a search path for `<service>.<namespace>.svc.cluster.local`. You can also use the fully qualified name `backend.fl-k8s-0099`."
+
+lifecycle:
+  namespaces: [fl-k8s-0099]
+  setup:
+    manifests: [setup/backend.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment backend has 1 available replica
+    params:
+      name: backend
+      namespace: fl-k8s-0099
+      replicas: 1
+  - id: service-type
+    type: k8s.service-spec
+    label: Service backend is ClusterIP with port 80
+    params:
+      name: backend
+      namespace: fl-k8s-0099
+      type: ClusterIP
+      ports:
+        - port: 80
+          targetPort: 80
+  - id: routes
+    type: k8s.service-selects
+    label: Service backend routes to the backend Deployment
+    params:
+      name: backend
+      namespace: fl-k8s-0099
+      workload: { kind: Deployment, name: backend }
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service backend returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0099
+      host: backend.fl-k8s-0099
+      port: 80
+      contains: nginx

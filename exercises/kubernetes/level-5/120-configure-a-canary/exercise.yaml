@@ -1,0 +1,66 @@
+schemaVersion: 1
+id: k8s-0120
+type: task
+title: Configure a Canary
+summary: Create a canary Deployment that shares the Service's selector so a fraction of traffic reaches the new version.
+track: kubernetes
+level: 5
+order: 23
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [services, canary, deployments, traffic-routing]
+prerequisites: [k8s-0119]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0120`"
+  - "Deployment `checkout-canary` exists with 1 replica, labels `app=checkout` and `version=canary`, image `nginx:1.27`"
+  - "Service `checkout` selector is `app: checkout` only (no version label)"
+  - "Service `checkout` has at least 5 ready endpoints (4 stable + 1 canary)"
+
+hints:
+  - "The Service selector must remain `app: checkout` without a `version` label so it selects both Deployments."
+  - "Give the canary Deployment the same `app: checkout` label on its Pods as the stable Deployment, plus an additional `version: canary` label for differentiation."
+  - "Check both Deployments are rolled out: `kubectl rollout status deployment/checkout-stable -n fl-k8s-0120` and `kubectl rollout status deployment/checkout-canary -n fl-k8s-0120`."
+
+lifecycle:
+  namespaces: [fl-k8s-0120]
+  setup:
+    manifests: [setup/checkout.yaml]
+
+checks:
+  - id: stable-ready
+    type: k8s.rollout-complete
+    label: Deployment checkout-stable has 4 available replicas
+    params:
+      name: checkout-stable
+      namespace: fl-k8s-0120
+      replicas: 4
+  - id: canary-ready
+    type: k8s.rollout-complete
+    label: Deployment checkout-canary has 1 available replica
+    params:
+      name: checkout-canary
+      namespace: fl-k8s-0120
+      replicas: 1
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service checkout has at least 5 ready endpoints
+    params:
+      name: checkout
+      namespace: fl-k8s-0120
+      minReady: 5
+  - id: selector
+    type: k8s.service-spec
+    label: Service checkout selector is app=checkout only
+    params:
+      name: checkout
+      namespace: fl-k8s-0120
+      selector:
+        app: checkout

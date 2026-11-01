@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0106
+type: task
+title: Readiness Matters
+summary: Fix a failing readiness probe so Pods become ready and appear as live endpoints in the Service.
+track: kubernetes
+level: 5
+order: 9
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [services, endpointslices, readiness-probe, troubleshooting]
+prerequisites: [k8s-0105]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0106`"
+  - "Deployment `payments` has 3 available replicas"
+  - "Service `payments` has at least 3 ready endpoints"
+  - "Service `payments` selector matches the payments Deployment"
+
+hints:
+  - "Check why endpoints are missing: `kubectl get endpoints payments -n fl-k8s-0106` — it will show `<none>`."
+  - "Inspect Pod status: `kubectl describe pods -n fl-k8s-0106 | grep -A5 Readiness`"
+  - "The readiness probe path `/ready` does not exist in nginx. Edit the Deployment and change `path: /ready` to `path: /`."
+
+lifecycle:
+  namespaces: [fl-k8s-0106]
+  setup:
+    manifests: [setup/payments.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment payments has 3 available replicas
+    params:
+      name: payments
+      namespace: fl-k8s-0106
+      replicas: 3
+  - id: routes
+    type: k8s.service-selects
+    label: Service payments routes to the payments Deployment
+    params:
+      name: payments
+      namespace: fl-k8s-0106
+      workload: { kind: Deployment, name: payments }
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service payments has at least 3 ready endpoints
+    params:
+      name: payments
+      namespace: fl-k8s-0106
+      minReady: 3

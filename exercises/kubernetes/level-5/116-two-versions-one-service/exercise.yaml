@@ -1,0 +1,59 @@
+schemaVersion: 1
+id: k8s-0116
+type: task
+title: Two Versions, One Service
+summary: Understand how a single Service selector can target one of two identically-labeled Deployments. Scale the idle version to prepare for a traffic switch.
+track: kubernetes
+level: 5
+order: 19
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, blue-green, selectors, deployments]
+prerequisites: [k8s-0115]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0116`"
+  - "Deployment `web-green` has 3 available replicas"
+  - "Service `web` selector still routes to the `web-blue` Deployment (selector: app=web, version=blue)"
+
+hints:
+  - "Inspect the Service selector: `kubectl get svc web -n fl-k8s-0116 -o jsonpath='{.spec.selector}'`. Note that `version=blue` means only Pods with that label receive traffic."
+  - "Scale web-green: `kubectl scale deployment web-green --replicas=3 -n fl-k8s-0116`"
+  - "Do NOT change the Service selector in this exercise — you are only scaling the idle version."
+
+lifecycle:
+  namespaces: [fl-k8s-0116]
+  setup:
+    manifests: [setup/blue-green.yaml]
+
+checks:
+  - id: green-scaled
+    type: k8s.rollout-complete
+    label: Deployment web-green has 3 available replicas
+    params:
+      name: web-green
+      namespace: fl-k8s-0116
+      replicas: 3
+  - id: service-still-blue
+    type: k8s.service-spec
+    label: Service web selector still targets version=blue
+    params:
+      name: web
+      namespace: fl-k8s-0116
+      selector:
+        app: web
+        version: blue
+  - id: routes-to-blue
+    type: k8s.service-selects
+    label: Service web routes to the web-blue Deployment
+    params:
+      name: web
+      namespace: fl-k8s-0116
+      workload: { kind: Deployment, name: web-blue }

@@ -22,6 +22,7 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
   const execEnvMap = new Map(); // key: `${podName}/${envKey}`, value: string | null (null = unset)
   const execFileMap = new Map(); // key: `${podName}/${path}`, value: string | null (null = absent)
   const execContainerErrors = new Set(); // key: `${podName}/${container}`, returns server error
+  const execArgvMap = new Map(); // key: `${podName}/${cmd}`, value: {exitCode, stdout, stderr}
   const cluster = {
     calls,
     down: false,
@@ -39,6 +40,13 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
     /** Simulate kubectl exec failing for a container (e.g. container not found). */
     setExecContainerError(podName, container) {
       execContainerErrors.add(`${podName}/${container}`);
+    },
+    /**
+     * Seed an execArgv result: the first command word (e.g. "wget", "nslookup") is the key.
+     * `setExecArgvResult(podName, "wget", { exitCode: 0, stdout: "Welcome to nginx" })`
+     */
+    setExecArgvResult(podName, cmd, result) {
+      execArgvMap.set(`${podName}/${cmd}`, result);
     },
     put(resource) {
       const { kind, metadata } = resource;
@@ -157,6 +165,13 @@ export function createFakeCluster({ resources = [], context = "kind-featherlab" 
           return { stdout: "", stderr: "command terminated with exit code 1", exitCode: 1 };
         }
         // args after -- are: printenv KEY
+        const firstCmd = ddIdx >= 0 ? args[ddIdx + 1] : undefined;
+        // execArgv dispatch: wget, nslookup, or any other seeded command
+        if (firstCmd && firstCmd !== "printenv") {
+          const cmdResult = execArgvMap.get(`${podName}/${firstCmd}`);
+          if (cmdResult) return cmdResult;
+          return { stdout: "", stderr: `${firstCmd}: not found`, exitCode: 1 };
+        }
         const envKey = ddIdx >= 0 ? args[ddIdx + 2] : undefined;
         const mapKey = `${podName}/${envKey}`;
         const value = execEnvMap.get(mapKey); // undefined = not seeded, null = explicitly unset

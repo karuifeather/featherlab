@@ -1,0 +1,69 @@
+schemaVersion: 1
+id: k8s-0101
+type: task
+title: Named Ports
+summary: Create a Service that targets a container port by name rather than number.
+track: kubernetes
+level: 5
+order: 4
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [services, clusterip, named-ports, targetport]
+prerequisites: [k8s-0100]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0101`"
+  - "Deployment `catalog` has a container port named `http` (port 80)"
+  - "Service `catalog` exposes port 80 with targetPort `http`"
+  - "Service `catalog` selector matches the catalog Deployment"
+  - "At least 1 ready endpoint backing Service `catalog`"
+
+hints:
+  - "Inspect the Deployment to see the named port: `kubectl get deploy catalog -n fl-k8s-0101 -o yaml | grep -A3 ports`"
+  - "When creating a Service, targetPort can be either a number or the name of a container port."
+  - "Use `kubectl expose deployment catalog --port=80 --target-port=http -n fl-k8s-0101` or write a manifest with `targetPort: http`."
+
+lifecycle:
+  namespaces: [fl-k8s-0101]
+  setup:
+    manifests: [setup/catalog.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment catalog has 1 available replica
+    params:
+      name: catalog
+      namespace: fl-k8s-0101
+      replicas: 1
+  - id: service-ports
+    type: k8s.service-spec
+    label: Service catalog exposes port 80 → targetPort http
+    params:
+      name: catalog
+      namespace: fl-k8s-0101
+      type: ClusterIP
+      ports:
+        - port: 80
+          targetPort: http
+  - id: routes
+    type: k8s.service-selects
+    label: Service catalog routes to the catalog Deployment
+    params:
+      name: catalog
+      namespace: fl-k8s-0101
+      workload: { kind: Deployment, name: catalog }
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service catalog has at least 1 ready endpoint
+    params:
+      name: catalog
+      namespace: fl-k8s-0101
+      minReady: 1

@@ -150,6 +150,40 @@ test("the prerequisite graph is the designed curriculum, not one linear chain", 
     "k8s-0095": ["k8s-0094"],
     "k8s-0096": ["k8s-0095"],
     "k8s-0097": ["k8s-0096"],
+    // Level 5: M5.7 Circuit A — ClusterIP Fundamentals.
+    "k8s-0098": ["k8s-0097"],
+    "k8s-0099": ["k8s-0098"],
+    "k8s-0100": ["k8s-0099"],
+    "k8s-0101": ["k8s-0100"],
+    "k8s-0102": ["k8s-0101"],
+    "k8s-0103": ["k8s-0102"],
+    // Level 5: M5.7 Circuit B — EndpointSlices and Backend Readiness.
+    "k8s-0104": ["k8s-0103"],
+    "k8s-0105": ["k8s-0104"],
+    "k8s-0106": ["k8s-0105"],
+    "k8s-0107": ["k8s-0106"],
+    "k8s-0108": ["k8s-0107"],
+    // Level 5: M5.7 Circuit C — DNS.
+    "k8s-0109": ["k8s-0108"],
+    "k8s-0110": ["k8s-0109"],
+    "k8s-0111": ["k8s-0110"],
+    "k8s-0112": ["k8s-0111"],
+    "k8s-0113": ["k8s-0112"],
+    // Level 5: M5.7 Circuit D — Service Types.
+    "k8s-0114": ["k8s-0113"],
+    "k8s-0115": ["k8s-0114"],
+    // Level 5: M5.7 Circuit E — Blue/Green Deployment.
+    "k8s-0116": ["k8s-0115"],
+    "k8s-0117": ["k8s-0116"],
+    "k8s-0118": ["k8s-0117"],
+    "k8s-0119": ["k8s-0118"],
+    // Level 5: M5.7 Circuit F — Canary Traffic.
+    "k8s-0120": ["k8s-0119"],
+    "k8s-0121": ["k8s-0120"],
+    "k8s-0122": ["k8s-0121"],
+    // Level 5: M5.7 Circuit G — DNS Troubleshooting and Mastery.
+    "k8s-0123": ["k8s-0122"],
+    "k8s-0124": ["k8s-0123"],
   });
 });
 

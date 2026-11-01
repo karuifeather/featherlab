@@ -1,0 +1,111 @@
+schemaVersion: 1
+id: kq-k8s-l5-006
+activityType: knowledge-check
+title: Canary Traffic Strategies
+summary: Understand how Kubernetes canary deployments work via replica ratio, why exact traffic percentages are not guaranteed, and how to decide whether to promote or roll back.
+track: kubernetes
+level: 5
+order: 25.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [canary, deployment, replica-ratio, traffic-splitting, promote-rollback]
+relatedLabs: [k8s-0120, k8s-0121, k8s-0122]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "How does a Kubernetes-native canary deployment control how much traffic the canary version receives?"
+    options:
+      - id: a
+        text: By setting a weight percentage on the Service's port configuration
+      - id: b
+        text: By using a shared Service selector and adjusting the ratio of stable to canary replicas
+      - id: c
+        text: "By configuring an Ingress annotation with `canary-weight: 10`"
+      - id: d
+        text: By deploying the canary to a separate namespace and editing CoreDNS weights
+    correctAnswer: b
+    explanation: "In a native Kubernetes canary, both the stable and canary Deployments share a common label (e.g., `app: web`) that the Service selects. kube-proxy distributes connections roughly proportional to the number of ready endpoints. With 9 stable replicas and 1 canary replica, roughly 10% of connections go to the canary."
+    wrongExplanations:
+      a: "Kubernetes Service specs have no weight field on ports or in the ClusterIP model. Weights are a feature of Ingress controllers (e.g., NGINX, Traefik) or service meshes (e.g., Istio VirtualService)."
+      c: "Ingress `canary-weight` annotations are an Ingress controller extension, not a native Kubernetes Service or Deployment feature."
+      d: "CoreDNS does not support weighted responses for Service records. Namespace-level canary via DNS is not a standard pattern."
+    tryCommand: kubectl get pods -l app=web -n <namespace>
+
+  - id: q2
+    type: single-choice
+    prompt: "You have 9 stable replicas and 1 canary replica behind one Service. A test runs 100 HTTP requests through the Service. How many requests should you expect to hit the canary?"
+    options:
+      - id: a
+        text: Exactly 10
+      - id: b
+        text: Exactly 1
+      - id: c
+        text: Approximately 10, but the actual count varies due to connection-level load balancing
+      - id: d
+        text: Zero — the canary only receives traffic during a designated maintenance window
+    correctAnswer: c
+    explanation: "kube-proxy load-balances at the connection level using round-robin or random selection across all ready endpoints. With 10 total endpoints (9 stable + 1 canary), each connection has a 1-in-10 chance of hitting the canary. Over 100 requests you expect roughly 10, but the actual count follows a binomial distribution — you may see 7, 13, or any other value. Do not write tests that assert exactly 10."
+    wrongExplanations:
+      a: "Exactly 10 would require perfectly round-robin distribution across all 100 requests with no variance. Real TCP/HTTP connection routing is not that deterministic."
+      b: "Exactly 1 out of 100 would be a 1% rate, but with 1 canary out of 10 total replicas the expected rate is 10%, not 1%."
+      d: "There is no maintenance-window concept in Kubernetes canary routing. The canary receives traffic continuously once it is ready."
+
+  - id: q3
+    type: single-choice
+    prompt: "You are running a canary alongside a stable version. The canary's error rate in logs is 3% while the stable version shows 0.1%. What action should you take?"
+    options:
+      - id: a
+        text: Promote the canary immediately — a 3% error rate is acceptable for a new release
+      - id: b
+        text: Scale the canary to 0 replicas (roll back) to stop traffic reaching the bad version
+      - id: c
+        text: Increase the canary replica count to gather more data before deciding
+      - id: d
+        text: Delete the stable Deployment so all traffic routes to the canary for faster testing
+    correctAnswer: b
+    explanation: "A 30x increase in error rate (0.1% → 3%) is a clear regression signal. Roll back immediately by scaling the canary Deployment to 0 or deleting it — no new connections will reach it. Investigate the cause before attempting another canary release."
+    wrongExplanations:
+      a: "Whether 3% is acceptable depends entirely on the application. A 30x increase relative to baseline is a significant regression and warrants stopping the canary, not promoting it."
+      c: "Increasing canary replicas would expose more traffic to the buggy version while you gather data, worsening the user experience."
+      d: "Deleting the stable Deployment would shift all traffic to the broken canary, maximizing the impact of the regression."
+    tryCommand: kubectl scale deployment web-canary --replicas=0 -n <namespace>
+
+  - id: q4
+    type: single-choice
+    prompt: "How do you promote a canary to become the new stable version in a native Kubernetes canary setup?"
+    options:
+      - id: a
+        text: Rename the canary Deployment to the stable Deployment name
+      - id: b
+        text: Update the stable Deployment's image to the canary image, then scale the canary to 0
+      - id: c
+        text: Change the Service selector to point only to the canary label
+      - id: d
+        text: Run `kubectl promote deployment/web-canary`
+    correctAnswer: b
+    explanation: "Promotion means making the canary's version the new baseline. Update the stable Deployment's container image to match the canary image (which triggers a rolling update of the stable replicas). Once the stable rollout completes and all stable Pods run the new image, scale the canary Deployment to 0 or delete it. The Service selector never needs to change."
+    wrongExplanations:
+      a: "Renaming a Deployment is not a Kubernetes operation. Deployments are identified by name; renaming would require delete-and-recreate, which disrupts traffic."
+      c: "Changing the selector to the canary label would work temporarily, but it leaves the old stable Deployment running at its original image. The standard promotion is to roll the new image into the stable Deployment."
+      d: "`kubectl promote` does not exist as a built-in command. Promotion is a manual or CI-driven process."
+
+  - id: q5
+    type: single-choice
+    prompt: "Which shared label is most important for the canary pattern to work — and why?"
+    options:
+      - id: a
+        text: "A label shared by both Deployments (`app: web`) that the Service selector uses to find all endpoints"
+      - id: b
+        text: "A label unique to the canary (`track: canary`) that the Service uses to route only canary traffic"
+      - id: c
+        text: The `kubernetes.io/version` label that kube-proxy reads for weighted routing
+      - id: d
+        text: A namespace label that enables traffic splitting between two namespaces
+    correctAnswer: a
+    explanation: "The canary pattern requires a label that both stable and canary Pods share, which is what the Service selector matches on. This causes kube-proxy to include endpoints from both Deployments in its routing table. The proportion going to each version is determined by their relative replica counts — not by any label value."
+    wrongExplanations:
+      b: "If the Service only selected `track: canary`, it would route all traffic to the canary and none to the stable version. That is the opposite of a canary."
+      c: "`kubernetes.io/version` is not a recognized label for kube-proxy weighted routing. Native Kubernetes does not support label-based traffic weights."
+      d: "Cross-namespace Service selectors are not supported in standard Kubernetes. The canary pattern works within a single namespace."

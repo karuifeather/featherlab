@@ -1,0 +1,73 @@
+schemaVersion: 1
+id: k8s-0124
+type: task
+title: Services and DNS Mastery
+summary: Fix a broken Service selector, scale a canary Deployment, and verify cross-namespace HTTP connectivity in a two-namespace application.
+track: kubernetes
+level: 5
+order: 27
+difficulty: advanced
+estimatedMinutes: 20
+tags: [services, canary, dns, cross-namespace, troubleshooting, mastery]
+prerequisites: [k8s-0123]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0124`: Deployment `web-canary` scaled to 1 replica and Service `web` has at least 3 ready endpoints"
+  - "Namespace `fl-k8s-0124-data`: Service `db` selector fixed to select the `db` Deployment"
+  - "HTTP request from `fl-k8s-0124` through Service `web` returns a response containing `nginx`"
+
+hints:
+  - "Inspect the `db` Service: `kubectl describe svc db -n fl-k8s-0124-data`. Look at the Selector and Endpoints fields."
+  - "Compare Service selector to Deployment labels: `kubectl get deployment db -n fl-k8s-0124-data -o jsonpath='{.spec.template.metadata.labels}'`"
+  - "Scale the canary: `kubectl scale deployment web-canary --replicas=1 -n fl-k8s-0124`"
+
+lifecycle:
+  namespaces: [fl-k8s-0124, fl-k8s-0124-data]
+  setup:
+    manifests: [setup/web.yaml, setup/data.yaml]
+
+checks:
+  - id: db-selects
+    type: k8s.service-selects
+    label: Service db in fl-k8s-0124-data selects the db Deployment
+    params:
+      name: db
+      namespace: fl-k8s-0124-data
+      workload: { kind: Deployment, name: db }
+  - id: db-endpoints
+    type: k8s.endpoint-ready
+    label: Service db has at least 1 ready endpoint
+    params:
+      name: db
+      namespace: fl-k8s-0124-data
+      minReady: 1
+  - id: canary-ready
+    type: k8s.rollout-complete
+    label: Deployment web-canary has 1 available replica
+    params:
+      name: web-canary
+      namespace: fl-k8s-0124
+      replicas: 1
+  - id: web-endpoints
+    type: k8s.endpoint-ready
+    label: Service web has at least 3 ready endpoints
+    params:
+      name: web
+      namespace: fl-k8s-0124
+      minReady: 3
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service web returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0124
+      host: web.fl-k8s-0124
+      port: 80
+      contains: nginx

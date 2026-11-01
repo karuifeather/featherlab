@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0107
+type: task
+title: Empty EndpointSlice
+summary: Diagnose why a Service has no backends and fix the selector typo.
+track: kubernetes
+level: 5
+order: 10
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, endpointslices, selector, troubleshooting]
+prerequisites: [k8s-0106]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0107`"
+  - "Deployment `reports` has 2 available replicas"
+  - "Service `reports` selector matches the reports Deployment"
+  - "Service `reports` has at least 2 ready endpoints"
+
+hints:
+  - "Check if the Service has endpoints: `kubectl get endpoints reports -n fl-k8s-0107`"
+  - "Compare the Service selector to the Pod labels: `kubectl get svc reports -n fl-k8s-0107 -o jsonpath='{.spec.selector}'` vs `kubectl get pods -n fl-k8s-0107 --show-labels`"
+  - "The selector has a typo — look closely at the label value. Fix with `kubectl edit svc reports -n fl-k8s-0107`."
+
+lifecycle:
+  namespaces: [fl-k8s-0107]
+  setup:
+    manifests: [setup/reports.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment reports has 2 available replicas
+    params:
+      name: reports
+      namespace: fl-k8s-0107
+      replicas: 2
+  - id: routes
+    type: k8s.service-selects
+    label: Service reports routes to the reports Deployment
+    params:
+      name: reports
+      namespace: fl-k8s-0107
+      workload: { kind: Deployment, name: reports }
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service reports has at least 2 ready endpoints
+    params:
+      name: reports
+      namespace: fl-k8s-0107
+      minReady: 2

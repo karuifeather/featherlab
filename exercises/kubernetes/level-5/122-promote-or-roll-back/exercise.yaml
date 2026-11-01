@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: k8s-0122
+type: task
+title: Promote or Roll Back
+summary: A canary Deployment is failing due to a bad image. Remove it to restore full traffic to the stable version.
+track: kubernetes
+level: 5
+order: 25
+difficulty: advanced
+estimatedMinutes: 12
+tags: [services, canary, rollback, troubleshooting]
+prerequisites: [k8s-0121]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0122`"
+  - "Deployment `api-stable` has 3 ready replicas"
+  - "Deployment `api-canary` does not exist"
+  - "Service `api` has at least 3 ready endpoints"
+  - "HTTP request through Service `api` returns a response containing `nginx`"
+
+hints:
+  - "Check the canary status: `kubectl get deployment api-canary -n fl-k8s-0122` and `kubectl describe deployment api-canary -n fl-k8s-0122`. Look at the Events section."
+  - "To roll back, delete the failing canary: `kubectl delete deployment api-canary -n fl-k8s-0122`"
+  - "Verify stable is still healthy after the canary is removed: `kubectl rollout status deployment/api-stable -n fl-k8s-0122`"
+
+lifecycle:
+  namespaces: [fl-k8s-0122]
+  setup:
+    manifests: [setup/api.yaml]
+
+checks:
+  - id: stable-ready
+    type: k8s.rollout-complete
+    label: Deployment api-stable has 3 available replicas
+    params:
+      name: api-stable
+      namespace: fl-k8s-0122
+      replicas: 3
+  - id: canary-gone
+    type: k8s.resource-absent
+    label: Deployment api-canary has been removed
+    params:
+      kind: Deployment
+      name: api-canary
+      namespace: fl-k8s-0122
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service api has at least 3 ready endpoints
+    params:
+      name: api
+      namespace: fl-k8s-0122
+      minReady: 3
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service api returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0122
+      host: api.fl-k8s-0122
+      port: 80
+      contains: nginx

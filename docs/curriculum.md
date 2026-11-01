@@ -351,6 +351,89 @@ Intentionally deferred to avoid unsafe cluster mutations on the single-node kind
 - **TopologySpreadConstraints** — requires multiple nodes. Conceptually adjacent to anti-affinity; deferred.
 - **PriorityClass and preemption** — requires a workload that gets preempted; safely testable only with dedicated priority nodes.
 
+## Level 5: services, DNS and traffic routing (M5.7)
+
+Twenty-seven exercises cover ClusterIP, NodePort, LoadBalancer, ExternalName, named ports,
+selector repair, EndpointSlices, readiness, DNS resolution, cross-namespace DNS, headless
+Services, blue/green deployment, canary traffic, and DNS troubleshooting. Seven interleaved
+knowledge checks cover the conceptual side of each topic.
+
+### Circuit A — ClusterIP Fundamentals (k8s-0098 to k8s-0103)
+
+| Order | ID        | Title                          | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------------ | ------------ | ------------- |
+| 1     | k8s-0098  | Your First Service             | beginner     | 0097          |
+| 2     | k8s-0099  | Connect to a Service           | intermediate | 0098          |
+| 3     | k8s-0100  | Service Ports                  | intermediate | 0099          |
+| 4     | k8s-0101  | Named Ports                    | intermediate | 0100          |
+| 5     | k8s-0102  | Repair a Selector              | intermediate | 0101          |
+| 6     | k8s-0103  | Service Fundamentals Challenge | advanced     | 0102          |
+| 6.5   | kq-l5-001 | Service Fundamentals           | — (check)    | 0103          |
+
+### Circuit B — EndpointSlices and Backend Readiness (k8s-0104 to k8s-0108)
+
+| Order | ID        | Title                        | Difficulty   | Prerequisites |
+| ----- | --------- | ---------------------------- | ------------ | ------------- |
+| 7     | k8s-0104  | Find the Backends            | intermediate | 0103          |
+| 8     | k8s-0105  | Multiple Backends            | intermediate | 0104          |
+| 9     | k8s-0106  | Readiness Matters            | intermediate | 0105          |
+| 10    | k8s-0107  | Empty EndpointSlice          | intermediate | 0106          |
+| 11    | k8s-0108  | Restore a Broken Service     | advanced     | 0107          |
+| 11.5  | kq-l5-002 | EndpointSlices and Readiness | — (check)    | 0108          |
+
+### Circuit C — DNS (k8s-0109 to k8s-0113)
+
+| Order | ID        | Title                        | Difficulty   | Prerequisites |
+| ----- | --------- | ---------------------------- | ------------ | ------------- |
+| 12    | k8s-0109  | Resolve a Service            | intermediate | 0108          |
+| 13    | k8s-0110  | Reach Another Namespace      | intermediate | 0109          |
+| 14    | k8s-0111  | DNS Search Paths             | intermediate | 0110          |
+| 15    | k8s-0112  | Headless Service             | intermediate | 0111          |
+| 16    | k8s-0113  | ExternalName Service         | intermediate | 0112          |
+| 16.5  | kq-l5-003 | DNS and Namespace Resolution | — (check)    | 0113          |
+
+### Circuit D — Service Types (k8s-0114 to k8s-0115)
+
+| Order | ID        | Title                        | Difficulty   | Prerequisites |
+| ----- | --------- | ---------------------------- | ------------ | ------------- |
+| 17    | k8s-0114  | NodePort Configuration       | intermediate | 0113          |
+| 18    | k8s-0115  | Service Type Troubleshooting | intermediate | 0114          |
+| 18.5  | kq-l5-004 | Service Types and Exposure   | — (check)    | 0115          |
+
+### Circuit E — Blue/Green Deployment (k8s-0116 to k8s-0119)
+
+| Order | ID        | Title                     | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------- | ------------ | ------------- |
+| 19    | k8s-0116  | Two Versions, One Service | intermediate | 0115          |
+| 20    | k8s-0117  | Switch to Green           | intermediate | 0116          |
+| 21    | k8s-0118  | Roll Back to Blue         | intermediate | 0117          |
+| 22    | k8s-0119  | Broken Release Recovery   | advanced     | 0118          |
+| 22.5  | kq-l5-005 | Blue/Green Deployment     | — (check)    | 0119          |
+
+### Circuit F — Canary Traffic (k8s-0120 to k8s-0122)
+
+| Order | ID        | Title                 | Difficulty   | Prerequisites |
+| ----- | --------- | --------------------- | ------------ | ------------- |
+| 23    | k8s-0120  | Configure a Canary    | intermediate | 0119          |
+| 24    | k8s-0121  | Observe Both Versions | intermediate | 0120          |
+| 25    | k8s-0122  | Promote or Roll Back  | advanced     | 0121          |
+| 25.5  | kq-l5-006 | Canary Traffic        | — (check)    | 0122          |
+
+### Circuit G — DNS Troubleshooting and Mastery (k8s-0123 to k8s-0124)
+
+| Order | ID        | Title                    | Difficulty | Prerequisites |
+| ----- | --------- | ------------------------ | ---------- | ------------- |
+| 26    | k8s-0123  | Debug DNS                | advanced   | 0122          |
+| 27    | k8s-0124  | Services and DNS Mastery | advanced   | 0123          |
+| 27.5  | kq-l5-007 | Level 5 Mixed Review     | — (check)  | 0124          |
+
+### Deferred topics
+
+- **LoadBalancer Services** — require a cloud provider or MetalLB, neither of which is present in the single-node kind cluster. Covered conceptually in kq-l5-004.
+- **Ingress and Gateway API** — distinct topic area (HTTP routing, TLS termination). Earmarked for a future level.
+- **NetworkPolicy** — cluster-level networking; requires a CNI that enforces policies (kind default does not). Deferred.
+- **EndpointSlice manual creation** — EndpointSlices are controller-managed; exercises observe but never create them.
+
 ## Ownership, setup and reset
 
 Every exercise owns only namespaced objects in its declared namespaces (`fl-<id>`,

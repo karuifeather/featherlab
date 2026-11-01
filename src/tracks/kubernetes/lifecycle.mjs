@@ -84,6 +84,11 @@ function checkPlacement(object, namespaces, problems, path) {
       path,
       "Namespace objects are not allowed in setup manifests; declare them in lifecycle.namespaces",
     );
+  if (spec.queryOnly)
+    return problems.add(
+      path,
+      `${kind} is query-only; exercises may observe but not create or delete ${kind} objects`,
+    );
   if (!spec.namespaced)
     return problems.add(
       path,

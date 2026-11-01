@@ -134,6 +134,42 @@ export const CURRICULUM = Object.freeze({
     "k8s-0096", // Investigate a Pending Pod
     "k8s-0097", // Master Scheduling Placement
   ],
+  5: [
+    // Circuit A — ClusterIP Fundamentals (M5.7)
+    "k8s-0098", // Your First Service
+    "k8s-0099", // Connect to a Service
+    "k8s-0100", // Service Ports
+    "k8s-0101", // Named Ports
+    "k8s-0102", // Repair a Selector
+    "k8s-0103", // Service Fundamentals Challenge
+    // Circuit B — EndpointSlices and Backend Readiness (M5.7)
+    "k8s-0104", // Find the Backends
+    "k8s-0105", // Multiple Backends
+    "k8s-0106", // Readiness Matters
+    "k8s-0107", // Empty EndpointSlice
+    "k8s-0108", // Restore a Broken Service
+    // Circuit C — DNS (M5.7)
+    "k8s-0109", // Resolve a Service
+    "k8s-0110", // Reach Another Namespace
+    "k8s-0111", // DNS Search Paths
+    "k8s-0112", // Headless Service
+    "k8s-0113", // ExternalName Service
+    // Circuit D — Service Types (M5.7)
+    "k8s-0114", // NodePort Configuration
+    "k8s-0115", // Service Type Troubleshooting
+    // Circuit E — Blue/Green Deployment (M5.7)
+    "k8s-0116", // Two Versions, One Service
+    "k8s-0117", // Switch to Green
+    "k8s-0118", // Roll Back to Blue
+    "k8s-0119", // Broken Release Recovery
+    // Circuit F — Canary Traffic (M5.7)
+    "k8s-0120", // Configure a Canary
+    "k8s-0121", // Observe Both Versions
+    "k8s-0122", // Promote or Roll Back
+    // Circuit G — DNS Troubleshooting and Mastery (M5.7)
+    "k8s-0123", // Debug DNS
+    "k8s-0124", // Services and DNS Mastery
+  ],
 });
 
 export const CURRICULUM_ORDER = Object.freeze(Object.values(CURRICULUM).flat());

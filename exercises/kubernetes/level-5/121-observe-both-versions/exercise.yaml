@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: k8s-0121
+type: task
+title: Observe Both Versions
+summary: Verify a canary deployment is healthy by confirming both stable and canary Deployments are ready and the Service routes HTTP traffic.
+track: kubernetes
+level: 5
+order: 24
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, canary, endpoints, http-probe]
+prerequisites: [k8s-0120]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0121`"
+  - "Deployment `app-stable` has 3 ready replicas"
+  - "Deployment `app-canary` has 1 ready replica"
+  - "Service `myapp` has at least 4 ready endpoints"
+  - "HTTP request through Service `myapp` returns a response containing `nginx`"
+
+hints:
+  - "Check endpoint health: `kubectl get endpointslices -l kubernetes.io/service-name=myapp -n fl-k8s-0121`"
+  - "Both Deployments already exist — inspect with `kubectl get deployments -n fl-k8s-0121` to see their current status."
+  - "The Service selector must be `app: myapp` without a version label so it selects both Deployments."
+
+lifecycle:
+  namespaces: [fl-k8s-0121]
+  setup:
+    manifests: [setup/app.yaml]
+
+checks:
+  - id: stable-ready
+    type: k8s.rollout-complete
+    label: Deployment app-stable has 3 available replicas
+    params:
+      name: app-stable
+      namespace: fl-k8s-0121
+      replicas: 3
+  - id: canary-ready
+    type: k8s.rollout-complete
+    label: Deployment app-canary has 1 available replica
+    params:
+      name: app-canary
+      namespace: fl-k8s-0121
+      replicas: 1
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service myapp has at least 4 ready endpoints
+    params:
+      name: myapp
+      namespace: fl-k8s-0121
+      minReady: 4
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service myapp returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0121
+      host: myapp.fl-k8s-0121
+      port: 80
+      contains: nginx

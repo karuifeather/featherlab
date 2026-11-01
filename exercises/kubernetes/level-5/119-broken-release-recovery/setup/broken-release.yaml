@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-blue
+  namespace: fl-k8s-0119
+  labels:
+    app: web
+    version: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: web
+        version: blue
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+---
+# Broken release: nginx:1.27.99 does not exist — Pods will enter ImagePullBackOff.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-green
+  namespace: fl-k8s-0119
+  labels:
+    app: web
+    version: green
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+      version: green
+  template:
+    metadata:
+      labels:
+        app: web
+        version: green
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27.99
+          ports:
+            - containerPort: 80
+---
+# Service is routing to broken green. The learner must switch it back to blue
+# without deleting web-green.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: fl-k8s-0119
+spec:
+  selector:
+    app: web
+    version: green
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Grader-owned client Pod for HTTP probe; the learner does not need to create this.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grader-client
+  namespace: fl-k8s-0119
+  labels:
+    app: grader-client
+    featherlab.dev/role: grader
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: client
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep infinity"]

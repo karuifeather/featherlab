@@ -1,0 +1,78 @@
+schemaVersion: 1
+id: k8s-0115
+type: task
+title: Service Type Troubleshooting
+summary: A NodePort Service has the wrong targetPort. Diagnose and fix the port misconfiguration to restore HTTP connectivity.
+track: kubernetes
+level: 5
+order: 18
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [services, nodeport, troubleshooting, targetport]
+prerequisites: [k8s-0114]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0115`"
+  - "Deployment `api` runs `nginx:1.27` with 2 available replicas"
+  - "Service `api` is type NodePort, port 8080, targetPort 80"
+  - "Service `api` has at least 2 ready endpoints"
+  - "HTTP request through Service `api` on port 8080 returns a response containing `nginx`"
+
+hints:
+  - "Check the Service ports: `kubectl get svc api -n fl-k8s-0115 -o yaml | grep -A5 ports`. The `targetPort` must match the container port — nginx listens on 80, not 9090."
+  - "Edit the Service: `kubectl edit svc api -n fl-k8s-0115` — change `targetPort: 9090` to `targetPort: 80`."
+  - "After the fix, verify endpoints are ready: `kubectl describe svc api -n fl-k8s-0115`. The `Endpoints` field should list Pod IPs, not `<none>`."
+
+lifecycle:
+  namespaces: [fl-k8s-0115]
+  setup:
+    manifests: [setup/api.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment api has 2 available replicas
+    params:
+      name: api
+      namespace: fl-k8s-0115
+      replicas: 2
+  - id: service-type
+    type: k8s.service-spec
+    label: Service api is NodePort with port 8080 -> targetPort 80
+    params:
+      name: api
+      namespace: fl-k8s-0115
+      type: NodePort
+      ports:
+        - port: 8080
+          targetPort: 80
+  - id: routes
+    type: k8s.service-selects
+    label: Service api routes to the api Deployment
+    params:
+      name: api
+      namespace: fl-k8s-0115
+      workload: { kind: Deployment, name: api }
+  - id: endpoints-ready
+    type: k8s.endpoint-ready
+    label: Service api has at least 2 ready endpoints
+    params:
+      name: api
+      namespace: fl-k8s-0115
+      minReady: 2
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service api on port 8080 returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0115
+      host: api.fl-k8s-0115
+      port: 8080
+      contains: nginx

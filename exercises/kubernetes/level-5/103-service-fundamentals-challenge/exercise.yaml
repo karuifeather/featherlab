@@ -1,0 +1,100 @@
+schemaVersion: 1
+id: k8s-0103
+type: task
+title: Service Fundamentals Challenge
+summary: Expose two Deployments as ClusterIP Services with different port configurations and verify both have ready endpoints.
+track: kubernetes
+level: 5
+order: 6
+difficulty: advanced
+estimatedMinutes: 15
+tags: [services, clusterip, ports, endpoints, challenge]
+prerequisites: [k8s-0102]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0103`"
+  - "Service `auth` is ClusterIP exposing port 80 and routing to the auth Deployment"
+  - "Service `gateway` is ClusterIP exposing port 8080 with targetPort 80 and routing to the gateway Deployment"
+  - "Service `auth` has at least 2 ready endpoints"
+  - "Service `gateway` has at least 1 ready endpoint"
+
+hints:
+  - "Check what's running: `kubectl get deploy -n fl-k8s-0103`"
+  - "For `auth`: `kubectl expose deployment auth --port=80 --target-port=80 -n fl-k8s-0103`"
+  - "For `gateway`: `kubectl expose deployment gateway --port=8080 --target-port=80 -n fl-k8s-0103`"
+
+lifecycle:
+  namespaces: [fl-k8s-0103]
+  setup:
+    manifests: [setup/deployments.yaml]
+
+checks:
+  - id: rollout-auth
+    type: k8s.rollout-complete
+    label: Deployment auth has 2 available replicas
+    params:
+      name: auth
+      namespace: fl-k8s-0103
+      replicas: 2
+  - id: rollout-gateway
+    type: k8s.rollout-complete
+    label: Deployment gateway has 1 available replica
+    params:
+      name: gateway
+      namespace: fl-k8s-0103
+      replicas: 1
+  - id: service-auth
+    type: k8s.service-spec
+    label: Service auth is ClusterIP exposing port 80
+    params:
+      name: auth
+      namespace: fl-k8s-0103
+      type: ClusterIP
+      ports:
+        - port: 80
+          targetPort: 80
+  - id: service-gateway
+    type: k8s.service-spec
+    label: Service gateway is ClusterIP exposing port 8080 → 80
+    params:
+      name: gateway
+      namespace: fl-k8s-0103
+      type: ClusterIP
+      ports:
+        - port: 8080
+          targetPort: 80
+  - id: routes-auth
+    type: k8s.service-selects
+    label: Service auth routes to the auth Deployment
+    params:
+      name: auth
+      namespace: fl-k8s-0103
+      workload: { kind: Deployment, name: auth }
+  - id: routes-gateway
+    type: k8s.service-selects
+    label: Service gateway routes to the gateway Deployment
+    params:
+      name: gateway
+      namespace: fl-k8s-0103
+      workload: { kind: Deployment, name: gateway }
+  - id: endpoints-auth
+    type: k8s.endpoint-ready
+    label: Service auth has at least 2 ready endpoints
+    params:
+      name: auth
+      namespace: fl-k8s-0103
+      minReady: 2
+  - id: endpoints-gateway
+    type: k8s.endpoint-ready
+    label: Service gateway has at least 1 ready endpoint
+    params:
+      name: gateway
+      namespace: fl-k8s-0103
+      minReady: 1

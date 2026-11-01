@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-stable
+  namespace: fl-k8s-0120
+  labels:
+    app: checkout
+    version: stable
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: checkout
+      version: stable
+  template:
+    metadata:
+      labels:
+        app: checkout
+        version: stable
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout
+  namespace: fl-k8s-0120
+spec:
+  selector:
+    app: checkout
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grader-client
+  namespace: fl-k8s-0120
+  labels:
+    app: grader-client
+    featherlab.dev/role: grader
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: client
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep infinity"]

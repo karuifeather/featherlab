@@ -4,8 +4,9 @@
  * new kind, add one entry here.
  *
  * `podSpecPath` locates the PodSpec for kinds that run containers.
- * `queryOnly` marks cluster-scoped kinds that may be queried by validators but never
- * appear in exercise setup manifests (lifecycle.mjs rejects cluster-scoped manifest objects).
+ * `queryOnly` marks kinds that validators may read but that must never appear in exercise
+ * setup manifests. This applies to both cluster-scoped kinds (Node) and namespaced kinds
+ * that exercises must not create or modify directly (EndpointSlice — controller-managed).
  */
 export const KINDS = Object.freeze({
   Pod: { resource: "pods", namespaced: true, podSpecPath: ["spec"] },
@@ -46,6 +47,13 @@ export const KINDS = Object.freeze({
   // Node is cluster-scoped and query-only: validators may read nodes but setup manifests cannot
   // create or delete them (lifecycle.mjs already blocks all cluster-scoped objects in manifests).
   Node: { resource: "nodes", namespaced: false, queryOnly: true },
+  // Level 5 additions — services, DNS, and traffic routing
+  // EndpointSlice is namespaced but controller-managed: exercises observe them, never create them.
+  EndpointSlice: {
+    resource: "endpointslices.discovery.k8s.io",
+    namespaced: true,
+    queryOnly: true,
+  },
 });
 
 /**

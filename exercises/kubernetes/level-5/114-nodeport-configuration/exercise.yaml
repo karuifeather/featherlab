@@ -1,0 +1,61 @@
+schemaVersion: 1
+id: k8s-0114
+type: task
+title: NodePort Configuration
+summary: Expose a Deployment through a NodePort Service so it is reachable on a static port on every cluster node.
+track: kubernetes
+level: 5
+order: 17
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, nodeport, networking]
+prerequisites: [k8s-0113]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0114`"
+  - "Deployment `web` runs `nginx:1.27` with label `app=web` and 1 available replica"
+  - "Service `web` is type NodePort, exposes port 80, targetPort 80"
+  - "Service `web` selects the `web` Deployment"
+
+hints:
+  - "`kubectl expose deployment web --port=80 --target-port=80 --type=NodePort -n fl-k8s-0114` creates the Service. Kubernetes automatically assigns a nodePort in the 30000–32767 range."
+  - "Verify the assigned nodePort: `kubectl get svc web -n fl-k8s-0114 -o jsonpath='{.spec.ports[0].nodePort}'`"
+  - "In kind environments, the nodePort is visible on the node but Docker networking may prevent direct host access. The lab only checks configuration, not external connectivity."
+
+lifecycle:
+  namespaces: [fl-k8s-0114]
+  setup:
+    manifests: [setup/web.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment web has 1 available replica
+    params:
+      name: web
+      namespace: fl-k8s-0114
+      replicas: 1
+  - id: service-type
+    type: k8s.service-spec
+    label: Service web is NodePort with port 80
+    params:
+      name: web
+      namespace: fl-k8s-0114
+      type: NodePort
+      ports:
+        - port: 80
+          targetPort: 80
+  - id: routes
+    type: k8s.service-selects
+    label: Service web routes to the web Deployment
+    params:
+      name: web
+      namespace: fl-k8s-0114
+      workload: { kind: Deployment, name: web }

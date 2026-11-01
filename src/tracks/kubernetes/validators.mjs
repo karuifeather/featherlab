@@ -1687,6 +1687,302 @@ const hpaConfig = resourceValidator({
   },
 });
 
+// ─── Level 5: Services, DNS & Traffic Routing validators ──────────────────────
+
+/**
+ * k8s.service-spec — validates a Service's type, ports, selector, clusterIP, or externalName.
+ * Use alongside k8s.service-selects (which proves selector→workload match) and
+ * k8s.endpoint-ready (which proves ready traffic backends).
+ */
+const SAFE_PORT_NUM = { type: "integer", min: 1, max: 65535 };
+const SERVICE_PORT_ITEM = {
+  type: "object",
+  open: true,
+  properties: {
+    port: SAFE_PORT_NUM,
+    targetPort: { type: "any" }, // integer or named-port string
+    protocol: { type: "string", enum: ["TCP", "UDP", "SCTP"] },
+    name: { type: "string", maxLength: 63 },
+  },
+};
+const serviceSpec = {
+  type: "k8s.service-spec",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(
+      p,
+      ["name", "namespace", "type", "clusterIP", "externalName", "ports", "selector"],
+      problems,
+    );
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    if (p.type !== undefined)
+      check(
+        p.type,
+        { type: "string", enum: ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"] },
+        "type",
+        problems,
+      );
+    if (p.clusterIP !== undefined)
+      check(p.clusterIP, { type: "string", minLength: 1, maxLength: 40 }, "clusterIP", problems);
+    if (p.externalName !== undefined)
+      check(
+        p.externalName,
+        { type: "string", minLength: 1, maxLength: 253 },
+        "externalName",
+        problems,
+      );
+    if (p.ports !== undefined)
+      check(p.ports, { type: "array", minItems: 1, items: SERVICE_PORT_ITEM }, "ports", problems);
+    if (p.selector !== undefined) check(p.selector, STRING_MAP, "selector", problems);
+    if (Object.keys(p).filter((k) => !["name", "namespace"].includes(k)).length === 0)
+      problems.add(
+        "",
+        "set at least one Service field to check (type, clusterIP, ports, selector, or externalName)",
+      );
+  },
+  async run(p, ctx) {
+    const ref = { kind: "Service", name: p.name, namespace: p.namespace };
+    const service = await ctx.query.get(ref);
+    if (!service)
+      return {
+        passed: false,
+        feedback: `Service "${p.name}" was not found in namespace "${p.namespace}".`,
+      };
+    if (service.metadata?.deletionTimestamp)
+      return { passed: false, feedback: `Service "${p.name}" is being deleted.` };
+    const spec = service.spec ?? {};
+    const failures = [];
+    const fmt = (actual, expected) =>
+      `${actual === undefined ? "(not set)" : JSON.stringify(actual)} — expected ${JSON.stringify(expected)}`;
+    if (p.type !== undefined && spec.type !== p.type)
+      failures.push(`type: ${fmt(spec.type, p.type)}`);
+    if (p.clusterIP !== undefined && spec.clusterIP !== p.clusterIP)
+      failures.push(`clusterIP: ${fmt(spec.clusterIP, p.clusterIP)}`);
+    if (p.externalName !== undefined && spec.externalName !== p.externalName)
+      failures.push(`externalName: ${fmt(spec.externalName, p.externalName)}`);
+    if (p.selector !== undefined) {
+      const actual = spec.selector ?? {};
+      for (const [k, v] of Object.entries(p.selector))
+        if (actual[k] !== v) failures.push(`selector.${k}: ${fmt(actual[k], v)}`);
+    }
+    for (const required of p.ports ?? []) {
+      const match = (spec.ports ?? []).find((port) => {
+        if (required.port !== undefined && port.port !== required.port) return false;
+        if (
+          required.targetPort !== undefined &&
+          String(port.targetPort) !== String(required.targetPort)
+        )
+          return false;
+        if (required.name !== undefined && port.name !== required.name) return false;
+        if (required.protocol !== undefined && port.protocol !== required.protocol) return false;
+        return true;
+      });
+      if (!match) failures.push(`port ${JSON.stringify(required)} not found`);
+    }
+    return {
+      passed: failures.length === 0,
+      feedback:
+        failures.length === 0
+          ? `Service "${p.name}" has the required configuration.`
+          : `Service "${p.name}" has incorrect configuration: ${failures.join("; ")}.`,
+    };
+  },
+};
+
+/**
+ * k8s.endpoint-ready — verifies that at least `minReady` endpoints are ready for a Service,
+ * by inspecting the controller-managed EndpointSlice objects.
+ * Counts endpoints where conditions.ready === true and conditions.terminating !== true.
+ */
+const endpointReady = {
+  type: "k8s.endpoint-ready",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["name", "namespace", "minReady"], problems);
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(p.minReady, { type: "integer", required: true, min: 1, max: 1000 }, "minReady", problems);
+  },
+  async run(p, ctx) {
+    const slices = await ctx.query.list({
+      kind: "EndpointSlice",
+      namespace: p.namespace,
+      labelSelector: `kubernetes.io/service-name=${p.name}`,
+    });
+    let readyCount = 0;
+    for (const slice of slices) {
+      for (const endpoint of slice.endpoints ?? []) {
+        const cond = endpoint.conditions ?? {};
+        if (cond.ready === true && cond.terminating !== true) readyCount++;
+      }
+    }
+    return {
+      passed: readyCount >= p.minReady,
+      feedback:
+        readyCount >= p.minReady
+          ? `Service "${p.name}" has ${readyCount} ready endpoint(s) (need ${p.minReady}).`
+          : `Service "${p.name}" has ${readyCount} ready endpoint(s); need at least ${p.minReady}.`,
+      details: { readyCount, sliceCount: slices.length },
+    };
+  },
+};
+
+// Restricted character set for HTTP paths in grader probes.
+const SAFE_HTTP_PATH = /^\/[A-Za-z0-9._/-]{0,199}$/;
+// Restricted character set for DNS names (includes dots for qualified names like svc.ns).
+const SAFE_DNS_NAME = /^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/;
+
+/**
+ * k8s.http-probe — executes `wget -qO- -T5 http://<host>:<port><path>` inside a named
+ * client Pod and passes when the response body contains the expected string.
+ * The client Pod must already exist in the exercise namespace (created by setup).
+ * host must be a service DNS name (no IPs, no external hosts — validated by SAFE_DNS_NAME
+ * which matches only lowercase alphanumeric, dots and hyphens, max 253 chars).
+ */
+const httpProbe = {
+  type: "k8s.http-probe",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["clientPod", "namespace", "host", "port", "path", "contains"], problems);
+    check(p.clientPod, NAME, "clientPod", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(
+      p.host,
+      { type: "string", required: true, pattern: SAFE_DNS_NAME, maxLength: 253 },
+      "host",
+      problems,
+    );
+    check(p.port, { type: "integer", required: true, min: 1, max: 65535 }, "port", problems);
+    if (p.path !== undefined)
+      check(p.path, { type: "string", pattern: SAFE_HTTP_PATH, maxLength: 200 }, "path", problems);
+    check(
+      p.contains,
+      { type: "string", required: true, minLength: 1, maxLength: 300 },
+      "contains",
+      problems,
+    );
+  },
+  async run(p, ctx) {
+    const ref = { kind: "Pod", name: p.clientPod, namespace: p.namespace };
+    const pod = await ctx.query.get(ref);
+    if (!pod)
+      return {
+        passed: false,
+        feedback: `Client Pod "${p.clientPod}" was not found in namespace "${p.namespace}".`,
+      };
+    if (pod.status?.phase !== "Running")
+      return { passed: false, feedback: `Client Pod "${p.clientPod}" is not Running.` };
+    const path = p.path ?? "/";
+    const url = `http://${p.host}:${p.port}${path}`;
+    const result = await ctx.query.execArgv({
+      podName: p.clientPod,
+      namespace: p.namespace,
+      argv: ["wget", "-qO-", "-T", "5", url],
+    });
+    if (result.exitCode !== 0) {
+      return {
+        passed: false,
+        feedback: `HTTP request to "${url}" failed (exit ${result.exitCode}).`,
+        details: { url },
+      };
+    }
+    if (!result.stdout.includes(p.contains)) {
+      return {
+        passed: false,
+        feedback: `HTTP response from "${url}" does not contain the expected content.`,
+        details: { url, contains: p.contains },
+      };
+    }
+    return { passed: true, feedback: `HTTP response from "${url}" contains the expected content.` };
+  },
+};
+
+/**
+ * k8s.dns-resolve — executes `nslookup <hostname>` inside a named client Pod and passes
+ * when the lookup succeeds (exit 0). If `expectContains` is provided, the nslookup output
+ * must also include that string (useful for checking a specific address or CNAME target).
+ */
+const dnsResolve = {
+  type: "k8s.dns-resolve",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["clientPod", "namespace", "hostname", "expectContains"], problems);
+    check(p.clientPod, NAME, "clientPod", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(
+      p.hostname,
+      { type: "string", required: true, pattern: SAFE_DNS_NAME, maxLength: 253 },
+      "hostname",
+      problems,
+    );
+    if (p.expectContains !== undefined)
+      check(
+        p.expectContains,
+        { type: "string", minLength: 1, maxLength: 253 },
+        "expectContains",
+        problems,
+      );
+  },
+  async run(p, ctx) {
+    const ref = { kind: "Pod", name: p.clientPod, namespace: p.namespace };
+    const pod = await ctx.query.get(ref);
+    if (!pod)
+      return {
+        passed: false,
+        feedback: `Client Pod "${p.clientPod}" was not found in namespace "${p.namespace}".`,
+      };
+    if (pod.status?.phase !== "Running")
+      return { passed: false, feedback: `Client Pod "${p.clientPod}" is not Running.` };
+    // Busybox nslookup does not apply DNS search domains to dotted hostnames; always query
+    // the fully-qualified cluster name so the check works regardless of nslookup implementation.
+    const fqdn = p.hostname.includes(".svc.cluster.local")
+      ? p.hostname
+      : `${p.hostname}.svc.cluster.local`;
+    const result = await ctx.query.execArgv({
+      podName: p.clientPod,
+      namespace: p.namespace,
+      argv: ["nslookup", fqdn],
+      timeoutMs: 10_000,
+    });
+    if (result.exitCode !== 0) {
+      return {
+        passed: false,
+        feedback: `DNS lookup for "${p.hostname}" failed.`,
+        details: { hostname: p.hostname, fqdn },
+      };
+    }
+    if (p.expectContains !== undefined && !result.stdout.includes(p.expectContains)) {
+      return {
+        passed: false,
+        feedback: `DNS lookup for "${p.hostname}" resolved but output does not contain "${p.expectContains}".`,
+        details: { hostname: p.hostname, expectContains: p.expectContains },
+      };
+    }
+    return { passed: true, feedback: `DNS lookup for "${p.hostname}" succeeded.` };
+  },
+};
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -1731,4 +2027,9 @@ export const kubernetesValidators = Object.freeze([
   podTolerations,
   nodeAffinity,
   hpaConfig,
+  // Level 5 validators
+  serviceSpec,
+  endpointReady,
+  httpProbe,
+  dnsResolve,
 ]);

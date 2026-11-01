@@ -87,6 +87,26 @@ export class KubernetesQuery {
   }
 
   /**
+   * Run an arbitrary command inside a named Pod and return `{exitCode, stdout, stderr}`.
+   * Unlike `exec` and `execFileContent`, any exit code from the container command itself
+   * is returned to the caller as a valid result — only kubectl infrastructure failures
+   * (server errors, pod not found) reject with EnvironmentError.
+   * argv must be a pre-validated array; the caller is responsible for safety.
+   */
+  execArgv({ podName, namespace, argv, timeoutMs = 15_000 }) {
+    return this.#memo(["execArgv", podName, namespace, JSON.stringify(argv)], async () => {
+      const cmd = ["kubectl", "exec", podName, "-n", namespace, REQUEST_TIMEOUT, "--", ...argv];
+      const result = await this.#runner.run(cmd, { signal: this.#signal, timeoutMs });
+      if (result.exitCode !== 0 && /Error from server|^error:/im.test(result.stderr ?? ""))
+        throw new EnvironmentError("Could not exec into pod.", {
+          reason: "unavailable",
+          details: { stderr: result.stderr.slice(0, 500) },
+        });
+      return result;
+    });
+  }
+
+  /**
    * Run `head -c 4096 <path>` inside a named container and return `{found, content}`.
    * Path must be a validated absolute path (the caller performs content-load validation).
    * `found` is false when exit code is 1 (file absent or unreadable). Other exit codes

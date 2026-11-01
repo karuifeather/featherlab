@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0102
+type: task
+title: Repair a Selector
+summary: Fix a Service selector typo so it correctly routes traffic to the frontend Deployment.
+track: kubernetes
+level: 5
+order: 5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [services, clusterip, selector, troubleshooting]
+prerequisites: [k8s-0101]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0102`"
+  - "Deployment `frontend` runs `nginx:1.27` with 2 available replicas"
+  - "Service `frontend` selector matches the frontend Deployment's Pods"
+  - "Service `frontend` has at least 2 ready endpoints"
+
+hints:
+  - "Check the Service selector: `kubectl get svc frontend -n fl-k8s-0102 -o yaml | grep -A3 selector`"
+  - "Check the Pod labels: `kubectl get pods -n fl-k8s-0102 --show-labels`"
+  - "Spot the difference — the selector has a typo in the label value. Fix it with `kubectl edit svc frontend -n fl-k8s-0102`."
+
+lifecycle:
+  namespaces: [fl-k8s-0102]
+  setup:
+    manifests: [setup/frontend.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment frontend has 2 available replicas
+    params:
+      name: frontend
+      namespace: fl-k8s-0102
+      replicas: 2
+  - id: routes
+    type: k8s.service-selects
+    label: Service frontend routes to the frontend Deployment
+    params:
+      name: frontend
+      namespace: fl-k8s-0102
+      workload: { kind: Deployment, name: frontend }
+  - id: endpoints
+    type: k8s.endpoint-ready
+    label: Service frontend has at least 2 ready endpoints
+    params:
+      name: frontend
+      namespace: fl-k8s-0102
+      minReady: 2

@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: k8s-0098
+type: task
+title: Your First Service
+summary: Pod IP addresses are ephemeral. Expose a Deployment through a stable ClusterIP Service so other workloads can always reach it.
+track: kubernetes
+level: 5
+order: 1
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, clusterip, kubectl-expose, selectors]
+prerequisites: [k8s-0097]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0098`"
+  - "Deployment `web` runs `nginx:1.27` with label `app=web` and 2 available replicas"
+  - "Service `web` is type ClusterIP and routes to the `web` Deployment"
+  - "Service `web` exposes port 80 with targetPort 80"
+
+hints:
+  - "`kubectl expose deployment web --port=80 --target-port=80 -n fl-k8s-0098` creates a ClusterIP Service with the Deployment's selector copied automatically. Verify the selector with `kubectl describe svc web -n fl-k8s-0098`."
+  - "A Service is only useful if its selector matches a running Pod. Check the selector against the Deployment's Pod template labels: `kubectl get deployment web -n fl-k8s-0098 -o jsonpath='{.spec.template.metadata.labels}'`."
+  - "After exposing: `kubectl get svc web -n fl-k8s-0098` should show a ClusterIP. `kubectl describe svc web` shows the Endpoints (the IP:port pairs for ready Pods)."
+
+lifecycle:
+  namespaces: [fl-k8s-0098]
+  setup:
+    manifests: [setup/web.yaml]
+
+checks:
+  - id: rollout
+    type: k8s.rollout-complete
+    label: Deployment web has 2 available replicas
+    params:
+      name: web
+      namespace: fl-k8s-0098
+      replicas: 2
+  - id: service-exists
+    type: k8s.resource-exists
+    label: Service web exists in fl-k8s-0098
+    params:
+      kind: Service
+      name: web
+      namespace: fl-k8s-0098
+  - id: service-type
+    type: k8s.service-spec
+    label: Service web is ClusterIP with port 80
+    params:
+      name: web
+      namespace: fl-k8s-0098
+      type: ClusterIP
+      ports:
+        - port: 80
+          targetPort: 80
+  - id: routes
+    type: k8s.service-selects
+    label: Service web routes to the web Deployment
+    params:
+      name: web
+      namespace: fl-k8s-0098
+      workload: { kind: Deployment, name: web }

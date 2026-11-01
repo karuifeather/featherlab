@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l5-001
+activityType: knowledge-check
+title: Service Fundamentals
+summary: Confirm your understanding of why Services exist, how ClusterIP works, and how selectors bind a Service to its Pods.
+track: kubernetes
+level: 5
+order: 6.5
+difficulty: intermediate
+estimatedMinutes: 6
+tags: [services, clusterip, selectors, kubectl, expose]
+relatedLabs: [k8s-0098, k8s-0099, k8s-0100, k8s-0101, k8s-0102, k8s-0103]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Why do applications inside a cluster use a Service instead of connecting directly to a Pod's IP address?"
+    options:
+      - id: a
+        text: Pod IPs are private and unreachable even within the cluster
+      - id: b
+        text: Pod IPs change every time a Pod is replaced; a Service provides a stable virtual IP
+      - id: c
+        text: Services encrypt traffic between Pods; direct Pod-to-Pod communication is blocked
+      - id: d
+        text: Kubernetes rate-limits connections to Pod IPs but not to Service IPs
+    correctAnswer: b
+    explanation: "Pod IPs are ephemeral — when a Pod restarts, crashes, or is rescheduled, it gets a new IP. A ClusterIP Service holds a stable virtual IP that kube-proxy keeps pointing at the current set of ready Pods. Consumers connect to the Service IP and never need to track individual Pod IPs."
+    wrongExplanations:
+      a: "Pod IPs are reachable within the cluster. The problem is that they are not stable — not that they are blocked."
+      c: "Kubernetes does not encrypt Pod-to-Pod traffic by default, and neither does a Service. Encryption is provided by a service mesh or mTLS at the application layer."
+      d: "Kubernetes does not rate-limit connections to Pod IPs. The reason to use a Service is stability, not throughput."
+    tryCommand: kubectl get pod -o wide -n <namespace>
+
+  - id: q2
+    type: single-choice
+    prompt: "Which field in a Service spec determines which Pods receive traffic from that Service?"
+    options:
+      - id: a
+        text: "`spec.ports[].targetPort`"
+      - id: b
+        text: "`spec.selector`"
+      - id: c
+        text: "`metadata.labels`"
+      - id: d
+        text: "`spec.clusterIP`"
+    correctAnswer: b
+    explanation: "`spec.selector` is a label map. The endpoint controller continuously finds Pods whose labels match this map and are in a Ready state, then registers their IPs as the Service's endpoints. Traffic is forwarded to those endpoints."
+    wrongExplanations:
+      a: "`spec.ports[].targetPort` tells the Service which port on the selected Pods to forward traffic to; it does not control which Pods are selected."
+      c: "`metadata.labels` are labels applied to the Service object itself, not the selector it uses to match Pods."
+      d: "`spec.clusterIP` is the virtual IP assigned to the Service, not a selector for Pods."
+    tryCommand: kubectl get svc <name> -n <namespace> -o jsonpath='{.spec.selector}'
+
+  - id: q3
+    type: single-choice
+    prompt: "You run `kubectl expose deployment web --port=80 --target-port=80 -n demo`. What type of Service is created by default?"
+    options:
+      - id: a
+        text: NodePort
+      - id: b
+        text: LoadBalancer
+      - id: c
+        text: ClusterIP
+      - id: d
+        text: ExternalName
+    correctAnswer: c
+    explanation: "When `--type` is not specified, `kubectl expose` creates a ClusterIP Service. ClusterIP is reachable only inside the cluster on the assigned virtual IP and port."
+    wrongExplanations:
+      a: "NodePort would require `--type=NodePort`. It opens a port on every cluster node in addition to the ClusterIP."
+      b: "LoadBalancer would require `--type=LoadBalancer`. It provisions a cloud load balancer in addition to ClusterIP and NodePort."
+      d: "ExternalName maps a Service to a DNS name outside the cluster. It requires `--type=ExternalName` and an `--external-name` value; `kubectl expose` cannot produce one automatically."
+    tryCommand: kubectl expose deployment web --port=80 --target-port=80 -n demo --dry-run=client -o yaml
+
+  - id: q4
+    type: single-choice
+    prompt: "`kubectl describe svc backend -n demo` shows `Endpoints: <none>`. What is the most likely cause?"
+    options:
+      - id: a
+        text: The Service was created with `--type=ExternalName` and has no Pods to select
+      - id: b
+        text: The Service's `spec.selector` labels do not match the labels on any running, Ready Pod in the namespace
+      - id: c
+        text: The Service port does not match the containerPort declared in the Pod spec
+      - id: d
+        text: The namespace does not have a DNS entry yet
+    correctAnswer: b
+    explanation: "When `Endpoints: <none>`, the endpoint controller found zero Pods matching the Service's selector with a Ready status. This almost always means a label mismatch — for example, the Service selects `app=backend` but the Pods have `app=api`. Check Pod labels with `kubectl get pods --show-labels` and compare them to the Service selector."
+    wrongExplanations:
+      a: "An ExternalName Service has no selector at all; its endpoints field is irrelevant. A standard ClusterIP/NodePort/LoadBalancer Service with no matching Pods shows `<none>`."
+      c: "A wrong targetPort does not suppress endpoints — the Pod's IP still appears as an endpoint. Connections would fail, but the endpoint would still be listed."
+      d: "DNS and endpoints are independent. A Service gets a DNS name immediately, regardless of whether it has any endpoints."
+    tryCommand: kubectl get pods -n demo --show-labels
+
+  - id: q5
+    type: single-choice
+    prompt: "`kubectl describe svc frontend` shows `Endpoints: 10.244.1.4:8080,10.244.1.7:8080`. What does this mean?"
+    options:
+      - id: a
+        text: Two nodes are registered for this Service
+      - id: b
+        text: Two Pods are ready and selected by the Service; traffic is load-balanced between them
+      - id: c
+        text: The Service has two ports open on the same Pod
+      - id: d
+        text: Two Services share the same ClusterIP
+    correctAnswer: b
+    explanation: "Each entry in the Endpoints list is a `<pod-ip>:<targetPort>` pair belonging to a Ready Pod that matches the Service selector. Two entries mean two Pods are ready. kube-proxy distributes incoming connections across all endpoints."
+    wrongExplanations:
+      a: "Node IPs do not appear in the Endpoints field. Node information is relevant for NodePort, not ClusterIP endpoints."
+      c: "Multiple ports on one Pod would appear as separate port entries in `kubectl get endpoints` output (e.g., `10.244.1.4:8080,10.244.1.4:443`). Two distinct IPs indicate two distinct Pods."
+      d: "Every ClusterIP Service gets its own unique virtual IP. Two Services cannot share a ClusterIP."
+    tryCommand: kubectl get endpoints frontend

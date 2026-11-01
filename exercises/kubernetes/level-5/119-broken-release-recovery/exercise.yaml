@@ -1,0 +1,78 @@
+schemaVersion: 1
+id: k8s-0119
+type: task
+title: Broken Release Recovery
+summary: Diagnose a broken green Deployment causing ImagePullBackOff, restore traffic to the stable blue version, and preserve the broken version for investigation.
+track: kubernetes
+level: 5
+order: 22
+difficulty: advanced
+estimatedMinutes: 15
+tags: [services, blue-green, troubleshooting, imagepullbackoff, recovery]
+prerequisites: [k8s-0118]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0119`"
+  - "Service `web` selector targets version=blue"
+  - "Service `web` routes to the `web-blue` Deployment"
+  - "Service `web` has at least 2 ready endpoints"
+  - "HTTP request through Service `web` returns a response containing `nginx`"
+  - "Deployment `web-green` still exists (do not delete it)"
+
+hints:
+  - "Diagnose the broken release: `kubectl get pods -n fl-k8s-0119 -l version=green`. Look for `ImagePullBackOff` status."
+  - 'Switch traffic back to blue: `kubectl patch svc web -n fl-k8s-0119 --type=merge -p=''{"spec":{"selector":{"app":"web","version":"blue"}}}''`'
+  - "Do NOT delete web-green — it must remain for post-incident investigation."
+
+lifecycle:
+  namespaces: [fl-k8s-0119]
+  setup:
+    manifests: [setup/broken-release.yaml]
+
+checks:
+  - id: service-selector
+    type: k8s.service-spec
+    label: Service web selector targets version=blue
+    params:
+      name: web
+      namespace: fl-k8s-0119
+      selector:
+        app: web
+        version: blue
+  - id: routes-to-blue
+    type: k8s.service-selects
+    label: Service web routes to the web-blue Deployment
+    params:
+      name: web
+      namespace: fl-k8s-0119
+      workload: { kind: Deployment, name: web-blue }
+  - id: endpoints-ready
+    type: k8s.endpoint-ready
+    label: Service web has at least 2 ready endpoints
+    params:
+      name: web
+      namespace: fl-k8s-0119
+      minReady: 2
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service web returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0119
+      host: web.fl-k8s-0119
+      port: 80
+      contains: nginx
+  - id: green-preserved
+    type: k8s.resource-exists
+    label: Deployment web-green still exists for investigation
+    params:
+      kind: Deployment
+      name: web-green
+      namespace: fl-k8s-0119

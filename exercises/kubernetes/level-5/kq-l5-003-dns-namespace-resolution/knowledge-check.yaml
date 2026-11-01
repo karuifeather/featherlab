@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l5-003
+activityType: knowledge-check
+title: Service DNS and Namespace Resolution
+summary: Test your understanding of how Kubernetes DNS names are constructed, how search paths work, and how headless and ExternalName Services behave differently.
+track: kubernetes
+level: 5
+order: 16.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [dns, coredns, namespaces, headless, externalname, resolv]
+relatedLabs: [k8s-0109, k8s-0110, k8s-0111, k8s-0112, k8s-0113]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "A Service named `api` exists in namespace `payments`. What is its fully qualified DNS name inside the cluster?"
+    options:
+      - id: a
+        text: "`api.payments`"
+      - id: b
+        text: "`api.payments.svc`"
+      - id: c
+        text: "`api.payments.svc.cluster.local`"
+      - id: d
+        text: "`api.cluster.local`"
+    correctAnswer: c
+    explanation: "The Kubernetes DNS standard for Services is `<service>.<namespace>.svc.<cluster-domain>`. The default cluster domain is `cluster.local`, so the FQDN is `api.payments.svc.cluster.local`. This name resolves to the Service's ClusterIP."
+    wrongExplanations:
+      a: "`api.payments` is a short name that works only from within the `payments` namespace (or when `payments` is in the search path). It is not the FQDN."
+      b: "`api.payments.svc` is missing the cluster domain. It may happen to resolve in some configurations but is not the canonical name."
+      d: "`api.cluster.local` omits the namespace segment. The namespace is required in the FQDN."
+    tryCommand: nslookup api.payments.svc.cluster.local
+
+  - id: q2
+    type: single-choice
+    prompt: "A Pod in namespace `frontend` tries `curl http://backend/` and it resolves. The `backend` Service is in namespace `frontend`. Why does the short name work?"
+    options:
+      - id: a
+        text: All Services in a cluster share a global flat namespace; any Service is reachable by its name alone
+      - id: b
+        text: The Pod's `/etc/resolv.conf` has a search path that includes `frontend.svc.cluster.local`, so the resolver appends it automatically
+      - id: c
+        text: Kubernetes automatically creates DNS aliases for every Service in the default namespace
+      - id: d
+        text: The `backend` Service is of type ExternalName, which makes it globally resolvable
+    correctAnswer: b
+    explanation: "Every Pod in Kubernetes gets a `/etc/resolv.conf` with `search <namespace>.svc.cluster.local svc.cluster.local cluster.local`. When `backend` does not resolve as-is, the resolver appends each search domain in turn. `backend.frontend.svc.cluster.local` resolves to the Service ClusterIP."
+    wrongExplanations:
+      a: "Service names are namespace-scoped. A Service named `backend` in `frontend` does not conflict with another `backend` in `payments` because they have different FQDNs."
+      c: "Kubernetes does not create aliases to the default namespace. Short names resolve within the same namespace via search paths."
+      d: "ExternalName maps a DNS name to an external CNAME; it does not make a Service globally resolvable by short name."
+    tryCommand: kubectl exec <pod> -n frontend -- cat /etc/resolv.conf
+
+  - id: q3
+    type: single-choice
+    prompt: "A Pod in namespace `frontend` wants to reach Service `backend` in namespace `payments`. Which DNS name should it use?"
+    options:
+      - id: a
+        text: "`backend`"
+      - id: b
+        text: "`backend.payments`"
+      - id: c
+        text: "`backend.payments.svc.cluster.local`"
+      - id: d
+        text: "`backend.frontend.svc.cluster.local`"
+    correctAnswer: c
+    explanation: "Cross-namespace DNS requires either the FQDN `backend.payments.svc.cluster.local` or the two-segment short form `backend.payments` (which also works because `svc.cluster.local` is in the search path and `backend.payments.svc.cluster.local` resolves). The FQDN is always unambiguous."
+    wrongExplanations:
+      a: "`backend` alone resolves only within the current namespace (`frontend`). The search path appends `frontend.svc.cluster.local`, not `payments.svc.cluster.local`."
+      b: "`backend.payments` also works because the resolver appends `.svc.cluster.local` from the search path, making it equivalent to the FQDN. However, the FQDN (option c) is the explicit, unambiguous choice and is always correct."
+      d: "`backend.frontend.svc.cluster.local` looks for a Service `backend` in namespace `frontend`, not in `payments`."
+    tryCommand: kubectl exec <pod> -n frontend -- nslookup backend.payments.svc.cluster.local
+
+  - id: q4
+    type: single-choice
+    prompt: "You create a headless Service (`spec.clusterIP: None`) named `db` in namespace `data`. What does DNS return when you query `db.data.svc.cluster.local`?"
+    options:
+      - id: a
+        text: A single A record pointing to the ClusterIP of the headless Service
+      - id: b
+        text: Nothing — headless Services have no DNS entry
+      - id: c
+        text: Multiple A records, one for each ready Pod's IP
+      - id: d
+        text: A CNAME record pointing to the first Pod by creation order
+    correctAnswer: c
+    explanation: "A headless Service has no ClusterIP. Instead, CoreDNS returns an A record for each ready Pod that matches the selector, pointing directly to each Pod's IP. Clients must choose which IP to connect to (e.g., by iterating over the record set). This is the standard pattern for StatefulSets."
+    wrongExplanations:
+      a: "Headless Services have `clusterIP: None`; there is no virtual IP to return as an A record."
+      b: "Headless Services have DNS entries — just per-Pod A records instead of a single Service IP."
+      d: "DNS for headless Services returns A records (Pod IPs), not CNAME records. The order may vary and is not guaranteed to be creation order."
+    tryCommand: nslookup db.data.svc.cluster.local
+
+  - id: q5
+    type: single-choice
+    prompt: "You create a Service with `spec.type: ExternalName` and `spec.externalName: db.example.com`. What happens when a Pod in the cluster resolves the Service's DNS name?"
+    options:
+      - id: a
+        text: The request is proxied by kube-proxy to `db.example.com` through the Service's ClusterIP
+      - id: b
+        text: CoreDNS returns a CNAME record pointing to `db.example.com`; no kube-proxy rules are created
+      - id: c
+        text: Kubernetes creates a NodePort Service on every node and tunnels traffic to `db.example.com`
+      - id: d
+        text: The Service resolves to the cluster's external gateway IP, which forwards to `db.example.com`
+    correctAnswer: b
+    explanation: "An ExternalName Service is purely a DNS alias. CoreDNS responds to queries for the Service's name with a CNAME record pointing to `spec.externalName`. The client then resolves that CNAME through normal DNS. There is no ClusterIP assigned and no kube-proxy load-balancing rule."
+    wrongExplanations:
+      a: "ExternalName Services have no ClusterIP and no kube-proxy rules. The alias is resolved entirely at the DNS level by CoreDNS."
+      c: "ExternalName does not create NodePort rules or tunnels. It is a DNS-only redirect."
+      d: "Kubernetes does not maintain a 'cluster external gateway IP' for ExternalName routing. The CNAME directs the client's resolver to look up the external name directly."
+    tryCommand: kubectl get svc <name> -n <namespace> -o jsonpath='{.spec.externalName}'

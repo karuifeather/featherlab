@@ -1,0 +1,70 @@
+schemaVersion: 1
+id: k8s-0118
+type: task
+title: Roll Back to Blue
+summary: Roll back a blue/green traffic switch by restoring the Service selector to the stable blue version.
+track: kubernetes
+level: 5
+order: 21
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [services, blue-green, rollback, selectors]
+prerequisites: [k8s-0117]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0118`"
+  - "Service `web` selector targets version=blue"
+  - "Service `web` routes to the `web-blue` Deployment"
+  - "Service `web` has at least 3 ready endpoints"
+  - "HTTP request through Service `web` returns a response containing `nginx`"
+
+hints:
+  - "Check the current selector: `kubectl get svc web -n fl-k8s-0118 -o jsonpath='{.spec.selector}'`. It currently points to green."
+  - "Edit the Service: `kubectl edit svc web -n fl-k8s-0118` — change `version: green` back to `version: blue` in the selector."
+  - "Verify endpoints switched back: `kubectl get endpoints web -n fl-k8s-0118`"
+
+lifecycle:
+  namespaces: [fl-k8s-0118]
+  setup:
+    manifests: [setup/blue-green.yaml]
+
+checks:
+  - id: service-selector
+    type: k8s.service-spec
+    label: Service web selector targets version=blue
+    params:
+      name: web
+      namespace: fl-k8s-0118
+      selector:
+        app: web
+        version: blue
+  - id: routes-to-blue
+    type: k8s.service-selects
+    label: Service web routes to the web-blue Deployment
+    params:
+      name: web
+      namespace: fl-k8s-0118
+      workload: { kind: Deployment, name: web-blue }
+  - id: endpoints-ready
+    type: k8s.endpoint-ready
+    label: Service web has at least 3 ready endpoints
+    params:
+      name: web
+      namespace: fl-k8s-0118
+      minReady: 3
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service web returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0118
+      host: web.fl-k8s-0118
+      port: 80
+      contains: nginx

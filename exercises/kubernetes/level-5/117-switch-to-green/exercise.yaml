@@ -1,0 +1,70 @@
+schemaVersion: 1
+id: k8s-0117
+type: task
+title: Switch to Green
+summary: Perform a blue/green traffic switch by updating the Service selector from version=blue to version=green and verify HTTP connectivity.
+track: kubernetes
+level: 5
+order: 20
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [services, blue-green, selectors, traffic-switching]
+prerequisites: [k8s-0116]
+
+environment:
+  profile: kind-default
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0117`"
+  - "Service `web` selector targets version=green"
+  - "Service `web` routes to the `web-green` Deployment"
+  - "Service `web` has at least 2 ready endpoints"
+  - "HTTP request through Service `web` returns a response containing `nginx`"
+
+hints:
+  - "Edit the Service: `kubectl edit svc web -n fl-k8s-0117` — change `version: blue` to `version: green` in the selector section."
+  - "Verify the switch: `kubectl get endpoints web -n fl-k8s-0117`. The endpoint IPs should now belong to web-green Pods."
+  - "Check which Pods own those IPs: `kubectl get pods -n fl-k8s-0117 -o wide -l version=green`"
+
+lifecycle:
+  namespaces: [fl-k8s-0117]
+  setup:
+    manifests: [setup/blue-green.yaml]
+
+checks:
+  - id: service-selector
+    type: k8s.service-spec
+    label: Service web selector targets version=green
+    params:
+      name: web
+      namespace: fl-k8s-0117
+      selector:
+        app: web
+        version: green
+  - id: routes-to-green
+    type: k8s.service-selects
+    label: Service web routes to the web-green Deployment
+    params:
+      name: web
+      namespace: fl-k8s-0117
+      workload: { kind: Deployment, name: web-green }
+  - id: endpoints-ready
+    type: k8s.endpoint-ready
+    label: Service web has at least 2 ready endpoints
+    params:
+      name: web
+      namespace: fl-k8s-0117
+      minReady: 2
+  - id: http
+    type: k8s.http-probe
+    label: HTTP request through Service web returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0117
+      host: web.fl-k8s-0117
+      port: 80
+      contains: nginx
