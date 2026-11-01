@@ -184,6 +184,38 @@ test("the prerequisite graph is the designed curriculum, not one linear chain", 
     // Level 5: M5.7 Circuit G — DNS Troubleshooting and Mastery.
     "k8s-0123": ["k8s-0122"],
     "k8s-0124": ["k8s-0123"],
+    // Level 6: Circuit A — Ingress Fundamentals
+    "k8s-0125": ["k8s-0124"],
+    "k8s-0126": ["k8s-0125"],
+    "k8s-0127": ["k8s-0126"],
+    "k8s-0128": ["k8s-0127"],
+    "k8s-0129": ["k8s-0128"],
+    // Level 6: Circuit B — Gateway API Architecture
+    "k8s-0130": ["k8s-0129"],
+    "k8s-0131": ["k8s-0130"],
+    "k8s-0132": ["k8s-0131"],
+    "k8s-0133": ["k8s-0132"],
+    "k8s-0134": ["k8s-0133"],
+    "k8s-0135": ["k8s-0134"],
+    // Level 6: Circuit C — HTTP Matching
+    "k8s-0136": ["k8s-0135"],
+    "k8s-0137": ["k8s-0136"],
+    "k8s-0138": ["k8s-0137"],
+    "k8s-0139": ["k8s-0138"],
+    // Level 6: Circuit D — TLS and HTTPS
+    "k8s-0140": ["k8s-0139"],
+    "k8s-0141": ["k8s-0140"],
+    "k8s-0142": ["k8s-0141"],
+    "k8s-0143": ["k8s-0142"],
+    // Level 6: Circuit E — Cross-Namespace Routing
+    "k8s-0144": ["k8s-0143"],
+    "k8s-0145": ["k8s-0144"],
+    "k8s-0146": ["k8s-0145"],
+    "k8s-0147": ["k8s-0146"],
+    // Level 6: Circuit F — Canary HTTPRoute and Mastery
+    "k8s-0148": ["k8s-0147"],
+    "k8s-0149": ["k8s-0148"],
+    "k8s-0150": ["k8s-0149"],
   });
 });
 

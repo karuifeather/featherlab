@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l6-006
+activityType: knowledge-check
+title: Level 6 Routing — Mixed Review
+summary: A cross-circuit review covering Ingress path types, Gateway API architecture, HTTP header/path matching, TLS termination, cross-namespace security, and weighted routing.
+track: kubernetes
+level: 6
+order: 27.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [ingress, gateway-api, tls, cross-namespace, weighted-routing, http-matching]
+relatedLabs: [k8s-0125, k8s-0130, k8s-0136, k8s-0140, k8s-0144, k8s-0148, k8s-0150]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "An Ingress path rule has `path: /api` and `pathType: Exact`. Which request URLs does this rule match?"
+    options:
+      - id: a
+        text: "Any URL beginning with `/api`, such as `/api/users` and `/api/v2/items`"
+      - id: b
+        text: "Only the exact path `/api` — not `/api/` and not `/api/users`"
+      - id: c
+        text: "Any URL containing the string `api` anywhere in the path"
+      - id: d
+        text: "`/api` and `/api/` only, treating the trailing slash as optional"
+    correctAnswer: b
+    explanation: "`pathType: Exact` requires the URL path to be identical to the specified path, character for character. `/api` matches only `/api`. It does not match `/api/`, `/api/users`, or anything else. Use `pathType: Prefix` when you want to match a path and all sub-paths below it."
+    wrongExplanations:
+      a: "Prefix matching — not Exact. `pathType: Prefix` with `/api` would match `/api`, `/api/`, and `/api/users`."
+      c: "No Ingress pathType performs substring matching. The path is matched from the beginning, not anywhere in the URL."
+      d: "`pathType: Exact` is strict: `/api` and `/api/` are different paths. The trailing slash is not treated as optional."
+    docRef: "https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types"
+
+  - id: q2
+    type: single-choice
+    prompt: "In Gateway API, what is the relationship between a GatewayClass and a Gateway?"
+    options:
+      - id: a
+        text: "GatewayClass is a namespace-scoped resource that configures one Gateway's listeners"
+      - id: b
+        text: "GatewayClass is a cluster-scoped template that names a controller implementation; a Gateway is a namespace-scoped instance that references a GatewayClass to request a load balancer"
+      - id: c
+        text: "Gateway and GatewayClass are synonyms — they refer to the same resource type"
+      - id: d
+        text: "GatewayClass is the configuration for TLS certificates; Gateway defines the routing rules"
+    correctAnswer: b
+    explanation: "GatewayClass is a **cluster-scoped** resource (like StorageClass) created by the infrastructure provider. It names the controller that will implement Gateways of that class (e.g., `traefik`). A **Gateway** is a **namespace-scoped** resource created by a platform team or developer; it references a GatewayClass and declares listeners (port, protocol, hostname). The referenced controller reads the GatewayClass to determine how to provision the infrastructure, then programs the proxy based on the Gateway's listeners."
+    wrongExplanations:
+      a: "GatewayClass is cluster-scoped, not namespace-scoped. It is not specific to a single Gateway."
+      c: "They are distinct resource types with different scopes and purposes."
+      d: "GatewayClass identifies the controller; it has nothing to do with TLS certificates. TLS certificates are referenced from Gateway listeners via `certificateRefs`."
+    docRef: "https://gateway-api.sigs.k8s.io/concepts/api-overview/#gatewayclass"
+
+  - id: q3
+    type: single-choice
+    prompt: "Can a single HTTPRoute rule match requests on BOTH a specific HTTP header AND a specific path prefix simultaneously?"
+    options:
+      - id: a
+        text: "No — a rule can only contain one type of match condition at a time"
+      - id: b
+        text: "No — header matching requires a separate HTTPRoute resource from path matching"
+      - id: c
+        text: "Yes — a single HTTPRouteMatch can include both `path` and `headers` matchers; all conditions must be satisfied for the rule to fire"
+      - id: d
+        text: "Yes — but only if both conditions are listed in the same `matches` entry and the path is of type Exact"
+    correctAnswer: c
+    explanation: "An `HTTPRouteMatch` can contain any combination of `path`, `headers`, `queryParams`, and `method` conditions. When multiple conditions are present in the same match object, they are **ANDed** — the request must satisfy all of them. So a match on `path: /api` (Prefix) AND `headers: X-Version: v2` will only fire when the request path starts with `/api` AND the header is present with that value."
+    wrongExplanations:
+      a: "A single HTTPRouteMatch supports multiple field types simultaneously. All conditions in one match are ANDed together."
+      b: "There is no such separation — header and path conditions coexist within a single HTTPRoute rule's match."
+      d: "Combined path and header matching works with any pathType — Exact, Prefix, or RegularExpression. The pathType restriction is not required."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteMatch"
+
+  - id: q4
+    type: single-choice
+    prompt: "A Kubernetes Ingress resource is configured with a `tls:` section listing a Secret name and hostname. Where does TLS termination occur?"
+    options:
+      - id: a
+        text: "At the Ingress controller (e.g., Traefik), which decrypts the TLS connection and forwards plain HTTP to the backend pods"
+      - id: b
+        text: "At the backend pods, which receive the raw TLS connection from the Ingress controller"
+      - id: c
+        text: "At etcd, which stores the TLS certificate and decrypts traffic before it reaches the node"
+      - id: d
+        text: "At the kube-proxy on each node, which handles TLS for all cluster ingress traffic"
+    correctAnswer: a
+    explanation: "When an Ingress controller processes a `tls:` section, it loads the TLS certificate from the named Secret and terminates TLS at the proxy layer. The client connects with HTTPS; the Ingress controller decrypts the connection, then forwards the request as plain HTTP to the backend Service (unless you also configure backend TLS). This is called **TLS termination** or **TLS offloading** at the edge. Backend pods typically only need to handle HTTP."
+    wrongExplanations:
+      b: "Backend pods receive plain HTTP traffic (by default) after the Ingress controller terminates TLS. The pods do not see the encrypted connection."
+      c: "etcd stores cluster state and has no role in request routing or TLS termination."
+      d: "kube-proxy handles Service routing (ClusterIP, NodePort) but does not perform TLS termination for Ingress traffic."
+    docRef: "https://kubernetes.io/docs/concepts/services-networking/ingress/#tls"
+
+  - id: q5
+    type: single-choice
+    prompt: "An HTTPRoute in namespace `team-a` wants to reference a Service in namespace `team-b` as a backend. Why does Gateway API require a ReferenceGrant in `team-b`?"
+    options:
+      - id: a
+        text: "ReferenceGrants are required for all backendRefs, including same-namespace references, to enforce a consistent security model"
+      - id: b
+        text: "Cross-namespace references are restricted by default because allowing any namespace to reference services in another namespace would let a compromised or misconfigured HTTPRoute send traffic to backends it has no ownership over — ReferenceGrant gives `team-b` explicit control over who can reference its services"
+      - id: c
+        text: "It is only a performance optimization — without a ReferenceGrant the controller does not cache the cross-namespace Service endpoints"
+      - id: d
+        text: "ReferenceGrant is required because HTTPRoutes cannot cross namespace boundaries without a special API server flag"
+    correctAnswer: b
+    explanation: "Gateway API's cross-namespace security model is intentional: any namespace can create an HTTPRoute, but only namespaces that the *target* namespace explicitly permits can reference its Services. Without this control, a developer in `team-a` could route traffic to sensitive Services owned by `team-b` without `team-b`'s knowledge or consent. The ReferenceGrant, created in the *target* namespace by its owners, is the explicit opt-in. Same-namespace references do not require a ReferenceGrant because ownership is implied."
+    wrongExplanations:
+      a: "Same-namespace backendRefs do NOT require a ReferenceGrant. The restriction applies only to cross-namespace references."
+      c: "ReferenceGrant is a security authorization mechanism, not a performance optimization."
+      d: "Cross-namespace HTTPRoute backendRefs are a standard API feature; they work with a ReferenceGrant and no special API server flags. The constraint is at the application layer, not the API layer."
+    docRef: "https://gateway-api.sigs.k8s.io/concepts/security-model/#cross-namespace-references"

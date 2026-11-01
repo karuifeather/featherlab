@@ -170,6 +170,41 @@ export const CURRICULUM = Object.freeze({
     "k8s-0123", // Debug DNS
     "k8s-0124", // Services and DNS Mastery
   ],
+  6: [
+    // Circuit A — Ingress Fundamentals
+    "k8s-0125", // Your First Ingress
+    "k8s-0126", // Route by Hostname
+    "k8s-0127", // Route by Path
+    "k8s-0128", // Fix the Backend
+    "k8s-0129", // Ingress Routing Troubleshooting
+    // Circuit B — Gateway API Architecture
+    "k8s-0130", // Inspect the GatewayClass
+    "k8s-0131", // Your First Gateway Route
+    "k8s-0132", // Hostname Routing with Gateway
+    "k8s-0133", // Path-Based Routing
+    "k8s-0134", // Route Attachment
+    "k8s-0135", // Gateway Status Diagnostics
+    // Circuit C — HTTP Matching
+    "k8s-0136", // Match the Correct Path
+    "k8s-0137", // Route by Request Header
+    "k8s-0138", // HTTP Redirect
+    "k8s-0139", // Repair a Routing Conflict
+    // Circuit D — TLS and HTTPS
+    "k8s-0140", // HTTPS with Ingress
+    "k8s-0141", // HTTPS with Gateway
+    "k8s-0142", // Fix a TLS Configuration
+    "k8s-0143", // Secure Routing Challenge
+    // Circuit E — Cross-Namespace Routing
+    "k8s-0144", // Route Across Namespaces
+    "k8s-0145", // Inspect the Cross-Namespace Failure
+    "k8s-0146", // Multi-Backend Cross-Namespace
+    "k8s-0147", // Cross-Namespace Routing Mastery
+    // Circuit F — Canary HTTPRoute
+    "k8s-0148", // Configure a Canary HTTPRoute
+    "k8s-0149", // Promote the Canary
+    // Level 6 Mastery
+    "k8s-0150", // Level 6 Routing Mastery
+  ],
 });
 
 export const CURRICULUM_ORDER = Object.freeze(Object.values(CURRICULUM).flat());

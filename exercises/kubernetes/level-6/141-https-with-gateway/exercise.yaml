@@ -1,0 +1,59 @@
+schemaVersion: 1
+id: k8s-0141
+type: task
+title: HTTPS with Gateway
+summary: Add an HTTPS listener to an existing Gateway so TLS traffic is terminated at the Gateway using a pre-created Secret.
+track: kubernetes
+level: 6
+order: 17
+difficulty: intermediate
+estimatedMinutes: 14
+tags: [gateway-api, gateway, tls, https, secrets, networking]
+prerequisites: [k8s-0140]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0141`"
+  - "Gateway `web-gw` has an HTTPS listener on port 443 with TLS mode Terminate referencing Secret `app-tls`"
+  - "Gateway `web-gw` is Accepted and Programmed"
+  - "HTTPS request for host `app.k8s-0141.fl.test` returns a response containing `web-response`"
+
+hints:
+  - "Inspect the Gateway: `kubectl get gateway web-gw -n fl-k8s-0141 -o yaml`"
+  - "The Gateway currently has only an `http` listener on port 80"
+  - "Edit the Gateway and add an HTTPS listener with `name: https`, `port: 443`, `protocol: HTTPS`, `tls.mode: Terminate`, and `tls.certificateRefs[0].name: app-tls`: `kubectl edit gateway web-gw -n fl-k8s-0141`"
+
+lifecycle:
+  namespaces: [fl-k8s-0141]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: gateway-ready
+    type: k8s.gateway-ready
+    label: Gateway web-gw is Accepted and Programmed
+    params:
+      name: web-gw
+      namespace: fl-k8s-0141
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute web-route is accepted
+    params:
+      name: web-route
+      namespace: fl-k8s-0141
+      parentRefName: web-gw
+  - id: https-probe
+    type: k8s.routing-probe
+    label: HTTPS request reaches the web backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0141
+      host: app.k8s-0141.fl.test
+      https: true
+      contains: web-response

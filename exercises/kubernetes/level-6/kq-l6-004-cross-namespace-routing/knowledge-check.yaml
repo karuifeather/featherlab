@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l6-004
+activityType: knowledge-check
+title: Cross-Namespace Routing
+summary: Understand why Gateway API requires explicit authorization for cross-namespace backend references and how ReferenceGrant provides it.
+track: kubernetes
+level: 6
+order: 23.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [gateway-api, cross-namespace, reference-grant, security]
+relatedLabs: [k8s-0144, k8s-0145, k8s-0146, k8s-0147]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Why does an HTTPRoute that references a Service in a different namespace require a ReferenceGrant?"
+    options:
+      - id: a
+        text: "Because Services in other namespaces run on different nodes and need special network permissions."
+      - id: b
+        text: "Because the Gateway API enforces a namespace boundary: a namespace team must explicitly authorize external references into their namespace to prevent unauthorized exposure of their services."
+      - id: c
+        text: "Because Kubernetes RBAC blocks cross-namespace Service lookups by default and the ReferenceGrant grants the RBAC permission."
+      - id: d
+        text: "Because the Gateway controller cannot route to a Service without first resolving its ClusterIP, which requires a separate namespace-scoped token."
+    correctAnswer: b
+    explanation: "Gateway API treats the namespace boundary as a security perimeter. Without explicit authorization, an HTTPRoute in namespace A cannot pull traffic through to a Service in namespace B — even if the HTTPRoute author has cluster-admin rights. The ReferenceGrant is the team that owns namespace B saying 'yes, HTTP routes from namespace A may reference our Services.' This prevents accidental or malicious cross-namespace exposure."
+    wrongExplanations:
+      a: "Node placement has no bearing on this requirement. Services are reachable across nodes via kube-proxy regardless of namespace. The restriction is a policy decision by the Gateway API, not a network-layer limitation."
+      c: "ReferenceGrant is not an RBAC object. It does not grant `get` or `list` permissions on Services — those are governed separately by RBAC. ReferenceGrant is a Gateway API-specific authorization checked only by the Gateway controller."
+      d: "The Gateway controller does not use per-namespace tokens to resolve Service ClusterIPs. ClusterIP resolution is handled by the cluster's DNS and kube-proxy. ReferenceGrant is a policy check inside the controller, not a network credential."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1beta1.ReferenceGrant"
+
+  - id: q2
+    type: single-choice
+    prompt: "In which namespace must a ReferenceGrant be created when an HTTPRoute in namespace `app-ns` references a Service in namespace `backend-ns`?"
+    options:
+      - id: a
+        text: "In `app-ns` — where the HTTPRoute lives."
+      - id: b
+        text: "In the `traefik-system` namespace — where the Gateway controller runs."
+      - id: c
+        text: "In `backend-ns` — where the Service lives."
+      - id: d
+        text: "In the same namespace as the Gateway resource."
+    correctAnswer: c
+    explanation: "The ReferenceGrant must be placed in the *target* namespace — the namespace that owns the Service being referenced (`backend-ns`). This makes the authorization the responsibility of the team that manages `backend-ns`. The `spec.from` block then names the namespace that is allowed to reference into it (in this case `app-ns`)."
+    wrongExplanations:
+      a: "Placing the ReferenceGrant in `app-ns` (the HTTPRoute's namespace) would be circular — the requesting party cannot grant themselves access to another team's resources. The target namespace team must issue the grant."
+      b: "The `traefik-system` namespace is platform-owned and protected. Exercises cannot create resources there. ReferenceGrant placement is determined by the backend namespace, not the controller's namespace."
+      d: "The Gateway's namespace is independent of both the HTTPRoute and the backend Service. A ReferenceGrant placed in the Gateway namespace would not authorize the cross-namespace backendRef."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1beta1.ReferenceGrant"
+
+  - id: q3
+    type: single-choice
+    prompt: "What happens to an HTTPRoute's status when it references a Service in another namespace but no matching ReferenceGrant exists?"
+    options:
+      - id: a
+        text: "The `Accepted` condition becomes `False` with reason `NotAllowedByListeners`."
+      - id: b
+        text: "The HTTPRoute is silently dropped and does not appear in `kubectl get httproute` output."
+      - id: c
+        text: "The `ResolvedRefs` condition becomes `False` with reason `RefNotPermitted`."
+      - id: d
+        text: "The Gateway returns HTTP 403 Forbidden to all clients connecting to that hostname."
+    correctAnswer: c
+    explanation: 'The Gateway controller sets `ResolvedRefs=False` with `reason: RefNotPermitted` on the parent status entry for the HTTPRoute. The `Accepted` condition can remain `True` — the route is syntactically valid and attached to the Gateway — but its backend reference cannot be resolved. Traffic to the route returns HTTP 500 (no valid backend) until the ReferenceGrant is created. You can read the exact message with: `kubectl get httproute <name> -n <ns> -o jsonpath=''{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].message}''`'
+    wrongExplanations:
+      a: "`NotAllowedByListeners` is set when the HTTPRoute's hostnames or parentRef do not match any Gateway listener's allowed configuration — a different problem. `Accepted` concerns attachment to the Gateway, not backend resolution."
+      b: "The HTTPRoute is never silently dropped. It remains visible in the API and in `kubectl get httproute` output; only its status conditions indicate the problem."
+      d: "The Gateway returns HTTP 500 (backend unavailable), not HTTP 403, when a backendRef cannot be resolved. HTTP 403 is an application-layer response; the gateway infrastructure does not produce it for missing ReferenceGrants."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.RouteConditionType"
+
+  - id: q4
+    type: single-choice
+    prompt: "Which of the following correctly describes the `spec.from` section of a ReferenceGrant that permits HTTPRoutes in namespace `app-ns` to reference Services?"
+    options:
+      - id: a
+        text: '`from: [{group: "", kind: Service, namespace: app-ns}]`'
+      - id: b
+        text: "`from: [{group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: app-ns}]`"
+      - id: c
+        text: "`from: [{group: networking.k8s.io, kind: Ingress, namespace: app-ns}]`"
+      - id: d
+        text: "`from: [{group: gateway.networking.k8s.io, kind: Gateway, namespace: app-ns}]`"
+    correctAnswer: b
+    explanation: "The `from` block describes the referencing resource — the resource that holds the cross-namespace reference. For Gateway API routing, that resource is an HTTPRoute, which belongs to the `gateway.networking.k8s.io` API group. `namespace` names the namespace where the HTTPRoute lives. Together these three fields (`group`, `kind`, `namespace`) uniquely identify which HTTPRoutes are authorized to reference into this namespace."
+    wrongExplanations:
+      a: 'This describes a Service (`group: "", kind: Service`), which is the *target* of the reference, not the source. The `from` block identifies the referencing resource (HTTPRoute), not the referenced one.'
+      c: "Ingress resources do not use ReferenceGrant. They belong to `networking.k8s.io` but the Ingress API does not support cross-namespace backends at all, so a `from` entry for Ingress has no effect."
+      d: "The Gateway itself does not make backend references — HTTPRoutes do. A `from` entry for `kind: Gateway` would not authorize HTTPRoute backendRefs."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1beta1.ReferenceGrantSpec"
+
+  - id: q5
+    type: single-choice
+    prompt: "Does an Ingress resource that references a backend Service in a different namespace require a ReferenceGrant?"
+    options:
+      - id: a
+        text: "Yes — Ingress uses ReferenceGrant the same way HTTPRoute does."
+      - id: b
+        text: "Yes — but only when the Ingress controller explicitly supports cross-namespace backends."
+      - id: c
+        text: "No — Ingress rules do not support cross-namespace backend Services at all; every backend must be in the same namespace as the Ingress."
+      - id: d
+        text: "No — Ingress bypasses the ReferenceGrant requirement because it is an older API."
+    correctAnswer: c
+    explanation: "The Kubernetes Ingress API specification requires that backend Services be in the same namespace as the Ingress resource. Cross-namespace backends are simply not part of the Ingress spec — there is no field for a target namespace in `spec.rules[].http.paths[].backend`. ReferenceGrant is a Gateway API concept and has no effect on Ingress behavior. If you need cross-namespace routing, use an HTTPRoute with Gateway API and a ReferenceGrant in the backend namespace."
+    wrongExplanations:
+      a: "Ingress does not use ReferenceGrant. The ReferenceGrant CRD is part of the Gateway API specification and is checked only by Gateway API controllers when resolving HTTPRoute (and similar) backendRefs."
+      b: "No mainstream Ingress controller extends the Ingress spec to support cross-namespace backends. The backend namespace field does not exist in the Ingress API, regardless of controller implementation."
+      d: "The reason Ingress does not use ReferenceGrant is not that it 'bypasses' a requirement — it is that the Ingress spec was designed for same-namespace backends and the question of cross-namespace authorization simply never arose in that API. Option C is the accurate description."
+    docRef: "https://kubernetes.io/docs/concepts/services-networking/ingress/#the-ingress-resource"

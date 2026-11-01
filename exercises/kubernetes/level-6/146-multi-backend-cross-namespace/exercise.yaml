@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0146
+type: task
+title: Multi-Backend Cross-Namespace
+summary: Enable weighted traffic splitting across two backend Services in separate namespaces by creating a ReferenceGrant in each backend namespace.
+track: kubernetes
+level: 6
+order: 22
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [gateway-api, cross-namespace, reference-grant, traffic-splitting, httproute]
+prerequisites: [k8s-0145]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0146`"
+  - "ReferenceGrant `allow-from-gw-ns` exists in namespace `fl-k8s-0146-v1`"
+  - "ReferenceGrant `allow-from-gw-ns` exists in namespace `fl-k8s-0146-v2`"
+  - "HTTPRoute `api-route` in `fl-k8s-0146` has Accepted=True and ResolvedRefs=True"
+
+hints:
+  - "Inspect the HTTPRoute: `kubectl describe httproute api-route -n fl-k8s-0146`. Look at the `backendRefs` — there are two, each in a different namespace."
+  - "Each backend namespace needs its own ReferenceGrant; one grant cannot cover two namespaces."
+  - "Create one ReferenceGrant named `allow-from-gw-ns` in `fl-k8s-0146-v1` and another in `fl-k8s-0146-v2`, each with `from[0].namespace: fl-k8s-0146`."
+
+lifecycle:
+  namespaces: [fl-k8s-0146, fl-k8s-0146-v1, fl-k8s-0146-v2]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: grant-v1-exists
+    type: k8s.resource-exists
+    label: ReferenceGrant allow-from-gw-ns exists in fl-k8s-0146-v1
+    params:
+      kind: ReferenceGrant
+      name: allow-from-gw-ns
+      namespace: fl-k8s-0146-v1
+  - id: grant-v2-exists
+    type: k8s.resource-exists
+    label: ReferenceGrant allow-from-gw-ns exists in fl-k8s-0146-v2
+    params:
+      kind: ReferenceGrant
+      name: allow-from-gw-ns
+      namespace: fl-k8s-0146-v2
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute api-route is accepted with resolved references
+    params:
+      name: api-route
+      namespace: fl-k8s-0146
+      parentRefName: main-gw

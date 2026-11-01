@@ -1,0 +1,173 @@
+# v1 backend namespace resources
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: v1-html
+  namespace: fl-k8s-0146-v1
+data:
+  index.html: |
+    version-1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-v1
+  namespace: fl-k8s-0146-v1
+  labels:
+    app: api-v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-v1
+  template:
+    metadata:
+      labels:
+        app: api-v1
+    spec:
+      terminationGracePeriodSeconds: 5
+      volumes:
+        - name: html
+          configMap:
+            name: v1-html
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v1
+  namespace: fl-k8s-0146-v1
+spec:
+  selector:
+    app: api-v1
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# v2 backend namespace resources
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: v2-html
+  namespace: fl-k8s-0146-v2
+data:
+  index.html: |
+    version-2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-v2
+  namespace: fl-k8s-0146-v2
+  labels:
+    app: api-v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-v2
+  template:
+    metadata:
+      labels:
+        app: api-v2
+    spec:
+      terminationGracePeriodSeconds: 5
+      volumes:
+        - name: html
+          configMap:
+            name: v2-html
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v2
+  namespace: fl-k8s-0146-v2
+spec:
+  selector:
+    app: api-v2
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Gateway namespace resources: Gateway, HTTPRoute, and grader-client.
+# Both ReferenceGrants are intentionally absent — the learner must create them.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gw
+  namespace: fl-k8s-0146
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: "api.k8s-0146.fl.test"
+---
+# HTTPRoute splits traffic 50/50 across two backends in different namespaces.
+# ResolvedRefs is False until both ReferenceGrants exist.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: fl-k8s-0146
+spec:
+  parentRefs:
+    - name: main-gw
+  hostnames:
+    - "api.k8s-0146.fl.test"
+  rules:
+    - backendRefs:
+        - name: api-v1
+          namespace: fl-k8s-0146-v1
+          port: 80
+          weight: 50
+        - name: api-v2
+          namespace: fl-k8s-0146-v2
+          port: 80
+          weight: 50
+---
+# Grader-owned client Pod for routing probes; the learner does not create this.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grader-client
+  namespace: fl-k8s-0146
+  labels:
+    app: grader-client
+    featherlab.dev/role: grader
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: client
+      image: curlimages/curl:8.13.0
+      command: ["sleep", "86400"]

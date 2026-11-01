@@ -1,0 +1,201 @@
+# Web service in the primary namespace — served by an Ingress (same-namespace, no ReferenceGrant needed).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-html
+  namespace: fl-k8s-0147
+data:
+  index.html: |
+    web-0147
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: fl-k8s-0147
+  labels:
+    app: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      terminationGracePeriodSeconds: 5
+      volumes:
+        - name: html
+          configMap:
+            name: web-html
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: fl-k8s-0147
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Ingress for the web service — same-namespace backend works without a ReferenceGrant.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-ingress
+  namespace: fl-k8s-0147
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: web.k8s-0147.fl.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
+---
+# API service in the secondary namespace — served by a Gateway + HTTPRoute (cross-namespace).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-html
+  namespace: fl-k8s-0147-api
+data:
+  index.html: |
+    api-0147
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: fl-k8s-0147-api
+  labels:
+    app: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      terminationGracePeriodSeconds: 5
+      volumes:
+        - name: html
+          configMap:
+            name: api-html
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: fl-k8s-0147-api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Gateway and HTTPRoute in the primary namespace.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gw
+  namespace: fl-k8s-0147
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: "api.k8s-0147.fl.test"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: fl-k8s-0147
+spec:
+  parentRefs:
+    - name: main-gw
+  hostnames:
+    - "api.k8s-0147.fl.test"
+  rules:
+    - backendRefs:
+        - name: api
+          namespace: fl-k8s-0147-api
+          port: 80
+---
+# ReferenceGrant with WRONG from[0].namespace — the learner must fix it.
+# The from namespace is "wrong-namespace" but should be "fl-k8s-0147".
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-from-gw-ns
+  namespace: fl-k8s-0147-api
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: wrong-namespace
+  to:
+    - group: ""
+      kind: Service
+---
+# Grader-owned client Pod for routing probes; the learner does not create this.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grader-client
+  namespace: fl-k8s-0147
+  labels:
+    app: grader-client
+    featherlab.dev/role: grader
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: client
+      image: curlimages/curl:8.13.0
+      command: ["sleep", "86400"]

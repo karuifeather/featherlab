@@ -1,0 +1,62 @@
+schemaVersion: 1
+id: k8s-0136
+type: task
+title: Match the Correct Path
+summary: Correct an HTTPRoute that is sending all requests to the wrong backend by fixing its path matching rule.
+track: kubernetes
+level: 6
+order: 12
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [gateway-api, httproute, path-matching, networking]
+prerequisites: [k8s-0135]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0136`"
+  - "HTTPRoute `web-route` rule for PathPrefix `/api` routes to Service `api:80`"
+  - "HTTP request for path `/api` returns a response containing `api-response`"
+  - "HTTP request for path `/app` still returns a response containing `app-response`"
+
+hints:
+  - "Inspect the HTTPRoute: `kubectl get httproute web-route -n fl-k8s-0136 -o yaml`"
+  - "Look at the second rule — its `backendRefs[0].name` points to the wrong Service"
+  - "Edit the HTTPRoute: `kubectl edit httproute web-route -n fl-k8s-0136`"
+
+lifecycle:
+  namespaces: [fl-k8s-0136]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute web-route is accepted with resolved references
+    params:
+      name: web-route
+      namespace: fl-k8s-0136
+      parentRefName: web-gw
+  - id: probe-api
+    type: k8s.routing-probe
+    label: Path /api reaches the api backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0136
+      host: app.k8s-0136.fl.test
+      path: /api
+      contains: api-response
+  - id: probe-app
+    type: k8s.routing-probe
+    label: Path /app still reaches the app backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0136
+      host: app.k8s-0136.fl.test
+      path: /app
+      contains: app-response

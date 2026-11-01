@@ -1983,6 +1983,545 @@ const dnsResolve = {
   },
 };
 
+// ─── Level 6: Ingress, Gateway API & HTTP Routing validators ──────────────────
+
+/**
+ * k8s.ingress-spec — checks an Ingress resource's rules and/or TLS section.
+ * Validates that specific host+path→backend combinations appear in spec.rules,
+ * and optionally that a named TLS entry covers a given host.
+ *
+ * Only the listed entries are checked; additional rules are ignored.
+ */
+const ingressSpec = {
+  type: "k8s.ingress-spec",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["name", "namespace", "ingressClassName", "rules", "tls"], problems);
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    if (p.ingressClassName !== undefined)
+      check(
+        p.ingressClassName,
+        { type: "string", minLength: 1, maxLength: 253 },
+        "ingressClassName",
+        problems,
+      );
+    if (p.rules !== undefined) {
+      check(
+        p.rules,
+        {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            open: true,
+            properties: {
+              host: { type: "string", minLength: 1, maxLength: 253 },
+              path: { type: "string", minLength: 1, maxLength: 200 },
+              pathType: { type: "string", enum: ["Exact", "Prefix", "ImplementationSpecific"] },
+              backend: {
+                type: "object",
+                open: true,
+                properties: {
+                  serviceName: { type: "string", minLength: 1, maxLength: 253 },
+                  servicePort: { type: "any" },
+                },
+              },
+            },
+          },
+        },
+        "rules",
+        problems,
+      );
+    }
+    if (p.tls !== undefined) {
+      check(
+        p.tls,
+        {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            open: true,
+            properties: {
+              secretName: { type: "string", minLength: 1, maxLength: 253 },
+              host: { type: "string", minLength: 1, maxLength: 253 },
+            },
+          },
+        },
+        "tls",
+        problems,
+      );
+    }
+    if (!p.ingressClassName && !p.rules && !p.tls)
+      problems.add("", "set at least one of ingressClassName, rules, or tls");
+  },
+  async run(p, ctx) {
+    const ref = { kind: "Ingress", name: p.name, namespace: p.namespace };
+    const ingress = await ctx.query.get(ref);
+    if (!ingress)
+      return {
+        passed: false,
+        feedback: `Ingress "${p.name}" was not found in namespace "${p.namespace}".`,
+      };
+    if (ingress.metadata?.deletionTimestamp)
+      return { passed: false, feedback: `Ingress "${p.name}" is being deleted.` };
+    const failures = [];
+    if (p.ingressClassName !== undefined) {
+      const actual = ingress.spec?.ingressClassName;
+      if (actual !== p.ingressClassName)
+        failures.push(
+          `ingressClassName is "${actual ?? "(not set)"}", expected "${p.ingressClassName}"`,
+        );
+    }
+    for (const required of p.rules ?? []) {
+      const hostRules = (ingress.spec?.rules ?? []).filter(
+        (r) => !required.host || r.host === required.host,
+      );
+      if (hostRules.length === 0) {
+        failures.push(`no rule for host "${required.host ?? "*"}"`);
+        continue;
+      }
+      if (required.path !== undefined || required.backend !== undefined) {
+        const paths = hostRules.flatMap((r) => r.http?.paths ?? []);
+        const match = paths.find((p_) => {
+          if (required.path !== undefined && p_.path !== required.path) return false;
+          if (required.pathType !== undefined && p_.pathType !== required.pathType) return false;
+          if (required.backend?.serviceName !== undefined) {
+            const svc = p_.backend?.service?.name;
+            if (svc !== required.backend.serviceName) return false;
+          }
+          if (required.backend?.servicePort !== undefined) {
+            const port = p_.backend?.service?.port?.number ?? p_.backend?.service?.port?.name;
+            if (String(port) !== String(required.backend.servicePort)) return false;
+          }
+          return true;
+        });
+        if (!match) {
+          const desc = [
+            required.path ? `path "${required.path}"` : "",
+            required.pathType ? `pathType "${required.pathType}"` : "",
+            required.backend?.serviceName ? `→ service "${required.backend.serviceName}"` : "",
+            required.backend?.servicePort !== undefined ? `:${required.backend.servicePort}` : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          failures.push(`no path rule matching ${desc} under host "${required.host ?? "*"}"`);
+        }
+      }
+    }
+    for (const required of p.tls ?? []) {
+      const entries = ingress.spec?.tls ?? [];
+      const match = entries.find((t) => {
+        if (required.secretName !== undefined && t.secretName !== required.secretName) return false;
+        if (required.host !== undefined && !(t.hosts ?? []).includes(required.host)) return false;
+        return true;
+      });
+      if (!match) {
+        failures.push(
+          `no TLS entry matching secretName "${required.secretName ?? "*"}" and host "${required.host ?? "*"}"`,
+        );
+      }
+    }
+    return {
+      passed: failures.length === 0,
+      feedback:
+        failures.length === 0
+          ? `Ingress "${p.name}" has the required configuration.`
+          : `Ingress "${p.name}" is incorrect: ${failures.join("; ")}.`,
+    };
+  },
+};
+
+/**
+ * k8s.gateway-ready — passes when a Gateway's conditions include Accepted=True and
+ * Programmed=True at observedGeneration == generation. Also accepts a specific listener
+ * by index (0-based) to check listener-level Programmed=True.
+ * A missing status or stale generation is "not yet reconciled", not a pass.
+ */
+const gatewayReady = resourceValidator({
+  type: "k8s.gateway-ready",
+  kinds: ["Gateway"],
+  params: {
+    listenerIndex: { type: "integer", min: 0, max: 99 },
+  },
+  evaluate(gateway, p, ref) {
+    const generation = gateway.metadata?.generation ?? 0;
+    const status = gateway.status ?? {};
+    const conditions = status.conditions ?? [];
+    const accepted = conditions.find((c) => c.type === "Accepted");
+    const programmed = conditions.find((c) => c.type === "Programmed");
+
+    // GatewayStatus has no top-level observedGeneration; staleness is on each condition.
+    if (!accepted) {
+      return {
+        passed: false,
+        feedback: `${describe(ref)} has not been reconciled yet — no status conditions found.`,
+      };
+    }
+    const observedGen = accepted.observedGeneration;
+    if (observedGen !== undefined && observedGen < generation)
+      return {
+        passed: false,
+        feedback: `${describe(ref)} has pending changes not yet reconciled by the controller (generation ${generation}, observed ${observedGen}).`,
+      };
+    if (accepted.status !== "True")
+      return {
+        passed: false,
+        feedback: `${describe(ref)} is not Accepted (${accepted?.reason ?? "no status"}).`,
+      };
+    if (!programmed || programmed.status !== "True")
+      return {
+        passed: false,
+        feedback: `${describe(ref)} is not Programmed (${programmed?.reason ?? "no status"}).`,
+      };
+    if (p.listenerIndex !== undefined) {
+      const listener = (status.listeners ?? [])[p.listenerIndex];
+      if (!listener)
+        return {
+          passed: false,
+          feedback: `${describe(ref)} has no listener at index ${p.listenerIndex}.`,
+        };
+      const lProgrammed = (listener.conditions ?? []).find((c) => c.type === "Programmed");
+      if (!lProgrammed || lProgrammed.status !== "True")
+        return {
+          passed: false,
+          feedback: `${describe(ref)} listener ${p.listenerIndex} is not Programmed (${lProgrammed?.reason ?? "no status"}).`,
+        };
+    }
+    return { passed: true, feedback: `${describe(ref)} is Accepted and Programmed.` };
+  },
+});
+
+/**
+ * k8s.httproute-accepted — passes when the HTTPRoute's status includes a parent entry
+ * with Accepted=True and ResolvedRefs=True at an observedGeneration matching the
+ * resource's own generation. Optionally filters by parentRef name.
+ * A stale generation is "not yet reconciled", not a pass.
+ */
+const httpRouteAccepted = {
+  type: "k8s.httproute-accepted",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["name", "namespace", "parentRefName"], problems);
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    if (p.parentRefName !== undefined)
+      check(
+        p.parentRefName,
+        { type: "string", minLength: 1, maxLength: 253 },
+        "parentRefName",
+        problems,
+      );
+  },
+  async run(p, ctx) {
+    const ref = { kind: "HTTPRoute", name: p.name, namespace: p.namespace };
+    const route = await ctx.query.get(ref);
+    if (!route)
+      return {
+        passed: false,
+        feedback: `HTTPRoute "${p.name}" was not found in namespace "${p.namespace}".`,
+      };
+    if (route.metadata?.deletionTimestamp)
+      return { passed: false, feedback: `HTTPRoute "${p.name}" is being deleted.` };
+    const generation = route.metadata?.generation ?? 0;
+    const parents = route.status?.parents ?? [];
+    const candidates = p.parentRefName
+      ? parents.filter((e) => e.parentRef?.name === p.parentRefName)
+      : parents;
+    if (candidates.length === 0) {
+      const msg =
+        parents.length === 0
+          ? `HTTPRoute "${p.name}" has no parent status yet — the controller may not have reconciled it.`
+          : `HTTPRoute "${p.name}" has no parent status for "${p.parentRefName ?? "*"}".`;
+      return { passed: false, feedback: msg };
+    }
+    for (const entry of candidates) {
+      const observed =
+        entry.conditions?.find?.((c) => c.observedGeneration !== undefined)?.observedGeneration ??
+        entry.observedGeneration;
+      if (observed !== undefined && observed < generation)
+        return {
+          passed: false,
+          feedback: `HTTPRoute "${p.name}" parent "${entry.parentRef?.name ?? "(unknown)"}" status is stale (generation ${generation}, observed ${observed}).`,
+        };
+      const conditions = entry.conditions ?? [];
+      const accepted = conditions.find((c) => c.type === "Accepted");
+      const resolved = conditions.find((c) => c.type === "ResolvedRefs");
+      if (!accepted || accepted.status !== "True")
+        return {
+          passed: false,
+          feedback: `HTTPRoute "${p.name}" is not Accepted by gateway "${entry.parentRef?.name ?? "(unknown)"}" (${accepted?.reason ?? "no status"}).`,
+        };
+      if (!resolved || resolved.status !== "True")
+        return {
+          passed: false,
+          feedback: `HTTPRoute "${p.name}" has unresolved references (${resolved?.reason ?? "no status"}). Check backend Service names and namespaces.`,
+        };
+    }
+    return {
+      passed: true,
+      feedback: `HTTPRoute "${p.name}" is Accepted with resolved references.`,
+    };
+  },
+};
+
+// Traefik ClusterIP address (hardcoded — never derived from learner content).
+// Format: <service>.<namespace>.svc.cluster.local
+const TRAEFIK_HTTP_ADDR = "traefik.traefik-system.svc.cluster.local:80";
+const TRAEFIK_HTTPS_ADDR = "traefik.traefik-system.svc.cluster.local:443";
+
+// Hostname for routing probe: lowercase letters, digits, dots, hyphens. No IPs, no external hosts.
+// Must start and end with a letter or digit.
+const SAFE_ROUTING_HOST = /^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/;
+
+/**
+ * k8s.routing-probe — executes a curl request inside a named client Pod that reaches the
+ * platform Traefik proxy with a controlled Host header.
+ *
+ * The request always goes to the hardcoded Traefik ClusterIP — learner-supplied hostnames
+ * only set the HTTP Host header and TLS SNI; they never become network targets. This
+ * prevents the grader from acting as a network-scanning utility.
+ *
+ * Params:
+ *   clientPod   — Pod in the exercise namespace that runs curl (must have curlimages/curl)
+ *   namespace   — exercise namespace containing the client Pod
+ *   host        — hostname for the HTTP Host header (and SNI for HTTPS)
+ *   path        — HTTP path (default: /)
+ *   https       — true for HTTPS (connects to port 443, skips cert verification); false/absent for HTTP
+ *   contains    — expected substring in the response body
+ *   statusCode  — expected HTTP status code (default: 200); pass 301/302 to check redirects
+ *   locationContains — for redirects: substring expected in the Location response header
+ */
+const routingProbe = {
+  type: "k8s.routing-probe",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(
+      p,
+      [
+        "clientPod",
+        "namespace",
+        "host",
+        "path",
+        "https",
+        "contains",
+        "statusCode",
+        "locationContains",
+      ],
+      problems,
+    );
+    check(p.clientPod, NAME, "clientPod", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(
+      p.host,
+      { type: "string", required: true, pattern: SAFE_ROUTING_HOST, maxLength: 253 },
+      "host",
+      problems,
+    );
+    if (p.path !== undefined)
+      check(p.path, { type: "string", pattern: SAFE_HTTP_PATH, maxLength: 200 }, "path", problems);
+    if (p.https !== undefined) check(p.https, { type: "boolean" }, "https", problems);
+    if (p.contains !== undefined)
+      check(p.contains, { type: "string", minLength: 1, maxLength: 300 }, "contains", problems);
+    if (p.statusCode !== undefined)
+      check(p.statusCode, { type: "integer", min: 100, max: 599 }, "statusCode", problems);
+    if (p.locationContains !== undefined)
+      check(
+        p.locationContains,
+        { type: "string", minLength: 1, maxLength: 500 },
+        "locationContains",
+        problems,
+      );
+    if (!p.contains && !p.statusCode && !p.locationContains)
+      problems.add("", "set at least one of contains, statusCode, or locationContains");
+  },
+  async run(p, ctx) {
+    const ref = { kind: "Pod", name: p.clientPod, namespace: p.namespace };
+    const pod = await ctx.query.get(ref);
+    if (!pod)
+      return {
+        passed: false,
+        feedback: `Client Pod "${p.clientPod}" was not found in namespace "${p.namespace}".`,
+      };
+    if (pod.status?.phase !== "Running")
+      return { passed: false, feedback: `Client Pod "${p.clientPod}" is not Running.` };
+
+    const path = p.path ?? "/";
+    const addr = p.https ? TRAEFIK_HTTPS_ADDR : TRAEFIK_HTTP_ADDR;
+    const url = `${p.https ? "https" : "http"}://${p.host}${path}`;
+    const expectedStatus = p.statusCode ?? 200;
+
+    // Build the curl argv. All elements are hardcoded or content-load-validated.
+    // --connect-to routes the connection to the fixed Traefik address without resolving the hostname.
+    // --no-location prevents following redirects so callers can assert on status 3xx.
+    const argv = [
+      "curl",
+      "--silent",
+      "--max-time",
+      "8",
+      "--max-filesize",
+      "65536",
+      "--no-location",
+      "--proto",
+      p.https ? "=https" : "=http",
+      "--connect-to",
+      `${p.host}::${addr}`,
+      "-w",
+      "\\n---HTTP-STATUS:%{http_code}---",
+    ];
+
+    if (p.https) {
+      // Skip certificate verification: proves TLS transport and routing, not cert trust.
+      // TLS certificate correctness is checked separately via k8s.tls-secret-config.
+      argv.push("--insecure");
+    }
+
+    if (p.locationContains) {
+      // Request the Location header
+      argv.push("-D", "-"); // dump response headers to stdout
+    }
+
+    argv.push(url);
+
+    const result = await ctx.query.execArgv({
+      podName: p.clientPod,
+      namespace: p.namespace,
+      argv,
+      timeoutMs: 20_000,
+    });
+
+    // curl exit codes: 6=DNS, 7=connect, 28=timeout, 35/60=TLS; only 0 is success.
+    if (result.exitCode !== 0) {
+      const curlError = {
+        6: "DNS resolution failed — check that the controller is running",
+        7: "TCP connection refused — check that the routing controller is ready",
+        28: "Request timed out — check the backend Service and Pods",
+        35: "TLS handshake failed",
+        60: "TLS certificate verification failed",
+      };
+      const hint = curlError[result.exitCode] ?? `curl exit ${result.exitCode}`;
+      return {
+        passed: false,
+        feedback: `Routing probe to "${url}" failed: ${hint}.`,
+        details: { url, exitCode: result.exitCode },
+      };
+    }
+
+    const output = result.stdout ?? "";
+    const statusMatch = output.match(/---HTTP-STATUS:(\d+)---/);
+    const actualStatus = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+
+    if (actualStatus !== expectedStatus) {
+      return {
+        passed: false,
+        feedback: `Routing probe to "${url}" returned HTTP ${actualStatus}, expected ${expectedStatus}.`,
+        details: { url, actualStatus, expectedStatus },
+      };
+    }
+
+    if (p.locationContains !== undefined) {
+      const locationHeader = output.match(/^[Ll]ocation:\s*(.+)$/m)?.[1]?.trim() ?? "";
+      if (!locationHeader.includes(p.locationContains)) {
+        return {
+          passed: false,
+          feedback: `Routing probe to "${url}" did not find "${p.locationContains}" in the Location header.`,
+          details: { url },
+        };
+      }
+    }
+
+    if (p.contains !== undefined) {
+      // Strip the status sentinel appended by -w, then optionally strip response headers
+      // (present only when -D - is passed for locationContains checks).
+      // Use non-greedy .*? so the header/body split stops at the FIRST blank line, not the last.
+      let body = output.replace(/---HTTP-STATUS:\d+---\s*$/, "");
+      if (p.locationContains !== undefined) body = body.replace(/^.*?\r?\n\r?\n/s, "");
+      if (!body.includes(p.contains)) {
+        return {
+          passed: false,
+          feedback: `Routing probe to "${url}" returned HTTP ${actualStatus} but the response body did not contain the expected content.`,
+          details: { url },
+        };
+      }
+    }
+
+    return {
+      passed: true,
+      feedback: `Routing probe to "${url}" returned HTTP ${actualStatus} as expected.`,
+    };
+  },
+};
+
+/**
+ * k8s.httproute-weights — checks that an HTTPRoute has (at minimum) two backendRefs with
+ * the given relative weights. Verifies configuration only; actual traffic distribution
+ * requires behavioral verification (see level6 scenarios).
+ *
+ * `backends` is an array of {name, weight} pairs; at least two must be specified.
+ * Only the listed backends are checked; additional ones are ignored.
+ */
+const httpRouteWeights = resourceValidator({
+  type: "k8s.httproute-weights",
+  kinds: ["HTTPRoute"],
+  params: {
+    backends: {
+      type: "array",
+      required: true,
+      minItems: 2,
+      items: {
+        type: "object",
+        open: true,
+        properties: {
+          name: NAME,
+          weight: { type: "integer", min: 0, max: 1_000_000 },
+        },
+      },
+    },
+  },
+  evaluate(route, p, ref) {
+    const rules = route.spec?.rules ?? [];
+    const allBackends = rules.flatMap((r) => r.backendRefs ?? []);
+    const failures = [];
+    for (const required of p.backends) {
+      const match = allBackends.find(
+        (b) =>
+          b.name === required.name &&
+          (required.weight === undefined || b.weight === required.weight),
+      );
+      if (!match) {
+        const desc =
+          required.weight !== undefined
+            ? `backend "${required.name}" with weight ${required.weight}`
+            : `backend "${required.name}"`;
+        failures.push(`no ${desc}`);
+      }
+    }
+    return {
+      passed: failures.length === 0,
+      feedback:
+        failures.length === 0
+          ? `${describe(ref)} has the required backend weights.`
+          : `${describe(ref)} is missing: ${failures.join("; ")}.`,
+    };
+  },
+});
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -2032,4 +2571,10 @@ export const kubernetesValidators = Object.freeze([
   endpointReady,
   httpProbe,
   dnsResolve,
+  // Level 6 validators — Ingress, Gateway API and HTTP routing
+  ingressSpec,
+  gatewayReady,
+  httpRouteAccepted,
+  routingProbe,
+  httpRouteWeights,
 ]);

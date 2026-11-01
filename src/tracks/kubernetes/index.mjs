@@ -14,8 +14,10 @@ export function createKubernetesTrack({ runner, cluster, driverOptions = {} }) {
   const createQuery = ({ signal }) => new KubernetesQuery({ runner, signal });
   return {
     id: "kubernetes",
-    // Each profile names an environment shape. v1 ships the single-node kind cluster.
-    profiles: ["kind-default"],
+    // Each profile names an environment shape.
+    // kind-default: plain single-node kind cluster (Levels 0–5).
+    // kind-routing: kind cluster with Traefik v3 + Gateway API CRDs pre-installed (Level 6+).
+    profiles: ["kind-default", "kind-routing"],
     validators: kubernetesValidators,
     compileLifecycle,
     validateCheckScope,

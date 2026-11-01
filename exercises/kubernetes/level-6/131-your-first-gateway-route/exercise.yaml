@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0131
+type: task
+title: Your First Gateway Route
+summary: Create a Gateway and an HTTPRoute to expose a backend Service through the Traefik routing controller.
+track: kubernetes
+level: 6
+order: 7
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [gateway-api, gateway, httproute, networking]
+prerequisites: [k8s-0130]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Gateway `my-gateway` exists in namespace `fl-k8s-0131` with gatewayClassName `traefik`"
+  - "Gateway `my-gateway` is Accepted and Programmed"
+  - "HTTPRoute `my-route` is Accepted with ResolvedRefs=True under parent `my-gateway`"
+  - "HTTP request for host `app.k8s-0131.fl.test` reaches the backend and returns an nginx response"
+
+hints:
+  - "Create a Gateway that references the `traefik` GatewayClass with a listener on port 80; set the listener `hostname` to match the hostname your HTTPRoute will use"
+  - "The HTTPRoute `parentRefs` must point to your Gateway by name"
+  - "Check status: `kubectl describe gateway my-gateway -n fl-k8s-0131` and `kubectl describe httproute my-route -n fl-k8s-0131`"
+
+lifecycle:
+  namespaces: [fl-k8s-0131]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: gateway-ready
+    type: k8s.gateway-ready
+    label: Gateway my-gateway is Accepted and Programmed
+    params:
+      name: my-gateway
+      namespace: fl-k8s-0131
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute my-route is accepted under my-gateway
+    params:
+      name: my-route
+      namespace: fl-k8s-0131
+      parentRefName: my-gateway
+  - id: http-probe
+    type: k8s.routing-probe
+    label: HTTP request for app.k8s-0131.fl.test reaches the backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0131
+      host: app.k8s-0131.fl.test
+      contains: nginx

@@ -1,0 +1,50 @@
+schemaVersion: 1
+id: k8s-0134
+type: task
+title: Route Attachment
+summary: Fix an HTTPRoute that references a nonexistent Gateway so that it attaches to the correct Gateway and routes traffic.
+track: kubernetes
+level: 6
+order: 10
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [gateway-api, httproute, parentref, networking]
+prerequisites: [k8s-0133]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "In namespace `fl-k8s-0134`: HTTPRoute `web-route` is Accepted with ResolvedRefs=True under parent `main-gw`"
+  - "HTTP request for host `app.k8s-0134.fl.test` reaches the web backend and returns an nginx response"
+
+hints:
+  - "Inspect the HTTPRoute: `kubectl get httproute web-route -n fl-k8s-0134 -o yaml`"
+  - "Look at the `spec.parentRefs[0].name` field — it should be `main-gw`, not `wrong-gw`"
+  - "Edit with: `kubectl edit httproute web-route -n fl-k8s-0134`"
+
+lifecycle:
+  namespaces: [fl-k8s-0134]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute web-route is accepted under main-gw
+    params:
+      name: web-route
+      namespace: fl-k8s-0134
+      parentRefName: main-gw
+  - id: http-probe
+    type: k8s.routing-probe
+    label: HTTP request for app.k8s-0134.fl.test reaches the backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0134
+      host: app.k8s-0134.fl.test
+      contains: nginx

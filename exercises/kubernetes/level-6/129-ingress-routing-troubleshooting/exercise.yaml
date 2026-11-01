@@ -1,0 +1,57 @@
+schemaVersion: 1
+id: k8s-0129
+type: task
+title: Ingress Routing Troubleshooting
+summary: Investigate why an Ingress is not routing traffic and fix the ingressClassName to point at the correct controller.
+track: kubernetes
+level: 6
+order: 5
+difficulty: advanced
+estimatedMinutes: 15
+tags: [ingress, networking, troubleshooting, ingressclass]
+prerequisites: [k8s-0128]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0129`: Ingress `app` uses `ingressClassName: traefik`"
+  - "HTTP request to `app.k8s-0129.fl.test` returns a response containing `nginx`"
+
+hints:
+  - "Check the Ingress: `kubectl describe ingress app -n fl-k8s-0129`. Look at `Ingress Class` — if it says `nginx`, Traefik is ignoring this Ingress entirely."
+  - "List the available IngressClasses: `kubectl get ingressclass`. Only `traefik` is installed in this cluster. Fix the Ingress by changing `spec.ingressClassName` from `nginx` to `traefik`."
+  - "After fixing: `kubectl edit ingress app -n fl-k8s-0129` — change `ingressClassName: nginx` to `ingressClassName: traefik`. Traefik will reconcile the rule within a few seconds."
+
+lifecycle:
+  namespaces: [fl-k8s-0129]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: ingress-spec
+    type: k8s.ingress-spec
+    label: Ingress app uses ingressClassName traefik with correct backend
+    params:
+      name: app
+      namespace: fl-k8s-0129
+      ingressClassName: traefik
+      rules:
+        - host: app.k8s-0129.fl.test
+          path: /
+          pathType: Prefix
+          backend:
+            serviceName: app
+            servicePort: 8080
+  - id: http
+    type: k8s.routing-probe
+    label: HTTP request to app.k8s-0129.fl.test returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0129
+      host: app.k8s-0129.fl.test
+      contains: nginx

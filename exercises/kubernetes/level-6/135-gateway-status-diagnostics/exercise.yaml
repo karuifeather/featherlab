@@ -1,0 +1,50 @@
+schemaVersion: 1
+id: k8s-0135
+type: task
+title: Gateway Status Diagnostics
+summary: Read Gateway and HTTPRoute status conditions to identify a broken backend reference and fix it.
+track: kubernetes
+level: 6
+order: 11
+difficulty: advanced
+estimatedMinutes: 14
+tags: [gateway-api, httproute, status-conditions, debugging, networking]
+prerequisites: [k8s-0134]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "In namespace `fl-k8s-0135`: HTTPRoute `app-route` is Accepted with ResolvedRefs=True under parent `app-gw`"
+  - "HTTP request for host `app.k8s-0135.fl.test` returns an nginx response"
+
+hints:
+  - "Check the HTTPRoute status: `kubectl get httproute app-route -n fl-k8s-0135 -o yaml`"
+  - "Look at `status.parents[].conditions` — a `ResolvedRefs: False` with reason `BackendNotFound` means a backendRef Service name is wrong"
+  - "List Services and edit the HTTPRoute to fix the name: `kubectl get service -n fl-k8s-0135` then `kubectl edit httproute app-route -n fl-k8s-0135`"
+
+lifecycle:
+  namespaces: [fl-k8s-0135]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute app-route is accepted with ResolvedRefs=True
+    params:
+      name: app-route
+      namespace: fl-k8s-0135
+      parentRefName: app-gw
+  - id: http-probe
+    type: k8s.routing-probe
+    label: HTTP request for app.k8s-0135.fl.test returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0135
+      host: app.k8s-0135.fl.test
+      contains: nginx

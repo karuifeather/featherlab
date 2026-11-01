@@ -1,0 +1,15 @@
+---
+# Platform-owned GatewayClass for FeatherLab Level 6 exercises.
+# Installed by the provisioner; never created or modified by learner exercises.
+#
+# Exercises that inspect the GatewayClass use k8s.resource-exists with
+# kind: GatewayClass, name: traefik — which is queryOnly in KINDS.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: traefik
+  labels:
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+spec:
+  controllerName: traefik.io/gateway-controller

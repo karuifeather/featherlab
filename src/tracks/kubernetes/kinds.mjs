@@ -54,6 +54,27 @@ export const KINDS = Object.freeze({
     namespaced: true,
     queryOnly: true,
   },
+  // Level 6 additions — Ingress, Gateway API, and HTTP routing (profile: kind-routing)
+  // Exercises may create Ingress resources; controller must be installed by the platform.
+  Ingress: { resource: "ingresses.networking.k8s.io", namespaced: true },
+  // IngressClass is cluster-scoped and platform-owned: exercises inspect it, never create it.
+  IngressClass: {
+    resource: "ingressclasses.networking.k8s.io",
+    namespaced: false,
+    queryOnly: true,
+  },
+  // Gateway API core kinds (gateway.networking.k8s.io/v1).
+  // GatewayClass is cluster-scoped and platform-owned: exercises inspect it, never create it.
+  GatewayClass: {
+    resource: "gatewayclasses.gateway.networking.k8s.io",
+    namespaced: false,
+    queryOnly: true,
+  },
+  // Gateway and HTTPRoute are namespaced: exercises own and create them in exercise namespaces.
+  Gateway: { resource: "gateways.gateway.networking.k8s.io", namespaced: true },
+  HTTPRoute: { resource: "httproutes.gateway.networking.k8s.io", namespaced: true },
+  // ReferenceGrant (v1beta1) allows cross-namespace backend references in exercise-owned namespaces.
+  ReferenceGrant: { resource: "referencegrants.gateway.networking.k8s.io", namespaced: true },
 });
 
 /**
@@ -65,6 +86,8 @@ export const PROTECTED_NAMESPACES = Object.freeze([
   "kube-system",
   "kube-public",
   "kube-node-lease",
+  // Level 6: the routing controller namespace is platform-owned.
+  "traefik-system",
 ]);
 
 export const DNS_LABEL = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/;

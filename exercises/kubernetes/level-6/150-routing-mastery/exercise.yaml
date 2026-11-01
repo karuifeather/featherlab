@@ -1,0 +1,82 @@
+schemaVersion: 1
+id: k8s-0150
+type: task
+title: Level 6 Routing Mastery
+summary: Apply all Level 6 routing concepts in one integrated scenario — fix a broken Ingress, authorize cross-namespace Gateway API routing, and configure a weighted canary split.
+track: kubernetes
+level: 6
+order: 26
+difficulty: advanced
+estimatedMinutes: 30
+tags: [ingress, gateway-api, cross-namespace, reference-grant, weighted-routing, mastery]
+prerequisites: [k8s-0149]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0150`"
+  - "Namespace: `fl-k8s-0150-backend`"
+  - "Ingress `web-ingress` in `fl-k8s-0150` uses `ingressClassName: traefik`"
+  - "ReferenceGrant `allow-httproute` exists in `fl-k8s-0150-backend` allowing HTTPRoute from `fl-k8s-0150` to reference Services there"
+  - "HTTPRoute `api-route` is Accepted with ResolvedRefs=True"
+  - "HTTPRoute `api-route` routes 80% to `api-v1` and 20% to `api-v2` (weights 80/20)"
+  - "Routing probe for `web.k8s-0150.fl.test` returns HTTP 200"
+
+hints:
+  - "Fix the Ingress first: `kubectl edit ingress web-ingress -n fl-k8s-0150` and change `ingressClassName` to `traefik`."
+  - "The HTTPRoute's status will show `RefNotPermitted` until you create a ReferenceGrant in `fl-k8s-0150-backend`; check: `kubectl describe httproute api-route -n fl-k8s-0150`."
+  - "A ReferenceGrant has `spec.from` (the HTTPRoute's namespace) and `spec.to` (Service in backend namespace); after creating it, update HTTPRoute weights: `api-v1` → 80, `api-v2` → 20."
+
+lifecycle:
+  namespaces: [fl-k8s-0150, fl-k8s-0150-backend]
+  setup:
+    manifests:
+      - setup/fl-k8s-0150.yaml
+      - setup/fl-k8s-0150-backend.yaml
+
+checks:
+  - id: ingress-fixed
+    type: k8s.ingress-spec
+    label: Ingress web-ingress uses ingressClassName traefik
+    params:
+      name: web-ingress
+      namespace: fl-k8s-0150
+      ingressClassName: traefik
+  - id: reference-grant-exists
+    type: k8s.resource-exists
+    label: ReferenceGrant allow-httproute exists in fl-k8s-0150-backend
+    params:
+      kind: ReferenceGrant
+      name: allow-httproute
+      namespace: fl-k8s-0150-backend
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute api-route is Accepted with resolved cross-namespace refs
+    params:
+      name: api-route
+      namespace: fl-k8s-0150
+      parentRefName: main-gw
+  - id: route-weights
+    type: k8s.httproute-weights
+    label: HTTPRoute api-route has correct canary weights (80/20)
+    params:
+      name: api-route
+      namespace: fl-k8s-0150
+      backends:
+        - name: api-v1
+          weight: 80
+        - name: api-v2
+          weight: 20
+  - id: ingress-probe
+    type: k8s.routing-probe
+    label: Ingress route web.k8s-0150.fl.test returns HTTP 200
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0150
+      host: web.k8s-0150.fl.test
+      statusCode: 200

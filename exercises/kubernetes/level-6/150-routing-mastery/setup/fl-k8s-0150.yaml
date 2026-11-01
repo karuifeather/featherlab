@@ -1,0 +1,124 @@
+# Resources in fl-k8s-0150 (primary namespace)
+
+# ── Frontend ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: fl-k8s-0150
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: fl-k8s-0150
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# ── Ingress for web.k8s-0150.fl.test (BROKEN: wrong ingressClassName) ───────
+# The learner must change ingressClassName from "nonexistent" to "traefik".
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-ingress
+  namespace: fl-k8s-0150
+spec:
+  ingressClassName: nonexistent
+  rules:
+    - host: web.k8s-0150.fl.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+---
+# ── API Gateway (working) ────────────────────────────────────────────────────
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gw
+  namespace: fl-k8s-0150
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: "api.k8s-0150.fl.test"
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+# ── HTTPRoute that cross-namespace references services in fl-k8s-0150-backend ─
+# BROKEN: no ReferenceGrant exists in fl-k8s-0150-backend yet.
+# The learner must:
+#   1. Create a ReferenceGrant in fl-k8s-0150-backend.
+#   2. Adjust weights to 80 (api-v1) / 20 (api-v2).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: fl-k8s-0150
+spec:
+  parentRefs:
+    - name: main-gw
+  hostnames:
+    - "api.k8s-0150.fl.test"
+  rules:
+    - backendRefs:
+        - name: api-v1
+          namespace: fl-k8s-0150-backend
+          port: 80
+          weight: 50
+        - name: api-v2
+          namespace: fl-k8s-0150-backend
+          port: 80
+          weight: 50
+---
+# ── Grader client ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grader-client
+  namespace: fl-k8s-0150
+  labels:
+    app: grader-client
+    featherlab.dev/role: grader
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: client
+      image: curlimages/curl:8.13.0
+      command: ["sleep", "86400"]

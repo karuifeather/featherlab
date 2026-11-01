@@ -1,0 +1,60 @@
+schemaVersion: 1
+id: k8s-0132
+type: task
+title: Hostname Routing with Gateway
+summary: Route two different hostnames to two different backends by creating an HTTPRoute for the second hostname.
+track: kubernetes
+level: 6
+order: 8
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [gateway-api, httproute, hostname-routing, networking]
+prerequisites: [k8s-0131]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "HTTPRoute `v2-route` exists in namespace `fl-k8s-0132`"
+  - "HTTPRoute `v2-route` is Accepted with ResolvedRefs=True under parent `web-gw`"
+  - "HTTP request for host `v1.k8s-0132.fl.test` returns a response containing `v1`"
+  - "HTTP request for host `v2.k8s-0132.fl.test` returns a response containing `v2`"
+
+hints:
+  - "Describe the existing Gateway: `kubectl describe gateway web-gw -n fl-k8s-0132` — note the listener hostname wildcard"
+  - "Inspect the existing v1-route: `kubectl get httproute v1-route -n fl-k8s-0132 -o yaml`"
+  - "The v2-route should look like v1-route but with hostname `v2.k8s-0132.fl.test` and backendRef `v2`; an HTTPRoute attaches if the hostname matches the listener"
+
+lifecycle:
+  namespaces: [fl-k8s-0132]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: v2-route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute v2-route is accepted under web-gw
+    params:
+      name: v2-route
+      namespace: fl-k8s-0132
+      parentRefName: web-gw
+  - id: probe-v1
+    type: k8s.routing-probe
+    label: Host v1.k8s-0132.fl.test returns v1 content
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0132
+      host: v1.k8s-0132.fl.test
+      contains: v1
+  - id: probe-v2
+    type: k8s.routing-probe
+    label: Host v2.k8s-0132.fl.test returns v2 content
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0132
+      host: v2.k8s-0132.fl.test
+      contains: v2

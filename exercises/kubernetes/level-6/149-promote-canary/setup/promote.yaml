@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-v1
+  namespace: fl-k8s-0149
+  labels:
+    app: api
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: api
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-v2
+  namespace: fl-k8s-0149
+  labels:
+    app: api
+    version: v2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: api
+        version: v2
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v1
+  namespace: fl-k8s-0149
+spec:
+  selector:
+    app: api
+    version: v1
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v2
+  namespace: fl-k8s-0149
+spec:
+  selector:
+    app: api
+    version: v2
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: api-gw
+  namespace: fl-k8s-0149
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: "api.k8s-0149.fl.test"
+---
+# HTTPRoute starts with a 50/50 split between v1 and v2.
+# The learner must promote v2 to weight 100 and zero-weight v1,
+# then scale down the v1 Deployment to 0 replicas.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: fl-k8s-0149
+spec:
+  parentRefs:
+    - name: api-gw
+  hostnames:
+    - "api.k8s-0149.fl.test"
+  rules:
+    - backendRefs:
+        - name: api-v1
+          port: 80
+          weight: 50
+        - name: api-v2
+          port: 80
+          weight: 50
+---
+# Grader client pod for routing probes.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grader-client
+  namespace: fl-k8s-0149
+  labels:
+    app: grader-client
+    featherlab.dev/role: grader
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: client
+      image: curlimages/curl:8.13.0
+      command: ["sleep", "86400"]

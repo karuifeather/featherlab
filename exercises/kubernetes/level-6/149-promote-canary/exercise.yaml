@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0149
+type: task
+title: Promote the Canary
+summary: Complete the canary lifecycle by promoting api-v2 to 100% traffic, zeroing out api-v1, and scaling down the old Deployment.
+track: kubernetes
+level: 6
+order: 25
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [gateway-api, weighted-routing, canary, httproute, lifecycle]
+prerequisites: [k8s-0148]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0149`"
+  - "HTTPRoute `api-route` has backendRef `api-v2` with weight 100"
+  - "HTTPRoute `api-route` has backendRef `api-v1` with weight 0 (kept for rollback)"
+  - "Deployment `api-v1` has 0 desired replicas"
+  - "Routing probe for `api.k8s-0149.fl.test` returns HTTP 200"
+
+hints:
+  - "Edit the HTTPRoute: `kubectl edit httproute api-route -n fl-k8s-0149`"
+  - "Set `api-v2` weight to 100 and `api-v1` weight to 0 — keep both backendRefs so you can roll back by bumping the weight."
+  - "Scale down v1: `kubectl scale deployment api-v1 --replicas=0 -n fl-k8s-0149`; both weight and replica count must change for a clean promotion."
+
+lifecycle:
+  namespaces: [fl-k8s-0149]
+  setup:
+    manifests: [setup/promote.yaml]
+
+checks:
+  - id: route-weights
+    type: k8s.httproute-weights
+    label: HTTPRoute api-route has api-v2 at weight 100 and api-v1 at weight 0
+    params:
+      name: api-route
+      namespace: fl-k8s-0149
+      backends:
+        - name: api-v2
+          weight: 100
+        - name: api-v1
+          weight: 0
+  - id: v1-scaled-down
+    type: k8s.replicas-desired
+    label: Deployment api-v1 has 0 desired replicas
+    params:
+      kind: Deployment
+      name: api-v1
+      namespace: fl-k8s-0149
+      replicas: 0
+  - id: route-responds
+    type: k8s.routing-probe
+    label: Route for api.k8s-0149.fl.test returns HTTP 200
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0149
+      host: api.k8s-0149.fl.test
+      statusCode: 200

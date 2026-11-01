@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: fl-k8s-0128
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: fl-k8s-0128
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grader-client
+  namespace: fl-k8s-0128
+  labels:
+    app: grader-client
+    featherlab.dev/role: grader
+spec:
+  terminationGracePeriodSeconds: 5
+  containers:
+    - name: client
+      image: curlimages/curl:8.13.0
+      command: ["sleep", "86400"]
+---
+# Ingress with a broken backend: references "webserver" instead of "web"
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: fl-k8s-0128
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: app.k8s-0128.fl.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: webserver
+                port:
+                  number: 80

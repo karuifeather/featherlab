@@ -1,0 +1,62 @@
+schemaVersion: 1
+id: k8s-0138
+type: task
+title: HTTP Redirect
+summary: Add an HTTPRoute redirect rule that issues a 301 response sending clients from /old to /current.
+track: kubernetes
+level: 6
+order: 14
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [gateway-api, httproute, redirect, filters, networking]
+prerequisites: [k8s-0137]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0138`"
+  - "HTTPRoute `web-route` has a rule matching PathPrefix `/old` that returns HTTP 301 redirecting to `/current`"
+  - "HTTP request for path `/current` returns a response containing `current-site`"
+
+hints:
+  - "HTTPRoute supports redirect filters via `spec.rules[].filters[].type: RequestRedirect`"
+  - "The redirect filter uses `requestRedirect.path.type: ReplaceFullPath` with `value: /current`"
+  - "Edit the HTTPRoute and add a rule with PathPrefix `/old` BEFORE the `/current` rule: `kubectl edit httproute web-route -n fl-k8s-0138`"
+
+lifecycle:
+  namespaces: [fl-k8s-0138]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute web-route is accepted
+    params:
+      name: web-route
+      namespace: fl-k8s-0138
+      parentRefName: web-gw
+  - id: probe-redirect
+    type: k8s.routing-probe
+    label: Path /old returns HTTP 301 redirecting to /current
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0138
+      host: app.k8s-0138.fl.test
+      path: /old
+      statusCode: 301
+      locationContains: /current
+  - id: probe-current
+    type: k8s.routing-probe
+    label: Path /current reaches the web backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0138
+      host: app.k8s-0138.fl.test
+      path: /current
+      contains: current-site

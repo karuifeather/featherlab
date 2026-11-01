@@ -1,0 +1,57 @@
+schemaVersion: 1
+id: k8s-0128
+type: task
+title: Fix the Backend
+summary: Diagnose and repair an Ingress that references a non-existent Service backend.
+track: kubernetes
+level: 6
+order: 4
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [ingress, networking, troubleshooting, http-routing]
+prerequisites: [k8s-0127]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0128`: Ingress `web` backend references Service `web` on port 80 (not `webserver`)"
+  - "HTTP request to `app.k8s-0128.fl.test` returns a response containing `nginx`"
+
+hints:
+  - 'Inspect the Ingress: `kubectl describe ingress web -n fl-k8s-0128`. Look for `<error: endpoints "webserver" not found>` in the backend field — this tells you Traefik cannot find the Service named `webserver`.'
+  - "The Service is actually named `web`, not `webserver`. Edit the Ingress to fix the backend service name: `kubectl edit ingress web -n fl-k8s-0128` and change `name: webserver` to `name: web`."
+  - "Verify the fix: `kubectl describe ingress web -n fl-k8s-0128`. The backend should now show `web:80` without an error."
+
+lifecycle:
+  namespaces: [fl-k8s-0128]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: ingress-spec
+    type: k8s.ingress-spec
+    label: Ingress web references Service web on port 80
+    params:
+      name: web
+      namespace: fl-k8s-0128
+      ingressClassName: traefik
+      rules:
+        - host: app.k8s-0128.fl.test
+          path: /
+          pathType: Prefix
+          backend:
+            serviceName: web
+            servicePort: 80
+  - id: http
+    type: k8s.routing-probe
+    label: HTTP request to app.k8s-0128.fl.test returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0128
+      host: app.k8s-0128.fl.test
+      contains: nginx

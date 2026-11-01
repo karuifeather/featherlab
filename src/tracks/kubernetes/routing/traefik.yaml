@@ -1,0 +1,174 @@
+---
+# Traefik v3 routing controller for FeatherLab Level 6 (profile: kind-routing).
+# Platform-provisioned: installed once, never touched by learner exercises.
+#
+# MAINTAINER: Pin the image by digest before deploying.
+# Verify conformance at https://gateway-api.sigs.k8s.io/implementations/
+# and the Traefik v3 Gateway API docs at https://doc.traefik.io/traefik/routing/providers/kubernetes-gateway/
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik-system
+  labels:
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traefik
+  namespace: traefik-system
+  labels:
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-featherlab
+  labels:
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+rules:
+  # Core: services, endpoints, secrets, and namespace/node discovery
+  - apiGroups: [""]
+    resources: [services, endpoints, secrets, namespaces, nodes]
+    verbs: [get, list, watch]
+  # Ingress (networking.k8s.io/v1)
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, ingressclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses/status]
+    verbs: [update]
+  # Gateway API standard channel (v1.2.x): includes GRPCRoute
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses, gateways, httproutes, grpcroutes, referencegrants]
+    verbs: [get, list, watch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses/status, gateways/status, httproutes/status, grpcroutes/status]
+    verbs: [update]
+  # EndpointSlices (preferred over Endpoints in k8s 1.21+)
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+  labels:
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+spec:
+  controller: traefik.io/ingress-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traefik-featherlab
+  labels:
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-featherlab
+subjects:
+  - kind: ServiceAccount
+    name: traefik
+    namespace: traefik-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: traefik-system
+  labels:
+    app: traefik
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      serviceAccountName: traefik
+      containers:
+        - name: traefik
+          image: traefik:v3.3@sha256:2cd5cc75530c8d07ae0587c743d23eb30cae2436d07017a5ff78498b1a43d09f
+          args:
+            - --log.level=INFO
+            - --api.insecure=true
+            - --ping=true
+            - --ping.entrypoint=traefik
+            # traefik entrypoint (8080): dashboard + ping probe target
+            - --entrypoints.traefik.address=:8080
+            - --entrypoints.web.address=:80
+            - --entrypoints.websecure.address=:443
+            - --providers.kubernetesingress=true
+            - --providers.kubernetesingress.ingressclass=traefik
+            # Standard channel Gateway API only (no experimentalChannel)
+            - --providers.kubernetesgateway=true
+            # Required for Ingress spec.tls to produce a live TLS router on websecure.
+            # Without this flag Traefik loads the cert but does not enable TLS on the router.
+            - --entrypoints.websecure.http.tls=true
+          ports:
+            - name: traefik
+              containerPort: 8080
+              protocol: TCP
+            - name: web
+              containerPort: 80
+              protocol: TCP
+            - name: websecure
+              containerPort: 443
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik
+  namespace: traefik-system
+  labels:
+    app: traefik
+    app.kubernetes.io/managed-by: featherlab
+    featherlab.dev/component: routing
+spec:
+  # ClusterIP only: exercises reach Traefik from within the cluster via in-namespace client pods.
+  # No NodePort or LoadBalancer needed — grading always runs from inside the cluster.
+  type: ClusterIP
+  selector:
+    app: traefik
+  ports:
+    - name: web
+      port: 80
+      targetPort: web
+      protocol: TCP
+    - name: websecure
+      port: 443
+      targetPort: websecure
+      protocol: TCP

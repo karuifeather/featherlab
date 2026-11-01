@@ -1,9 +1,14 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseAllDocuments } from "yaml";
 import { EnvironmentError, LifecycleError } from "../../core/errors.mjs";
 import { check } from "../../core/schema.mjs";
 import { relativePathSpec } from "../../core/exercises/definition.mjs";
 import { DNS_LABEL, DNS_SUBDOMAIN, KIND_NAMES, KINDS, PROTECTED_NAMESPACES } from "./kinds.mjs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export const MANAGED_BY_LABEL = "app.kubernetes.io/managed-by";
 export const EXERCISE_LABEL = "featherlab.dev/exercise";
@@ -476,6 +481,75 @@ export function createDriver({
       ];
     });
 
+  /**
+   * Idempotent: installs Gateway API CRDs, Traefik, and GatewayClass if not already present.
+   * Called before reset() for exercises with profile: kind-routing.
+   */
+  async function ensureRoutingInstalled(signal) {
+    // Fast path: Traefik Deployment ready
+    const check = await kubectl(
+      [
+        "get",
+        "deployment",
+        "traefik",
+        "-n",
+        "traefik-system",
+        "--ignore-not-found",
+        "-o",
+        "jsonpath={.status.readyReplicas}",
+      ],
+      { signal, timeoutMs: 15_000 },
+    );
+    if (check.exitCode === 0 && check.stdout.trim() === "1") return;
+
+    const routingDir = resolve(__dirname, "routing");
+    const crds = readFileSync(resolve(routingDir, "gateway-api-crds.yaml"), "utf8");
+    await kubectl(["apply", "--server-side", "--force-conflicts=false", "-f", "-"], {
+      signal,
+      stdin: crds,
+      timeoutMs: 120_000,
+    });
+
+    const traefik = readFileSync(resolve(routingDir, "traefik.yaml"), "utf8");
+    await kubectl(["apply", "--server-side", "--force-conflicts=false", "-f", "-"], {
+      signal,
+      stdin: traefik,
+      timeoutMs: 120_000,
+    });
+
+    const gwclass = readFileSync(resolve(routingDir, "gatewayclass.yaml"), "utf8");
+    await kubectl(["apply", "--server-side", "--force-conflicts=false", "-f", "-"], {
+      signal,
+      stdin: gwclass,
+      timeoutMs: 30_000,
+    });
+
+    // Wait for Traefik to become ready (up to 120 s)
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      const ready = await kubectl(
+        [
+          "get",
+          "deployment",
+          "traefik",
+          "-n",
+          "traefik-system",
+          "--ignore-not-found",
+          "-o",
+          "jsonpath={.status.readyReplicas}",
+        ],
+        { signal, timeoutMs: 15_000 },
+      );
+      if (ready.exitCode === 0 && ready.stdout.trim() === "1") return;
+      await sleep(3_000, undefined, { signal });
+    }
+    throw new EnvironmentError(
+      "Routing controller (Traefik) did not become ready within 120 s. " +
+        "Check the traefik-system namespace: kubectl get pods -n traefik-system",
+      { reason: "timeout" },
+    );
+  }
+
   const createPlan = (exercise, signal) => [
     ...exercise.lifecycle.namespaces.map((name) => ({
       name: `create Namespace/${name}`,
@@ -533,6 +607,9 @@ export function createDriver({
     },
 
     async reset({ exercise, signal }) {
+      if (exercise.environment?.profile === "kind-routing") {
+        await ensureRoutingInstalled(signal);
+      }
       const removed = await steps("Reset", deleteNamespacesPlan("reset", exercise, signal));
       const created = await steps("Reset", createPlan(exercise, signal));
       return [...removed, ...created];

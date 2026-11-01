@@ -1,0 +1,64 @@
+schemaVersion: 1
+id: k8s-0126
+type: task
+title: Route by Hostname
+summary: Add a second hostname rule to an existing Ingress so two Services are reachable behind different virtual hostnames.
+track: kubernetes
+level: 6
+order: 2
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [ingress, networking, http-routing, virtual-hosts]
+prerequisites: [k8s-0125]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0126`: Ingress `web` routes `frontend.k8s-0126.fl.test` to Service `frontend:80` (already present)"
+  - "Ingress `web` also routes `api.k8s-0126.fl.test` to Service `api:80`"
+  - "HTTP request to `api.k8s-0126.fl.test` returns a response containing `api-backend`"
+
+hints:
+  - "Get the current Ingress: `kubectl get ingress web -n fl-k8s-0126 -o yaml > ingress.yaml`. Add a second item under `spec.rules` for host `api.k8s-0126.fl.test`, then `kubectl apply -f ingress.yaml`."
+  - "Each hostname is a separate entry in `spec.rules`. The `host` field must match exactly what the client sends in the `Host` header — including the full `api.k8s-0126.fl.test` hostname."
+  - "Verify both routes after applying: `kubectl describe ingress web -n fl-k8s-0126`. Both `frontend.k8s-0126.fl.test` and `api.k8s-0126.fl.test` should appear in the Rules section."
+
+lifecycle:
+  namespaces: [fl-k8s-0126]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: ingress-spec
+    type: k8s.ingress-spec
+    label: Ingress web routes both frontend and api hostnames
+    params:
+      name: web
+      namespace: fl-k8s-0126
+      ingressClassName: traefik
+      rules:
+        - host: frontend.k8s-0126.fl.test
+          path: /
+          pathType: Prefix
+          backend:
+            serviceName: frontend
+            servicePort: 80
+        - host: api.k8s-0126.fl.test
+          path: /
+          pathType: Prefix
+          backend:
+            serviceName: api
+            servicePort: 80
+  - id: api-http
+    type: k8s.routing-probe
+    label: HTTP request to api.k8s-0126.fl.test returns api-backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0126
+      host: api.k8s-0126.fl.test
+      contains: api-backend

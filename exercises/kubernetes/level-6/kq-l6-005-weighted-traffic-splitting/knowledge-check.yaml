@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l6-005
+activityType: knowledge-check
+title: Weighted Traffic Splitting
+summary: Test your understanding of HTTPRoute backendRef weights, canary promotion patterns, and how Gateway API traffic splitting differs from replica-based approaches.
+track: kubernetes
+level: 6
+order: 25.5
+difficulty: intermediate
+estimatedMinutes: 5
+tags: [gateway-api, httproute, weighted-routing, canary]
+relatedLabs: [k8s-0148, k8s-0149]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "An HTTPRoute has two backendRefs: `backend-a` with weight 3 and `backend-b` with weight 1. What fraction of traffic goes to `backend-a`?"
+    options:
+      - id: a
+        text: "3% — weights are percentages and must sum to 100"
+      - id: b
+        text: "75% — weights are relative; 3 out of 3+1=4 total"
+      - id: c
+        text: "30% — weights are tenths of a percentage point"
+      - id: d
+        text: "50% — traffic is always split evenly regardless of weight values"
+    correctAnswer: b
+    explanation: "HTTPRoute `backendRef` weights are **relative integers**, not percentages. Traefik computes each backend's share as its weight divided by the sum of all weights in the rule. With weights 3 and 1, the total is 4, so `backend-a` receives 3/4 = 75% and `backend-b` receives 1/4 = 25%. You can use any integers — 75/25, 3/1, and 300/100 all produce the same split."
+    wrongExplanations:
+      a: "Weights are not percentages and do not need to sum to 100. They are relative proportions."
+      c: "There is no 'tenths of a percentage point' interpretation. Weights are plain relative integers."
+      d: "Weights are explicitly honored by the proxy; traffic is not split evenly unless all weights are equal."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.BackendRef"
+
+  - id: q2
+    type: single-choice
+    prompt: "An HTTPRoute rule has only one backendRef with no `weight` field set. What weight does the Gateway API spec assign to it?"
+    options:
+      - id: a
+        text: "0 — a missing weight means the backend is disabled"
+      - id: b
+        text: "1 — the default weight is 1"
+      - id: c
+        text: "100 — a single backend implicitly receives all traffic"
+      - id: d
+        text: "The route is invalid unless weight is explicitly set on every backendRef"
+    correctAnswer: b
+    explanation: "The Gateway API spec defaults `weight` to 1 when omitted. With a single backendRef this means the backend receives 1/1 = 100% of traffic, which is correct behavior. However, if you add a second backendRef without specifying weights, both default to 1 and traffic is split 50/50 — which is rarely what you want during a careful canary rollout. Always set explicit weights when using more than one backend."
+    wrongExplanations:
+      a: "A missing weight defaults to 1, not 0. Weight 0 must be specified explicitly to disable a backend."
+      c: "The default weight is 1, not 100. The single-backend case happens to send all traffic there because 1/1=100%, but the field value is 1."
+      d: "Weight is optional. The spec defines a default of 1 for omitted weights."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.BackendRef"
+
+  - id: q3
+    type: single-choice
+    prompt: "You are promoting a canary from 10% to 100%. Which change to the HTTPRoute best preserves instant rollback capability?"
+    options:
+      - id: a
+        text: "Delete the old backendRef entry and increase the new version's weight to 100"
+      - id: b
+        text: "Set the new version's weight to 100 and the old version's weight to 0 — keep both entries"
+      - id: c
+        text: "Delete the entire HTTPRoute and recreate it with only the new version"
+      - id: d
+        text: "Reduce the old version's replicas to 0 — this automatically removes it from the route"
+    correctAnswer: b
+    explanation: "Setting the old backend's weight to 0 keeps the backendRef present in the route spec but sends no traffic to it. This means rollback is a single weight change rather than a structural edit of the route. Deleting the backendRef (options A and C) would require adding it back during rollback, which is slower and more error-prone. Option D is incorrect — scaling a Deployment to 0 replicas does not modify the HTTPRoute."
+    wrongExplanations:
+      a: "Deleting the old entry means rollback requires re-adding the backendRef. Setting weight to 0 is faster and safer."
+      c: "Deleting and recreating the route risks a routing gap and requires more work to roll back."
+      d: "Scaling the Deployment affects pods and capacity, but it has no effect on the HTTPRoute spec. A weight-0 backend with 0 replicas is a clean promoted state; a weight-nonzero backend with 0 replicas would cause 503 errors."
+
+  - id: q4
+    type: single-choice
+    prompt: "Level 5 used replica-based canary deployments (e.g., 4 stable replicas + 1 canary replica for an 80/20 split). How does Gateway API HTTPRoute weighting differ?"
+    options:
+      - id: a
+        text: "They are equivalent — HTTPRoute weights just automate the replica ratio calculation"
+      - id: b
+        text: "HTTPRoute weights control traffic proportion in the proxy, independent of replica counts — you can send 10% to a single-replica canary without needing 9 stable replicas"
+      - id: c
+        text: "HTTPRoute weights only work when both backends have the same number of replicas"
+      - id: d
+        text: "Replica-based canary is more precise because it uses Kubernetes scheduler weighting"
+    correctAnswer: b
+    explanation: "Replica-based canary splits traffic by adding pods to a shared selector — a 4:1 pod ratio produces roughly 80%/20% because each pod receives approximately equal load. This means you need 9× more pods to achieve a 90/10 split. HTTPRoute weights let you set any ratio in the proxy configuration, completely independent of replica counts. A single-replica canary can receive exactly 1% of traffic with weight 1 while the stable backend has weight 99."
+    wrongExplanations:
+      a: "HTTPRoute weights and replica ratios are independent mechanisms. The proxy honors weights regardless of pod counts."
+      c: "HTTPRoute weights work with any replica counts — the proxy distributes traffic according to the weight ratio, not the pod ratio."
+      d: "Kubernetes does not perform scheduler-based traffic weighting. Replica counts affect pod availability but not load balancer routing granularity."
+
+  - id: q5
+    type: single-choice
+    prompt: "What does setting a backendRef's weight to 0 in an HTTPRoute do?"
+    options:
+      - id: a
+        text: "It deletes the backendRef from the route spec on the next reconcile"
+      - id: b
+        text: "It causes the route to return a 503 error for all requests"
+      - id: c
+        text: "It keeps the backendRef present in the spec but directs no traffic to that backend, enabling instant rollback by changing the weight"
+      - id: d
+        text: "It is invalid — weight must be at least 1 in a valid HTTPRoute"
+    correctAnswer: c
+    explanation: "A `weight: 0` backendRef is explicitly supported by the Gateway API spec. The proxy sends zero requests to that backend but the entry remains in the route definition. This is the canonical way to 'soft-disable' a backend while preserving the ability to restore it instantly: setting the weight back to a positive integer immediately resumes traffic, with no structural change to the route required. The route remains valid and other backends receive 100% of traffic."
+    wrongExplanations:
+      a: "The controller never auto-deletes backendRefs based on weight. The spec is stored as written."
+      b: "A weight-0 backend does not make the route return 503. The remaining backends receive 100% of traffic."
+      d: "Weight 0 is explicitly valid per the Gateway API spec and is commonly used for the 'promoted canary with rollback' pattern."
+    docRef: "https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.BackendRef"

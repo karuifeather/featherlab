@@ -1,0 +1,52 @@
+schemaVersion: 1
+id: k8s-0137
+type: task
+title: Route by Request Header
+summary: Fix an HTTPRoute whose header-match rule references a non-existent backend Service.
+track: kubernetes
+level: 6
+order: 13
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [gateway-api, httproute, header-matching, networking]
+prerequisites: [k8s-0136]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0137`"
+  - "HTTPRoute `web-route` header-match rule for `X-User-Type: premium` routes to Service `premium:80`"
+  - "HTTPRoute `web-route` is Accepted with ResolvedRefs=True"
+  - "Plain HTTP request (no custom header) returns a response containing `standard-response`"
+
+hints:
+  - "Check the HTTPRoute status: `kubectl get httproute web-route -n fl-k8s-0137 -o yaml`"
+  - "Look for `ResolvedRefs: False` in the parent status conditions — this means a referenced Service was not found"
+  - "List Services in the namespace: `kubectl get service -n fl-k8s-0137`"
+
+lifecycle:
+  namespaces: [fl-k8s-0137]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute web-route is accepted with resolved references
+    params:
+      name: web-route
+      namespace: fl-k8s-0137
+      parentRefName: web-gw
+  - id: probe-default
+    type: k8s.routing-probe
+    label: Plain request reaches the standard backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0137
+      host: app.k8s-0137.fl.test
+      contains: standard-response

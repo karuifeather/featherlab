@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l6-003
+activityType: knowledge-check
+title: TLS, HTTPS, and Certificates
+summary: Understand TLS termination, kubernetes.io/tls Secrets, Ingress and Gateway HTTPS configuration, and how to diagnose TLS routing failures.
+track: kubernetes
+level: 6
+order: 19.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [tls, https, secrets, ingress, gateway-api, networking]
+relatedLabs: [k8s-0140, k8s-0141, k8s-0142, k8s-0143]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What two keys must a `kubernetes.io/tls` Secret contain?"
+    options:
+      - id: a
+        text: "`cert.pem` and `key.pem`"
+      - id: b
+        text: "`tls.crt` and `tls.key`"
+      - id: c
+        text: "`certificate` and `privateKey`"
+      - id: d
+        text: "`ca.crt` and `tls.key`"
+    correctAnswer: b
+    explanation: "A `kubernetes.io/tls` Secret must contain exactly `tls.crt` (the PEM-encoded certificate or chain) and `tls.key` (the PEM-encoded private key). Kubernetes validates these key names when the Secret is created with `type: kubernetes.io/tls`. Ingress controllers and Gateway API controllers read exactly these two keys when setting up TLS termination."
+    wrongExplanations:
+      a: "`cert.pem` and `key.pem` are common file names for certificates on disk but are not the required keys in a kubernetes.io/tls Secret. The required keys are `tls.crt` and `tls.key`."
+      c: "`certificate` and `privateKey` are not valid Secret keys for this type. Kubernetes would not validate the Secret correctly, and controllers would fail to load the certificate."
+      d: "`ca.crt` is the CA certificate used for client verification or trust, not the server certificate. A `kubernetes.io/tls` Secret needs the server certificate (`tls.crt`) and its private key (`tls.key`)."
+    tryCommand: kubectl get secret app-tls -n fl-k8s-0140 -o jsonpath='{.data}' | jq keys
+
+  - id: q2
+    type: single-choice
+    prompt: "What is the difference between TLS **termination** and TLS **passthrough** at a Gateway listener?"
+    options:
+      - id: a
+        text: "Termination decrypts TLS at the Gateway and forwards plaintext HTTP to the backend; passthrough forwards the encrypted stream unchanged"
+      - id: b
+        text: "Termination requires a client certificate; passthrough does not"
+      - id: c
+        text: "Termination uses port 443 and passthrough uses port 8443"
+      - id: d
+        text: "Termination works only with Ingress; passthrough works only with Gateway API"
+    correctAnswer: a
+    explanation: "With `mode: Terminate`, the Gateway controller holds the private key, decrypts the TLS handshake, and forwards plaintext HTTP to the backend Service — the backend never sees TLS. With `mode: Passthrough`, the Gateway forwards the encrypted TCP stream directly to the backend, which must handle TLS itself (requiring a TLSRoute instead of an HTTPRoute). Termination is the most common choice: it centralizes certificate management and allows the Gateway to inspect and route HTTP headers."
+    wrongExplanations:
+      b: "Client certificates (mTLS) are a separate concern from termination mode. Both termination and passthrough can be used with or without client certificates."
+      c: "Port numbers are independent of TLS mode. A Gateway listener can be on any port; 443 is the conventional HTTPS port but is not required."
+      d: "Both Ingress and Gateway API support TLS termination. The Gateway API additionally exposes passthrough mode via TLSRoute, which has no Ingress equivalent."
+    tryCommand: kubectl get gateway web-gw -n fl-k8s-0141 -o jsonpath='{.spec.listeners[?(@.protocol=="HTTPS")].tls.mode}'
+
+  - id: q3
+    type: single-choice
+    prompt: "An Ingress has a `spec.tls` entry with `secretName: my-cert`, but the Secret does not exist in the namespace. What happens?"
+    options:
+      - id: a
+        text: "The Ingress controller returns HTTP 503 for all requests to that host"
+      - id: b
+        text: "The Ingress controller removes the `spec.tls` stanza automatically and serves HTTP only"
+      - id: c
+        text: "The Ingress controller falls back to a default or self-signed certificate, so HTTPS may appear to work but serves the wrong certificate"
+      - id: d
+        text: "The Ingress is rejected by the API server and cannot be created"
+    correctAnswer: c
+    explanation: "Most Ingress controllers (including Traefik) do not fail hard when a referenced TLS Secret is missing. Instead they fall back to their own default certificate — which may be self-signed. HTTPS connections succeed (especially with `--insecure`/`-k`), but the certificate presented is not the one the operator intended. This makes the issue easy to miss. Always verify the correct certificate is being served, not just that a connection succeeds."
+    wrongExplanations:
+      a: "Ingress controllers typically do not block HTTP traffic when a TLS Secret is missing. They fall back to a default certificate and continue serving."
+      b: "Controllers do not automatically downgrade to HTTP when a TLS Secret is missing. They continue attempting to serve HTTPS, potentially with a fallback certificate."
+      d: "The Kubernetes API server does not validate that Secrets referenced by Ingress TLS stanzas exist at creation time. The Ingress is accepted as valid YAML even if the Secret is absent."
+    tryCommand: kubectl get ingress web -n fl-k8s-0142 -o jsonpath='{.spec.tls}'
+
+  - id: q4
+    type: single-choice
+    prompt: "In Gateway API, how does an HTTPS listener reference the TLS Secret to use for termination?"
+    options:
+      - id: a
+        text: "Via `spec.listeners[].tls.secretName` (same field as Ingress)"
+      - id: b
+        text: "Via `spec.listeners[].tls.certificateRefs[].name` pointing to a `kubernetes.io/tls` Secret"
+      - id: c
+        text: "Via a `TLSPolicy` resource that is attached to the Gateway by label"
+      - id: d
+        text: "The GatewayClass provides the certificate; individual Gateways cannot override it"
+    correctAnswer: b
+    explanation: "In the Gateway API spec, TLS certificates are referenced through `spec.listeners[].tls.certificateRefs`, which is a list of object references. Each entry specifies a `name` and optionally a `kind` (defaulting to `Secret`) and `namespace`. The controller reads the `tls.crt` and `tls.key` from that Secret to configure TLS termination for the listener."
+    wrongExplanations:
+      a: "Ingress uses `spec.tls[].secretName`, but Gateway API uses a different field: `spec.listeners[].tls.certificateRefs`. The two APIs are separate and should not be confused."
+      c: "There is no standard `TLSPolicy` resource in the Gateway API core spec (though some implementations offer policy attachments as extensions). The standard mechanism is `certificateRefs` in the listener."
+      d: "Individual Gateways control their own TLS certificates via `certificateRefs`. The GatewayClass provides implementation behavior, not certificates."
+    tryCommand: kubectl get gateway web-gw -n fl-k8s-0141 -o jsonpath='{.spec.listeners[?(@.protocol=="HTTPS")].tls}'
+
+  - id: q5
+    type: single-choice
+    prompt: "You run `curl --insecure https://app.example.com/` and get HTTP 200 with the expected response body. Does this prove the correct TLS certificate is being served?"
+    options:
+      - id: a
+        text: "Yes — the response body is correct, which means the full TLS chain is valid"
+      - id: b
+        text: "No — `--insecure` skips certificate verification entirely, so the server could be presenting any certificate (or a self-signed default)"
+      - id: c
+        text: "Yes — `--insecure` only skips hostname verification; it still checks the certificate's expiry and issuer"
+      - id: d
+        text: "No — `--insecure` also decrypts the response before sending it, so the body cannot be trusted"
+    correctAnswer: b
+    explanation: "`--insecure` (or `-k`) tells curl to skip all TLS certificate verification: it ignores hostname mismatches, expired certificates, and untrusted issuers. A 200 response proves only that TLS transport was established and the backend responded — not that the certificate is the intended one. An Ingress controller that falls back to a self-signed default certificate still establishes a TLS connection and serves content normally. To verify the actual certificate, use `openssl s_client` or `curl -v` and inspect the certificate chain."
+    wrongExplanations:
+      a: "The response body is returned by the backend, not by the TLS layer. The backend sends the same response regardless of which certificate the controller presents. A correct body with `--insecure` only confirms routing works."
+      c: "`--insecure` disables all TLS verification, including hostname checks, expiry checks, and CA trust. It does not selectively apply any checks."
+      d: "`--insecure` does not interfere with the response body. TLS still encrypts the connection; curl decrypts it normally. The flag only disables certificate validation."
+    tryCommand: "openssl s_client -connect traefik.traefik-system.svc.cluster.local:443 -servername app.k8s-0140.fl.test </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer"

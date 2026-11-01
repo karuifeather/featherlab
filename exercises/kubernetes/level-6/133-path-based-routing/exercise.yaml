@@ -1,0 +1,60 @@
+schemaVersion: 1
+id: k8s-0133
+type: task
+title: Path-Based Routing
+summary: Add a second path rule to an HTTPRoute so that /app and /api requests reach different backend Services.
+track: kubernetes
+level: 6
+order: 9
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [gateway-api, httproute, path-routing, networking]
+prerequisites: [k8s-0132]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "In namespace `fl-k8s-0133`: HTTPRoute `web-route` has rules for PathPrefix `/app` → `app:80` and PathPrefix `/api` → `api:80`"
+  - "HTTP request for path `/app/` returns a response containing `app-service`"
+  - "HTTP request for path `/api/` returns a response containing `api-service`"
+
+hints:
+  - "Inspect the current HTTPRoute: `kubectl get httproute web-route -n fl-k8s-0133 -o yaml`"
+  - "Add a second entry under `spec.rules` with a `matches` block for PathPrefix `/api` and `backendRefs` pointing to `api:80`"
+  - "Edit with: `kubectl edit httproute web-route -n fl-k8s-0133`"
+
+lifecycle:
+  namespaces: [fl-k8s-0133]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute web-route is accepted
+    params:
+      name: web-route
+      namespace: fl-k8s-0133
+  - id: probe-app
+    type: k8s.routing-probe
+    label: Path /app/ reaches the app backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0133
+      host: k8s-0133.fl.test
+      path: /app/
+      contains: app-service
+  - id: probe-api
+    type: k8s.routing-probe
+    label: Path /api/ reaches the api backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0133
+      host: k8s-0133.fl.test
+      path: /api/
+      contains: api-service

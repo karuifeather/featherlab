@@ -1,0 +1,61 @@
+schemaVersion: 1
+id: k8s-0144
+type: task
+title: Route Across Namespaces
+summary: Create a ReferenceGrant so an HTTPRoute in one namespace can reference a backend Service in another.
+track: kubernetes
+level: 6
+order: 20
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [gateway-api, cross-namespace, reference-grant, httproute]
+prerequisites: [k8s-0143]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0144`"
+  - "ReferenceGrant `allow-from-ingress-ns` exists in namespace `fl-k8s-0144-backend`"
+  - "HTTPRoute `web-route` in `fl-k8s-0144` has Accepted=True and ResolvedRefs=True"
+  - "HTTP request for host `app.k8s-0144.fl.test` reaches the backend and returns `backend-0144`"
+
+hints:
+  - 'Check why the route is broken: `kubectl get httproute web-route -n fl-k8s-0144 -o jsonpath=''{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].reason}''`'
+  - "A ReferenceGrant lives in the TARGET namespace (where the Service is), not in the HTTPRoute's namespace."
+  - 'The `from` block must list `group: gateway.networking.k8s.io`, `kind: HTTPRoute`, `namespace: fl-k8s-0144`; the `to` block must list `group: ""` and `kind: Service`.'
+
+lifecycle:
+  namespaces: [fl-k8s-0144, fl-k8s-0144-backend]
+  setup:
+    manifests: [setup/cross-ns.yaml]
+
+checks:
+  - id: grant-exists
+    type: k8s.resource-exists
+    label: ReferenceGrant allow-from-ingress-ns exists in fl-k8s-0144-backend
+    params:
+      kind: ReferenceGrant
+      name: allow-from-ingress-ns
+      namespace: fl-k8s-0144-backend
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute web-route is accepted with resolved references
+    params:
+      name: web-route
+      namespace: fl-k8s-0144
+      parentRefName: main-gw
+  - id: route-probe
+    type: k8s.routing-probe
+    label: HTTP request for app.k8s-0144.fl.test reaches the backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0144
+      host: app.k8s-0144.fl.test
+      path: /
+      statusCode: 200
+      contains: "backend-0144"

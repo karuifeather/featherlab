@@ -1,0 +1,61 @@
+schemaVersion: 1
+id: k8s-0147
+type: task
+title: Cross-Namespace Routing Mastery
+summary: Fix a broken ReferenceGrant whose from namespace is wrong so that an HTTPRoute can reach its cross-namespace backend.
+track: kubernetes
+level: 6
+order: 23
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [gateway-api, cross-namespace, reference-grant, repair, ingress]
+prerequisites: [k8s-0146]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0147`"
+  - "ReferenceGrant `allow-from-gw-ns` exists in namespace `fl-k8s-0147-api`"
+  - "HTTPRoute `api-route` in `fl-k8s-0147` has Accepted=True and ResolvedRefs=True"
+  - "HTTP request for host `api.k8s-0147.fl.test` reaches the API backend and returns `api-0147`"
+
+hints:
+  - "The ReferenceGrant already exists — inspect it: `kubectl get referencegrant allow-from-gw-ns -n fl-k8s-0147-api -o yaml`"
+  - "Look at `spec.from[0].namespace`. It names the wrong namespace. What is the HTTPRoute's actual namespace?"
+  - "Edit the grant: `kubectl edit referencegrant allow-from-gw-ns -n fl-k8s-0147-api` and fix the namespace to `fl-k8s-0147`."
+
+lifecycle:
+  namespaces: [fl-k8s-0147, fl-k8s-0147-api]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: grant-exists
+    type: k8s.resource-exists
+    label: ReferenceGrant allow-from-gw-ns exists in fl-k8s-0147-api
+    params:
+      kind: ReferenceGrant
+      name: allow-from-gw-ns
+      namespace: fl-k8s-0147-api
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute api-route is accepted with resolved references
+    params:
+      name: api-route
+      namespace: fl-k8s-0147
+      parentRefName: main-gw
+  - id: route-probe
+    type: k8s.routing-probe
+    label: HTTP request for api.k8s-0147.fl.test reaches the API backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0147
+      host: api.k8s-0147.fl.test
+      path: /
+      statusCode: 200
+      contains: "api-0147"

@@ -1,0 +1,64 @@
+schemaVersion: 1
+id: k8s-0148
+type: task
+title: Configure a Canary HTTPRoute
+summary: Split traffic between two Service backends using HTTPRoute backendRef weights — the Gateway API way to run a canary deployment.
+track: kubernetes
+level: 6
+order: 24
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [gateway-api, weighted-routing, canary, httproute]
+prerequisites: [k8s-0147]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0148`"
+  - "HTTPRoute `app-route` has backendRef `web-stable` with weight 90"
+  - "HTTPRoute `app-route` has backendRef `web-canary` with weight 10"
+  - "HTTPRoute `app-route` is Accepted by Gateway `app-gw`"
+  - "Routing probe for `app.k8s-0148.fl.test` returns HTTP 200"
+
+hints:
+  - "Edit the HTTPRoute with `kubectl edit httproute app-route -n fl-k8s-0148`"
+  - "In Gateway API, weights are relative integers — weight 90 and weight 10 means 90% vs 10% of traffic."
+  - "Add a second entry to `spec.rules[0].backendRefs` pointing to `web-canary` port 80 with `weight: 10`."
+
+lifecycle:
+  namespaces: [fl-k8s-0148]
+  setup:
+    manifests: [setup/weighted.yaml]
+
+checks:
+  - id: route-weights
+    type: k8s.httproute-weights
+    label: HTTPRoute has correct backend weights (90 stable / 10 canary)
+    params:
+      name: app-route
+      namespace: fl-k8s-0148
+      backends:
+        - name: web-stable
+          weight: 90
+        - name: web-canary
+          weight: 10
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute app-route is Accepted by app-gw
+    params:
+      name: app-route
+      namespace: fl-k8s-0148
+      parentRefName: app-gw
+  - id: route-responds
+    type: k8s.routing-probe
+    label: Route for app.k8s-0148.fl.test returns HTTP 200
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0148
+      host: app.k8s-0148.fl.test
+      statusCode: 200

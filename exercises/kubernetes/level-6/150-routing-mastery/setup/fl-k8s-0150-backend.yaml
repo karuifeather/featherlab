@@ -1,0 +1,127 @@
+# Resources in fl-k8s-0150-backend
+# These are the cross-namespace API backends.
+
+# ── Custom HTML so each version is identifiable ──────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-v1-html
+  namespace: fl-k8s-0150-backend
+data:
+  index.html: "API version 1\n"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-v2-html
+  namespace: fl-k8s-0150-backend
+data:
+  index.html: "API version 2\n"
+---
+# ── api-v1 Deployment ────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-v1
+  namespace: fl-k8s-0150-backend
+  labels:
+    app: api
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: api
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: html
+          configMap:
+            name: api-v1-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v1
+  namespace: fl-k8s-0150-backend
+spec:
+  selector:
+    app: api
+    version: v1
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# ── api-v2 Deployment ────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-v2
+  namespace: fl-k8s-0150-backend
+  labels:
+    app: api
+    version: v2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: api
+        version: v2
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: html
+          configMap:
+            name: api-v2-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-v2
+  namespace: fl-k8s-0150-backend
+spec:
+  selector:
+    app: api
+    version: v2
+  ports:
+    - port: 80
+      targetPort: 80

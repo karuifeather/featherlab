@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0130
+type: task
+title: Inspect the GatewayClass
+summary: Explore the platform-provided GatewayClass and understand which controller manages your Gateway resources.
+track: kubernetes
+level: 6
+order: 6
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [gateway-api, gatewayclass, networking]
+prerequisites: [k8s-0129]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "In namespace `fl-k8s-0130`: ConfigMap `my-notes` exists with key `controllerName` set to the GatewayClass controller name"
+  - "The `traefik` GatewayClass exists in the cluster"
+  - "ConfigMap `my-notes` has key `controllerName` set to the GatewayClass controller name"
+
+hints:
+  - "List GatewayClasses: `kubectl get gatewayclass`"
+  - "Inspect the traefik GatewayClass in detail: `kubectl get gatewayclass traefik -o yaml` — look for the `controllerName` field under `spec`"
+  - "Create the ConfigMap: `kubectl create configmap my-notes --from-literal=controllerName=<value> -n fl-k8s-0130`"
+
+lifecycle:
+  namespaces: [fl-k8s-0130]
+
+checks:
+  - id: gatewayclass-exists
+    type: k8s.resource-exists
+    label: GatewayClass traefik exists
+    params:
+      kind: GatewayClass
+      name: traefik
+  - id: notes-exists
+    type: k8s.resource-exists
+    label: ConfigMap my-notes exists in fl-k8s-0130
+    params:
+      kind: ConfigMap
+      name: my-notes
+      namespace: fl-k8s-0130
+  - id: notes-data
+    type: k8s.configmap-data
+    label: ConfigMap my-notes has the correct controllerName
+    params:
+      name: my-notes
+      namespace: fl-k8s-0130
+      data:
+        controllerName: traefik.io/gateway-controller

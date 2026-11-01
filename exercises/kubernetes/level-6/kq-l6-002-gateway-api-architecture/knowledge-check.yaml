@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l6-002
+activityType: knowledge-check
+title: Gateway API Architecture
+summary: Understand the roles of GatewayClass, Gateway, and HTTPRoute, and how they work together to route traffic.
+track: kubernetes
+level: 6
+order: 11.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [gateway-api, gatewayclass, gateway, httproute, networking]
+relatedLabs: [k8s-0130, k8s-0131, k8s-0132, k8s-0133, k8s-0134, k8s-0135]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "In the Gateway API model, which resource is cluster-scoped and names the controller implementation (e.g. Traefik, Envoy)?"
+    options:
+      - id: a
+        text: HTTPRoute
+      - id: b
+        text: Gateway
+      - id: c
+        text: GatewayClass
+      - id: d
+        text: IngressClass
+    correctAnswer: c
+    explanation: "GatewayClass is the cluster-scoped resource that names the controller implementation via its `spec.controllerName` field. Platform administrators install it; developers reference it in Gateways. A Gateway declares the listener configuration and references a GatewayClass. An HTTPRoute attaches to a Gateway and maps hostname + path rules to backend Services."
+    wrongExplanations:
+      a: "HTTPRoute is namespace-scoped and owned by application developers. It maps routing rules to backend Services; it does not name a controller implementation."
+      b: "Gateway is namespace-scoped. It declares the listener (port, protocol, hostname) and references a GatewayClass — it does not define the controller."
+      d: "IngressClass names an Ingress controller, not a Gateway API controller. IngressClass is used with the older Ingress resource, not with Gateway or HTTPRoute."
+    tryCommand: kubectl get gatewayclass
+
+  - id: q2
+    type: single-choice
+    prompt: "A Gateway has `status.conditions` showing `Accepted: True` and `Programmed: True`. What does `Accepted: True` mean?"
+    options:
+      - id: a
+        text: Traffic is actively flowing through the Gateway to backends
+      - id: b
+        text: The controller recognized the Gateway configuration as valid
+      - id: c
+        text: All HTTPRoutes attached to the Gateway are healthy
+      - id: d
+        text: The listener port is open on all cluster nodes
+    correctAnswer: b
+    explanation: "`Accepted: True` means the controller recognized the Gateway and accepted its configuration (the listener port, protocol, and hostname are valid). It does NOT mean traffic is flowing — that is indicated by `Programmed: True`, which confirms the data plane is configured. Traffic reaching backends also requires at least one HTTPRoute to be attached and healthy."
+    wrongExplanations:
+      a: "Traffic flow is not indicated by `Accepted`. You need `Programmed: True` (data plane configured) AND a healthy HTTPRoute attached before traffic flows."
+      c: "Gateway conditions describe the Gateway itself, not its attached routes. HTTPRoute health is reported in the HTTPRoute's own `status.parents[].conditions`."
+      d: "The Gateway API does not open node-level ports. A NodePort Service or a cloud load balancer would do that. Gateway listeners are reconciled by the controller (Traefik), not on individual nodes."
+    tryCommand: kubectl describe gateway <name> -n <namespace>
+
+  - id: q3
+    type: single-choice
+    prompt: "An HTTPRoute has `status.parents[0].conditions` showing `Accepted: True` but `ResolvedRefs: False` with reason `BackendNotFound`. What is the most likely cause?"
+    options:
+      - id: a
+        text: The Gateway referenced in parentRefs does not exist
+      - id: b
+        text: The HTTPRoute hostname does not match the Gateway listener hostname
+      - id: c
+        text: A Service named in backendRefs does not exist in the namespace
+      - id: d
+        text: The Gateway is not yet Programmed
+    correctAnswer: c
+    explanation: "`ResolvedRefs: False` with reason `BackendNotFound` means the controller could not find a Service (or other backend) named in `spec.rules[].backendRefs`. The route is accepted by the Gateway (`Accepted: True`), but traffic cannot be forwarded. Fix by correcting the Service name in backendRefs, or by creating the missing Service."
+    wrongExplanations:
+      a: "If the Gateway in parentRefs does not exist, no controller writes a parent entry at all — `status.parents` would be empty. In this question the prompt states that a parent entry already exists with `Accepted: True`, which means the Gateway was found and accepted the route."
+      b: "A hostname mismatch causes `Accepted: False`, not `ResolvedRefs: False`. The route would not attach to the Gateway at all."
+      d: "The Gateway's programmed state does not affect how the controller resolves HTTPRoute backend references. `ResolvedRefs` is about whether the backend Services exist."
+    tryCommand: kubectl get httproute <name> -n <namespace> -o yaml
+
+  - id: q4
+    type: single-choice
+    prompt: "You create an HTTPRoute with `spec.parentRefs[0].name: my-gateway`. Several minutes later, `status.parents` is still empty. What is the most likely reason?"
+    options:
+      - id: a
+        text: The HTTPRoute has no `hostnames` field
+      - id: b
+        text: No Gateway named `my-gateway` exists in the same namespace
+      - id: c
+        text: The backend Service is not ready
+      - id: d
+        text: The controller has not reconciled the HTTPRoute yet
+    correctAnswer: b
+    explanation: "An HTTPRoute's `status.parents` is populated by the controller of the Gateway it references. If no Gateway named `my-gateway` exists in the namespace, there is no controller to add a parent entry and the list stays empty. Always verify the Gateway exists and is in the correct namespace: `kubectl get gateway -n <namespace>`."
+    wrongExplanations:
+      a: "An HTTPRoute without `hostnames` is valid — it matches all hostnames the Gateway accepts. The missing `hostnames` field does not prevent a parent entry from appearing."
+      c: "Backend Service readiness affects `ResolvedRefs`, not whether a parent entry exists. Even with a missing Service, the controller would add a parent entry with `ResolvedRefs: False`."
+      d: "The question states that several minutes have passed. A brief reconciliation delay is normal, but an empty `status.parents` that persists indicates the referenced Gateway does not exist."
+    tryCommand: kubectl get gateway -n <namespace>
+
+  - id: q5
+    type: single-choice
+    prompt: 'A Gateway listener has `hostname: "*.example.com"`. The Gateway API spec describes this as a suffix match: it matches any hostname ending with `.example.com`. Which of the following HTTPRoute hostnames does NOT match this listener and would therefore fail to attach?'
+    options:
+      - id: a
+        text: "`example.com`"
+      - id: b
+        text: "`api.example.com`"
+      - id: c
+        text: "`v1.api.example.com`"
+      - id: d
+        text: "`test.example.com`"
+    correctAnswer: a
+    explanation: "`example.com` is the apex domain. The wildcard `*.example.com` is a suffix pattern — it requires `.example.com` to appear after at least one character, meaning `<something>.example.com`. The apex `example.com` does not have any prefix before `.example.com`, so it does not satisfy the suffix match and the HTTPRoute would fail to attach. The other options (`api.example.com`, `v1.api.example.com`, `test.example.com`) all end in `.example.com` with a non-empty prefix, so they all match."
+    wrongExplanations:
+      b: "`api.example.com` ends with `.example.com` and has the prefix `api`, so it satisfies the suffix match and attaches."
+      c: "`v1.api.example.com` ends with `.example.com` and has the prefix `v1.api`, so it also satisfies the suffix match and attaches. Unlike Ingress wildcards, Gateway API wildcard matching is a true suffix match, not a single-label match."
+      d: "`test.example.com` ends with `.example.com` and has the prefix `test`, so it satisfies the suffix match and attaches."
+    tryCommand: kubectl describe gateway <name> -n <namespace>

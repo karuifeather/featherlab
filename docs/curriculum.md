@@ -12,7 +12,9 @@ familiar concepts, never from mechanisms the learner has not met yet.
 | 2     | Configuration, health, security, and workload recovery           | 25 (k8s-0035–0053, k8s-0004–0010)       | M5.4 complete; M5.5+ to expand |
 | 3     | Application patterns — init, sidecar, Jobs, CronJobs, DaemonSets | 25 (k8s-0054–0078) + 7 knowledge checks | M5.5 complete                  |
 | 4     | Resource management and scheduling                               | 19 (k8s-0079–0097) + 8 knowledge checks | M5.6 complete                  |
-| 5+    | Networking, storage, cluster administration, CKS hardening       | none yet                                | planned                        |
+| 5     | Services, DNS, blue/green, canary traffic                        | 27 (k8s-0098–0124) + 7 knowledge checks | M5.7 complete                  |
+| 6     | Ingress, Gateway API, HTTP routing, TLS, cross-namespace routing | 26 (k8s-0125–0150) + 6 knowledge checks | M5.8 complete                  |
+| 7+    | Storage, cluster administration, CKS hardening                   | none yet                                | planned                        |
 
 All scenarios, statements, setup manifests, hints, solutions and validators are original
 FeatherLab content. They are not endorsed by the CNCF and do not reproduce certification exam
@@ -430,9 +432,90 @@ knowledge checks cover the conceptual side of each topic.
 ### Deferred topics
 
 - **LoadBalancer Services** — require a cloud provider or MetalLB, neither of which is present in the single-node kind cluster. Covered conceptually in kq-l5-004.
-- **Ingress and Gateway API** — distinct topic area (HTTP routing, TLS termination). Earmarked for a future level.
 - **NetworkPolicy** — cluster-level networking; requires a CNI that enforces policies (kind default does not). Deferred.
 - **EndpointSlice manual creation** — EndpointSlices are controller-managed; exercises observe but never create them.
+
+## Level 6: Ingress, Gateway API, HTTP routing (M5.8)
+
+Twenty-six exercises cover Kubernetes Ingress (Traefik v3), Gateway API (GatewayClass, Gateway,
+HTTPRoute), HTTP matching by path, header and hostname, HTTP redirects, TLS termination, cross-
+namespace routing with ReferenceGrant, and weighted backendRef traffic splitting. Six interleaved
+knowledge checks cover the conceptual side of each topic.
+
+All Level 6 exercises use the `kind-routing` environment profile, which starts a kind cluster with
+Traefik v3 and the standard-channel Gateway API CRDs pre-installed in `traefik-system`. Routing
+probes (`k8s.routing-probe`) send curl from a `grader-client` Pod to
+`traefik.traefik-system.svc.cluster.local` with a controlled `Host` header; learner-supplied
+hostnames are never used as network targets.
+
+### Circuit A — Kubernetes Ingress (k8s-0125 to k8s-0129)
+
+| Order | ID        | Title                           | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------------- | ------------ | ------------- |
+| 1     | k8s-0125  | Your First Ingress              | beginner     | 0124          |
+| 2     | k8s-0126  | Route by Hostname               | intermediate | 0125          |
+| 3     | k8s-0127  | Route by Path                   | intermediate | 0126          |
+| 4     | k8s-0128  | Fix the Backend                 | intermediate | 0127          |
+| 5     | k8s-0129  | Ingress Routing Troubleshooting | intermediate | 0128          |
+| 5.5   | kq-l6-001 | Ingress Fundamentals            | — (check)    | 0129          |
+
+### Circuit B — Gateway API (k8s-0130 to k8s-0135)
+
+| Order | ID        | Title                         | Difficulty   | Prerequisites |
+| ----- | --------- | ----------------------------- | ------------ | ------------- |
+| 6     | k8s-0130  | Inspect the GatewayClass      | beginner     | 0129          |
+| 7     | k8s-0131  | Your First Gateway Route      | intermediate | 0130          |
+| 8     | k8s-0132  | Hostname Routing with Gateway | intermediate | 0131          |
+| 9     | k8s-0133  | Path-Based Routing            | intermediate | 0132          |
+| 10    | k8s-0134  | Route Attachment              | intermediate | 0133          |
+| 11    | k8s-0135  | Gateway Status Diagnostics    | intermediate | 0134          |
+| 11.5  | kq-l6-002 | Gateway API Architecture      | — (check)    | 0135          |
+
+### Circuit C — HTTP Matching (k8s-0136 to k8s-0139)
+
+| Order | ID        | Title                     | Difficulty   | Prerequisites |
+| ----- | --------- | ------------------------- | ------------ | ------------- |
+| 12    | k8s-0136  | Match the Correct Path    | intermediate | 0135          |
+| 13    | k8s-0137  | Route by Request Header   | intermediate | 0136          |
+| 14    | k8s-0138  | HTTP Redirect             | intermediate | 0137          |
+| 15    | k8s-0139  | Repair a Routing Conflict | advanced     | 0138          |
+| 15.5  | kq-l6-003 | TLS and HTTPS             | — (check)    | 0139          |
+
+### Circuit D — TLS (k8s-0140 to k8s-0143)
+
+| Order | ID       | Title                    | Difficulty   | Prerequisites |
+| ----- | -------- | ------------------------ | ------------ | ------------- |
+| 16    | k8s-0140 | HTTPS with Ingress       | intermediate | 0139          |
+| 17    | k8s-0141 | HTTPS with Gateway       | intermediate | 0140          |
+| 18    | k8s-0142 | Fix a TLS Configuration  | intermediate | 0141          |
+| 19    | k8s-0143 | Secure Routing Challenge | advanced     | 0142          |
+
+### Circuit E — Cross-Namespace Routing (k8s-0144 to k8s-0147)
+
+| Order | ID        | Title                               | Difficulty   | Prerequisites |
+| ----- | --------- | ----------------------------------- | ------------ | ------------- |
+| 20    | k8s-0144  | Route Across Namespaces             | intermediate | 0143          |
+| 21    | k8s-0145  | Inspect the Cross-Namespace Failure | intermediate | 0144          |
+| 22    | k8s-0146  | Multi-Backend Cross-Namespace       | intermediate | 0145          |
+| 23    | k8s-0147  | Cross-Namespace Routing Mastery     | intermediate | 0146          |
+| 23.5  | kq-l6-004 | Cross-Namespace Routing             | — (check)    | 0147          |
+
+### Circuit F — Weighted Routing and Mastery (k8s-0148 to k8s-0150)
+
+| Order | ID        | Title                      | Difficulty   | Prerequisites |
+| ----- | --------- | -------------------------- | ------------ | ------------- |
+| 24    | k8s-0148  | Configure Canary HTTPRoute | intermediate | 0147          |
+| 25    | k8s-0149  | Promote Canary             | advanced     | 0148          |
+| 25.5  | kq-l6-005 | Weighted Traffic Splitting | — (check)    | 0149          |
+| 25.8  | kq-l6-006 | Level 6 Mixed Review       | — (check)    | 0149          |
+| 26    | k8s-0150  | Level 6 Routing Mastery    | advanced     | 0149          |
+
+### Deferred topics
+
+- **mTLS and advanced TLS policies** — require cert-manager or OPA/policy controllers; out of scope for the single-node kind setup.
+- **Ingress annotations** — controller-specific and fragile across Traefik versions; Gateway API filters cover the same use cases more portably.
+- **TCPRoute and GRPCRoute** — Gateway API extension resources; not included in the standard channel v1.2.1 CRDs.
+- **NetworkPolicy** — continues to be deferred; see Level 5 deferred topics.
 
 ## Ownership, setup and reset
 

@@ -1,0 +1,57 @@
+schemaVersion: 1
+id: k8s-0125
+type: task
+title: Your First Ingress
+summary: Expose a Service to HTTP traffic by creating an Ingress resource that routes requests by hostname.
+track: kubernetes
+level: 6
+order: 1
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [ingress, networking, http-routing]
+prerequisites: [k8s-0124]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0125`: Ingress `web` routes traffic for host `app.k8s-0125.fl.test` to Service `web` on port 80"
+  - "HTTP request to `app.k8s-0125.fl.test` returns a response containing `nginx`"
+
+hints:
+  - "Create an `ingress.yaml` file with `apiVersion: networking.k8s.io/v1`, `kind: Ingress`, `spec.ingressClassName: traefik`, and a rule for `app.k8s-0125.fl.test`. Apply it with `kubectl apply -f ingress.yaml -n fl-k8s-0125`."
+  - "Inspect the Ingress: `kubectl describe ingress web -n fl-k8s-0125`. Look for `Default backend` and `Rules` sections — the backend address shows whether Traefik found the Service."
+  - "Verify manually from the grader pod: `kubectl exec grader-client -n fl-k8s-0125 -- curl --silent --connect-to app.k8s-0125.fl.test::traefik.traefik-system.svc.cluster.local:80 http://app.k8s-0125.fl.test/`"
+
+lifecycle:
+  namespaces: [fl-k8s-0125]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: ingress-spec
+    type: k8s.ingress-spec
+    label: Ingress web routes app.k8s-0125.fl.test to Service web on port 80
+    params:
+      name: web
+      namespace: fl-k8s-0125
+      ingressClassName: traefik
+      rules:
+        - host: app.k8s-0125.fl.test
+          path: /
+          pathType: Prefix
+          backend:
+            serviceName: web
+            servicePort: 80
+  - id: http
+    type: k8s.routing-probe
+    label: HTTP request to app.k8s-0125.fl.test returns nginx response
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0125
+      host: app.k8s-0125.fl.test
+      contains: nginx

@@ -1,0 +1,60 @@
+schemaVersion: 1
+id: k8s-0143
+type: task
+title: Secure Routing Challenge
+summary: An HTTPRoute is waiting for an HTTPS listener that does not yet exist. Add the HTTPS listener to the Gateway to complete the secure routing setup.
+track: kubernetes
+level: 6
+order: 19
+difficulty: advanced
+estimatedMinutes: 16
+tags: [gateway-api, gateway, httproute, tls, https, secrets, networking]
+prerequisites: [k8s-0142]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0143`"
+  - "Gateway `secure-gw` has an HTTPS listener named `https` on port 443 with TLS mode Terminate referencing Secret `app-tls`"
+  - "Gateway `secure-gw` is Accepted and Programmed"
+  - "HTTPRoute `app-route` is Accepted with ResolvedRefs=True"
+  - "HTTPS request for host `app.k8s-0143.fl.test` returns a response containing `secure-app`"
+
+hints:
+  - "Check the HTTPRoute status — look for `NoMatchingParent`: `kubectl get httproute app-route -n fl-k8s-0143 -o yaml`"
+  - "Check the Gateway — it only has an `http` listener; the route needs one named `https`: `kubectl get gateway secure-gw -n fl-k8s-0143 -o yaml`"
+  - "Edit the Gateway and add a listener with `name: https`, `port: 443`, `protocol: HTTPS`, and `tls.certificateRefs[0].name: app-tls`: `kubectl edit gateway secure-gw -n fl-k8s-0143`"
+
+lifecycle:
+  namespaces: [fl-k8s-0143]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: gateway-ready
+    type: k8s.gateway-ready
+    label: Gateway secure-gw is Accepted and Programmed
+    params:
+      name: secure-gw
+      namespace: fl-k8s-0143
+  - id: route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute app-route is accepted with resolved references
+    params:
+      name: app-route
+      namespace: fl-k8s-0143
+      parentRefName: secure-gw
+  - id: https-probe
+    type: k8s.routing-probe
+    label: HTTPS request reaches the secure-app backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0143
+      host: app.k8s-0143.fl.test
+      https: true
+      contains: secure-app

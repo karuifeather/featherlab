@@ -1,0 +1,69 @@
+schemaVersion: 1
+id: k8s-0139
+type: task
+title: Repair a Routing Conflict
+summary: Two HTTPRoutes compete for the same host and path prefix, causing unpredictable routing. Fix the admin route to use a more specific path.
+track: kubernetes
+level: 6
+order: 15
+difficulty: advanced
+estimatedMinutes: 14
+tags: [gateway-api, httproute, path-matching, conflict, networking]
+prerequisites: [k8s-0138]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0139`"
+  - "HTTPRoute `admin-route` matches PathPrefix `/admin` (not `/`)"
+  - "HTTP request for path `/` returns a response containing `main-app`"
+  - "HTTP request for path `/admin` returns a response containing `admin-panel`"
+
+hints:
+  - "List both HTTPRoutes: `kubectl get httproute -n fl-k8s-0139 -o yaml`"
+  - "Both routes currently match `PathPrefix /` on the same hostname — this is the conflict"
+  - "Fix `admin-route` to use `PathPrefix /admin`: `kubectl edit httproute admin-route -n fl-k8s-0139`"
+
+lifecycle:
+  namespaces: [fl-k8s-0139]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: app-route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute app-route is accepted
+    params:
+      name: app-route
+      namespace: fl-k8s-0139
+      parentRefName: web-gw
+  - id: admin-route-accepted
+    type: k8s.httproute-accepted
+    label: HTTPRoute admin-route is accepted
+    params:
+      name: admin-route
+      namespace: fl-k8s-0139
+      parentRefName: web-gw
+  - id: probe-root
+    type: k8s.routing-probe
+    label: Path / reaches the main app backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0139
+      host: app.k8s-0139.fl.test
+      path: /
+      contains: main-app
+  - id: probe-admin
+    type: k8s.routing-probe
+    label: Path /admin reaches the admin backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0139
+      host: app.k8s-0139.fl.test
+      path: /admin
+      contains: admin-panel

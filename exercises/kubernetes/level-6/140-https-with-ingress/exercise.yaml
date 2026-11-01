@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0140
+type: task
+title: HTTPS with Ingress
+summary: Enable HTTPS on an existing Ingress by adding a TLS stanza that references a pre-created kubernetes.io/tls Secret.
+track: kubernetes
+level: 6
+order: 16
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [ingress, tls, https, secrets, networking]
+prerequisites: [k8s-0139]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0140`"
+  - "Ingress `web` has a `spec.tls` entry referencing Secret `app-tls` for host `app.k8s-0140.fl.test`"
+  - "HTTPS request for host `app.k8s-0140.fl.test` returns a response containing `web-response`"
+
+hints:
+  - "Inspect the current Ingress: `kubectl get ingress web -n fl-k8s-0140 -o yaml`"
+  - "Notice there is no `spec.tls` section yet — Secret `app-tls` is already created"
+  - "Edit the Ingress and add a `tls:` block with `secretName: app-tls` and `hosts: [app.k8s-0140.fl.test]`: `kubectl edit ingress web -n fl-k8s-0140`"
+
+lifecycle:
+  namespaces: [fl-k8s-0140]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: ingress-tls
+    type: k8s.ingress-spec
+    label: Ingress web has TLS configured for app-tls
+    params:
+      name: web
+      namespace: fl-k8s-0140
+      tls:
+        - secretName: app-tls
+          host: app.k8s-0140.fl.test
+  - id: https-probe
+    type: k8s.routing-probe
+    label: HTTPS request reaches the web backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0140
+      host: app.k8s-0140.fl.test
+      https: true
+      contains: web-response

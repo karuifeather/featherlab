@@ -1,0 +1,54 @@
+schemaVersion: 1
+id: k8s-0142
+type: task
+title: Fix a TLS Configuration
+summary: An Ingress TLS stanza references a Secret that does not exist. Find the correct Secret name and update the Ingress.
+track: kubernetes
+level: 6
+order: 18
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [ingress, tls, https, secrets, troubleshooting, networking]
+prerequisites: [k8s-0141]
+
+environment:
+  profile: kind-routing
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace: `fl-k8s-0142`"
+  - "Ingress `web` TLS stanza references Secret `correct-tls` for host `app.k8s-0142.fl.test`"
+  - "HTTPS request for host `app.k8s-0142.fl.test` returns a response containing `web-response`"
+
+hints:
+  - "Inspect the Ingress TLS section: `kubectl get ingress web -n fl-k8s-0142 -o jsonpath='{.spec.tls}'`"
+  - "The `secretName` in the TLS stanza references a Secret that does not exist — list Secrets to find the right one: `kubectl get secret -n fl-k8s-0142`"
+  - "Edit the Ingress and change `secretName: wrong-tls-secret` to `secretName: correct-tls`: `kubectl edit ingress web -n fl-k8s-0142`"
+
+lifecycle:
+  namespaces: [fl-k8s-0142]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: ingress-tls
+    type: k8s.ingress-spec
+    label: Ingress web TLS stanza references correct-tls
+    params:
+      name: web
+      namespace: fl-k8s-0142
+      tls:
+        - secretName: correct-tls
+          host: app.k8s-0142.fl.test
+  - id: https-probe
+    type: k8s.routing-probe
+    label: HTTPS request reaches the web backend
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0142
+      host: app.k8s-0142.fl.test
+      https: true
+      contains: web-response

@@ -1,0 +1,114 @@
+schemaVersion: 1
+id: kq-k8s-l6-001
+activityType: knowledge-check
+title: Ingress and IngressClass Fundamentals
+summary: Understand what an Ingress resource does, why IngressClass matters, and how hostname and path routing rules work.
+track: kubernetes
+level: 6
+order: 5.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [ingress, ingressclass, http-routing, networking]
+relatedLabs: [k8s-0125, k8s-0126, k8s-0127, k8s-0128, k8s-0129]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "You create an Ingress resource with `spec.ingressClassName: traefik` and a rule for `app.example.com`. You immediately test with curl and get a connection refused. What is the most likely explanation?"
+    options:
+      - id: a
+        text: An Ingress resource alone routes HTTP traffic; no controller is needed
+      - id: b
+        text: The Ingress was rejected by the API server because the IngressClass does not exist
+      - id: c
+        text: The Ingress resource is a declaration of intent; a running Ingress controller (Traefik) must be installed and running to program the actual proxy
+      - id: d
+        text: The Ingress needs at least 60 seconds to propagate before routing works
+    correctAnswer: c
+    explanation: "An Ingress is a configuration object, not a running component. It does nothing by itself. A running Ingress controller watches Ingress objects and programs a reverse proxy accordingly. If no controller is installed (or if it is not running), requests have no proxy to reach. This is why the cluster profile `kind-routing` installs Traefik before Level 6 exercises."
+    wrongExplanations:
+      a: "An Ingress resource alone routes nothing. It is purely declarative — a running controller is required to program the proxy."
+      b: "The Kubernetes API server accepts an Ingress even when the specified IngressClass does not exist. No error is returned; the Ingress is simply ignored by all controllers."
+      d: "Propagation time is typically a few seconds, not minutes. The more fundamental issue is whether a controller is running at all."
+    tryCommand: kubectl get deployment -n traefik-system
+
+  - id: q2
+    type: single-choice
+    prompt: "What is the purpose of `spec.ingressClassName` on an Ingress resource?"
+    options:
+      - id: a
+        text: It sets the DNS hostname that the Ingress controller uses to route traffic
+      - id: b
+        text: It names the Namespace where the Ingress controller is installed
+      - id: c
+        text: It selects which Ingress controller owns and processes this Ingress object
+      - id: d
+        text: It enables TLS termination for all rules in the Ingress
+    correctAnswer: c
+    explanation: "`spec.ingressClassName` is a claim that binds an Ingress to a specific controller. The referenced IngressClass object carries a `spec.controller` field that identifies the controller implementation (e.g. `traefik.io/ingress-controller`). Each controller watches Ingress objects and processes only those whose `ingressClassName` matches its own class. An Ingress with a wrong or missing class is silently ignored — no routing, no error."
+    wrongExplanations:
+      a: "Hostnames are declared in `spec.rules[].host`, not in `ingressClassName`. The class name refers to the controller, not to any DNS name."
+      b: "The IngressClass is a cluster-scoped object; it does not reference a Namespace. The controller runs wherever it is deployed and watches cluster-wide Ingress resources."
+      d: "TLS is configured under `spec.tls`, not via the IngressClass. `ingressClassName` is purely about controller selection, not feature flags."
+    tryCommand: kubectl get ingressclass
+
+  - id: q3
+    type: single-choice
+    prompt: "An Ingress rule has `path: /api` with `pathType: Prefix`. Which of the following request paths does it match?"
+    options:
+      - id: a
+        text: Only `/api` exactly — trailing slashes and sub-paths are not matched
+      - id: b
+        text: "`/api`, `/api/`, `/api/v1`, and `/api/v2/users` — all paths starting with `/api`"
+      - id: c
+        text: Any path containing the string `api` anywhere, including `/myapi` and `/v1/apifoo`
+      - id: d
+        text: "`/api` and `/api/` only — exactly one level of sub-path is matched"
+    correctAnswer: b
+    explanation: "With `pathType: Prefix`, the path `/api` is treated as a prefix. A request path matches if it equals `/api`, equals `/api/`, or starts with `/api/` followed by more path segments. Importantly, `/myapi` does NOT match because the prefix `/api` must be followed by a `/` or end of path — it is a path segment prefix, not a string prefix."
+    wrongExplanations:
+      a: "That describes `pathType: Exact`. Prefix matching is intentionally broader than exact matching."
+      c: "`pathType: Prefix` matches path segments, not arbitrary substrings. `/myapi` and `/v1/apifoo` do not start with the path segment `/api` and are not matched."
+      d: "Prefix matching has no depth limit. `/api/v1/users/42` is matched just as `/api/v1` is."
+    tryCommand: kubectl get ingress -n fl-k8s-0127 -o yaml
+
+  - id: q4
+    type: single-choice
+    prompt: 'An Ingress is configured with `backend.service.name: payments`. You apply it and immediately run `kubectl describe ingress checkout`. The output shows: `payments:80 (<error: endpoints "payments" not found>)`. What does this mean?'
+    options:
+      - id: a
+        text: The Ingress controller has not started yet; the error will clear once it initializes
+      - id: b
+        text: There is no Service named `payments` in the same namespace; the Ingress controller cannot route traffic to it
+      - id: c
+        text: The Service `payments` exists but has no ready Pods; the error means zero endpoints
+      - id: d
+        text: Port 80 is not open on the `payments` Service; change the port number
+    correctAnswer: b
+    explanation: 'The error `endpoints "payments" not found` means the Ingress controller looked for a Service named `payments` in the namespace and found nothing. This is distinct from a Service with zero ready endpoints: an existing Service always has an EndpointSlice object (even if empty). The fix is to create the Service, or correct a typo in the Ingress backend service name.'
+    wrongExplanations:
+      a: "The error is not a startup artifact. It is produced every reconciliation cycle when the referenced Service cannot be found. If the controller were not running, no error text would appear in the describe output at all."
+      c: "A Service with zero ready endpoints produces a different message (the endpoints slice exists but is empty). `not found` means no Service object of that name exists at all."
+      d: "The error references the Service object itself, not its port. A wrong port number would show the Service IP but cause a connection error at traffic time, not a `not found` error at reconcile time."
+    tryCommand: kubectl get svc -n fl-k8s-0128
+
+  - id: q5
+    type: single-choice
+    prompt: "An Ingress exists and Traefik is running, but requests to the configured hostname return a 404. What is the best first command to run to diagnose this?"
+    options:
+      - id: a
+        text: "`kubectl logs -n traefik-system deployment/traefik`"
+      - id: b
+        text: "`kubectl describe ingress <name> -n <namespace>`"
+      - id: c
+        text: "`kubectl get endpoints -n <namespace>`"
+      - id: d
+        text: "`kubectl get pod -n <namespace> --show-labels`"
+    correctAnswer: b
+    explanation: '`kubectl describe ingress` shows the Ingress Class, the rules (host and path), and the backends with any resolution errors (such as `endpoints "name" not found`). This single command reveals most Ingress problems: wrong class (controller ignoring the rule), backend service name typo, or missing rules. It is the natural first step when traffic does not route as expected.'
+    wrongExplanations:
+      a: "Controller logs are useful for deep diagnosis, but they are verbose and harder to parse. `kubectl describe ingress` surfaces the same information in a structured, human-readable form and should come first."
+      c: "`kubectl get endpoints` tells you whether Pods are ready behind a Service — useful once you have confirmed the Ingress rule is correct. But if the problem is in the Ingress itself (wrong class, wrong backend name), endpoints will look fine and the diagnosis misleads."
+      d: "Pod labels are relevant for Service selector debugging, which is one layer below Ingress. Start at the Ingress level: confirm the rule and backend are correctly configured before descending to the Service and Pod layers."
+    tryCommand: kubectl describe ingress web -n fl-k8s-0125
