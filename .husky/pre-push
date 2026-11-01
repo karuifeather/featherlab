@@ -1,0 +1,3 @@
+npm run check
+docker build -t featherlab-workstation:dev docker
+FEATHERLAB_IMAGE=featherlab-workstation:dev npm run test:kind
