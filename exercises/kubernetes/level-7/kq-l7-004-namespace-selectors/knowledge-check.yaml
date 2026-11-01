@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l7-004
+activityType: knowledge-check
+title: Namespace Selectors
+summary: Understand how namespaceSelector works in NetworkPolicy, AND vs OR logic, and namespace label conventions.
+track: kubernetes
+level: 7
+order: 11.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [networkpolicy, namespace-selector, labels, cross-namespace]
+relatedLabs: [k8s-0161, k8s-0162, k8s-0163]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Since Kubernetes v1.21, what label does Kubernetes automatically add to every namespace?"
+    options:
+      - id: a
+        text: "namespace/name: <namespace-name>"
+      - id: b
+        text: "kubernetes.io/metadata.name: <namespace-name>"
+      - id: c
+        text: "k8s.io/namespace: <namespace-name>"
+      - id: d
+        text: "meta.kubernetes.io/name: <namespace-name>"
+    correctAnswer: b
+    explanation: "Since Kubernetes v1.21, the API server automatically labels every namespace with `kubernetes.io/metadata.name: <name>`. This label cannot be removed by users. It makes it possible to write a `namespaceSelector` that targets a specific namespace by name without requiring manual labeling."
+    wrongExplanations:
+      a: "`namespace/name` is not a real Kubernetes label. The automatic label uses the `kubernetes.io/metadata.name` key."
+      c: "`k8s.io/namespace` is not a real Kubernetes label."
+      d: "`meta.kubernetes.io/name` is not a real Kubernetes label. The correct key is `kubernetes.io/metadata.name`."
+    tryCommand: "kubectl get namespace -o json | jq '.items[].metadata.labels'"
+
+  - id: q2
+    type: single-choice
+    prompt: "In a NetworkPolicy `from:` array, you have two separate entries: `[{podSelector: {matchLabels: {role: scraper}}}, {namespaceSelector: {matchLabels: {env: prod}}}]`. What is the logic between these two entries?"
+    options:
+      - id: a
+        text: "AND — a pod must have `role=scraper` AND be in a namespace with `env=prod`"
+      - id: b
+        text: "OR — a pod with `role=scraper` in ANY namespace, OR any pod in a namespace with `env=prod`, is allowed"
+      - id: c
+        text: "AND — both conditions are evaluated together and must both be satisfied"
+      - id: d
+        text: "The order matters — the first matching entry wins; the second is ignored"
+    correctAnswer: b
+    explanation: "Separate entries in the `from:` array use OR logic. Each entry is an independent allow rule. A pod is allowed if it matches ANY one of the entries. The first entry allows any pod with `role=scraper` (in any namespace). The second entry allows any pod in a namespace labeled `env=prod` (regardless of pod labels). Both sources are permitted."
+    wrongExplanations:
+      a: "AND logic is achieved by placing BOTH selectors INSIDE a SINGLE `from:` entry (as sibling fields within the same object). Separate array entries are OR."
+      c: "Same as A — separate entries use OR logic, not AND."
+      d: "NetworkPolicy `from:` entries do not use 'first match wins' logic. All matching entries apply simultaneously."
+
+  - id: q3
+    type: single-choice
+    prompt: "You want to allow ingress ONLY from pods with label `role=scraper` AND only when those pods are in the namespace `monitoring`. Which `from:` structure achieves this AND logic?"
+    options:
+      - id: a
+        text: "Two separate `from:` entries: one with `namespaceSelector` and one with `podSelector`"
+      - id: b
+        text: "A single `from:` entry with both `namespaceSelector` and `podSelector` as sibling fields in the same object"
+      - id: c
+        text: "A `from:` entry with `namespaceSelector.matchLabels` containing both the namespace and pod label"
+      - id: d
+        text: "Nested selectors: `from.namespaceSelector.podSelector.matchLabels`"
+    correctAnswer: b
+    explanation: "AND logic in a `from:` rule is achieved by placing `namespaceSelector` and `podSelector` as siblings within the SAME `from:` entry object. This means BOTH conditions must match the same Pod. If `namespaceSelector` matches `kubernetes.io/metadata.name: monitoring` and `podSelector` matches `role=scraper`, only pods with that label in that specific namespace are allowed."
+    wrongExplanations:
+      a: "Two separate entries use OR logic. This would allow ANY `role=scraper` pod (from any namespace) OR any pod in `monitoring` (regardless of pod labels) — not AND."
+      c: "`namespaceSelector.matchLabels` can only match namespace labels, not pod labels. Mixing them in one selector is not valid."
+      d: "There is no `from.namespaceSelector.podSelector` nesting in the NetworkPolicy API. Both selectors are top-level fields within the same `from:` entry."
+    tryCommand: "kubectl explain networkpolicy.spec.ingress.from"
+
+  - id: q4
+    type: single-choice
+    prompt: "A `namespaceSelector` in a NetworkPolicy selects namespaces with label `env=prod`. A new namespace is created and labeled `env=prod`. Are pods in the new namespace automatically allowed by the NetworkPolicy's from-rule?"
+    options:
+      - id: a
+        text: "No — you must update the NetworkPolicy to include the new namespace explicitly"
+      - id: b
+        text: "No — namespaceSelector only evaluates namespace labels at policy creation time"
+      - id: c
+        text: "Yes — the selector is evaluated dynamically; any namespace with `env=prod` is immediately included"
+      - id: d
+        text: "Yes — but only after you restart the CoreDNS pod to reload namespace labels"
+    correctAnswer: c
+    explanation: "NetworkPolicy selectors are evaluated dynamically at enforcement time by the CNI. When a new namespace is labeled `env=prod`, the CNI immediately recognizes it as matching the `namespaceSelector` and allows traffic from pods in that namespace. No policy update is needed — that is the key advantage of label-based selectors over explicit lists."
+    wrongExplanations:
+      a: "Label-based selectors do not require manual updates when new objects are created. This is by design — the policy stays current as the cluster changes."
+      b: "Namespace labels are not evaluated at policy creation time and cached. The CNI reads current labels for each connection."
+      d: "CoreDNS restart is not related to NetworkPolicy enforcement. The CNI (e.g., kindnet) enforces labels dynamically without requiring component restarts."
+
+  - id: q5
+    type: single-choice
+    prompt: "Which kubectl command shows all current labels on all namespaces?"
+    options:
+      - id: a
+        text: "kubectl get namespaces --show-labels"
+      - id: b
+        text: "kubectl describe namespaces --all"
+      - id: c
+        text: "kubectl get ns -o labels"
+      - id: d
+        text: "kubectl label namespace --list"
+    correctAnswer: a
+    explanation: "`kubectl get namespaces --show-labels` (or `kubectl get ns --show-labels`) displays all namespaces with their labels as a table column. This is the standard way to inspect namespace labels, including the automatic `kubernetes.io/metadata.name` label and any user-defined labels used by NetworkPolicy."
+    wrongExplanations:
+      b: "`kubectl describe namespaces --all` is not a valid flag. Use `kubectl describe namespace <name>` for one, or `kubectl get ns --show-labels` for all."
+      c: "`-o labels` is not a valid output format. Use `-o yaml` or `--show-labels`."
+      d: "`kubectl label namespace --list` is not a valid command for listing labels. Use `kubectl get ns --show-labels`."
+    tryCommand: "kubectl get ns --show-labels"

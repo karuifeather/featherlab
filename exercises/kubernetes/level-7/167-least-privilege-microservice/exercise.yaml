@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: k8s-0167
+type: task
+title: Least-Privilege Microservice
+summary: Build a complete least-privilege policy for an API pod — specific allowed ingress and specific allowed egress, everything else blocked.
+track: kubernetes
+level: 7
+order: 17
+difficulty: advanced
+estimatedMinutes: 20
+tags: [networkpolicy, ingress, egress, least-privilege, pod-selector]
+prerequisites: [k8s-0166]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "NetworkPolicy `api-least-privilege` exists in namespace `fl-k8s-0167`"
+  - "NetworkPolicy `api-least-privilege` targets pods with `app=api`"
+  - "NetworkPolicy `api-least-privilege` declares both Ingress and Egress with rules for each"
+  - "Pod `grader-client` can reach `api` on port 80"
+  - "Pod `deny-client` cannot reach `api` on port 80"
+
+hints:
+  - "The policy needs two sections: `ingress` (who can reach api on port 80) and `egress` (where api can connect — db on port 5432)."
+  - "Use `policyTypes: [Ingress, Egress]` to activate both; add explicit rules for the allowed paths."
+  - "Ports in egress rules target the destination pod's listening port, not the Service port. The db pod listens on port 5432. Note: this policy also blocks api's DNS egress, which is intentional for this exercise."
+
+lifecycle:
+  namespaces: [fl-k8s-0167]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-exists
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy api-least-privilege has correct spec
+    params:
+      name: api-least-privilege
+      namespace: fl-k8s-0167
+      podSelector:
+        matchLabels:
+          app: api
+      policyTypes: ["Ingress", "Egress"]
+      hasIngressRules: true
+      hasEgressRules: true
+  - id: grader-allowed
+    type: k8s.http-probe
+    label: grader-client can reach api on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0167
+      host: api.fl-k8s-0167.svc.cluster.local
+      port: 80
+      contains: nginx
+  - id: deny-blocked
+    type: k8s.traffic-blocked
+    label: deny-client cannot reach api on port 80
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0167
+      host: api.fl-k8s-0167.svc.cluster.local
+      port: 80

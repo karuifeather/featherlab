@@ -1,0 +1,62 @@
+schemaVersion: 1
+id: k8s-0161
+type: task
+title: Allow Traffic from a Namespace
+summary: Use namespaceSelector to allow ingress from a specific namespace while keeping same-namespace pods blocked.
+track: kubernetes
+level: 7
+order: 11
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [networkpolicy, namespace-selector, ingress]
+prerequisites: [k8s-0160]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "NetworkPolicy `allow-from-staging` exists in namespace `fl-k8s-0161`"
+  - "NetworkPolicy `allow-from-staging` has at least one ingress rule"
+  - "Pod `cross-ns-client` in `fl-k8s-0161-client` can reach `api.fl-k8s-0161.svc.cluster.local` on port 80"
+  - "Pod `deny-client` in `fl-k8s-0161` cannot reach `api.fl-k8s-0161.svc.cluster.local` on port 80"
+
+hints:
+  - "namespaceSelector matches namespace LABELS, not names. In Kubernetes 1.21+, every namespace automatically gets `kubernetes.io/metadata.name=<name>`."
+  - "Inspect the labels on the client namespace: `kubectl get namespace fl-k8s-0161-client --show-labels`"
+  - "Your namespaceSelector should use `matchLabels: {kubernetes.io/metadata.name: fl-k8s-0161-client}`. The cross-ns-client uses the full DNS name `api.fl-k8s-0161.svc.cluster.local` to reach the server."
+
+lifecycle:
+  namespaces: [fl-k8s-0161, fl-k8s-0161-client]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-exists
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-from-staging exists with ingress rules
+    params:
+      name: allow-from-staging
+      namespace: fl-k8s-0161
+      hasIngressRules: true
+  - id: cross-ns-allowed
+    type: k8s.http-probe
+    label: cross-ns-client in fl-k8s-0161-client can reach api
+    params:
+      clientPod: cross-ns-client
+      namespace: fl-k8s-0161-client
+      host: api.fl-k8s-0161.svc.cluster.local
+      port: 80
+      contains: nginx
+  - id: same-ns-blocked
+    type: k8s.traffic-blocked
+    label: deny-client in fl-k8s-0161 is still blocked
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0161
+      host: api.fl-k8s-0161.svc.cluster.local
+      port: 80

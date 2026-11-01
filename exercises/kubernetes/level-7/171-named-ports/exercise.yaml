@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0171
+type: task
+title: Named Ports in NetworkPolicy
+summary: Create a NetworkPolicy that allows ingress using a named port reference, and learn when named ports apply.
+track: kubernetes
+level: 7
+order: 21
+difficulty: advanced
+estimatedMinutes: 15
+tags: [networkpolicy, named-ports, ports, protocol]
+prerequisites: [k8s-0170]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0171`: NetworkPolicy `allow-http-port` exists"
+  - "Policy `allow-http-port` has policyTypes: [Ingress] with at least one ingress rule"
+  - "Pod `grader-client` can reach Service `api` on port 80"
+  - "Pod `deny-client` is blocked from reaching Service `api` on port 80"
+
+hints:
+  - "The api Pod declares a named containerPort `http` (port 80). A NetworkPolicy can reference this port by name (`port: http`) instead of by number (`port: 80`)."
+  - "Named port resolution happens at enforcement time against the target Pod's containerPort list. The name `http` resolves to 80 on the `api` pod."
+  - "Create `allow-http-port` with `podSelector: {matchLabels: {app: api}}` and an ingress rule from `app=grader-client` allowing port `http`."
+
+lifecycle:
+  namespaces: [fl-k8s-0171]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-http-port exists with Ingress rules
+    params:
+      name: allow-http-port
+      namespace: fl-k8s-0171
+      policyTypes: ["Ingress"]
+      hasIngressRules: true
+
+  - id: http-probe
+    type: k8s.http-probe
+    label: grader-client can reach api on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0171
+      host: api
+      port: 80
+      contains: "Welcome to nginx"
+
+  - id: traffic-blocked
+    type: k8s.traffic-blocked
+    label: deny-client is blocked from api on port 80
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0171
+      host: api
+      port: 80

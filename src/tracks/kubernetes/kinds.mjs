@@ -54,6 +54,9 @@ export const KINDS = Object.freeze({
     namespaced: true,
     queryOnly: true,
   },
+  // Level 7 additions — NetworkPolicy & connectivity isolation (profile: kind-networkpolicy)
+  // Exercises create and modify NetworkPolicy objects in their own namespaces.
+  NetworkPolicy: { resource: "networkpolicies.networking.k8s.io", namespaced: true },
   // Level 6 additions — Ingress, Gateway API, and HTTP routing (profile: kind-routing)
   // Exercises may create Ingress resources; controller must be installed by the platform.
   Ingress: { resource: "ingresses.networking.k8s.io", namespaced: true },

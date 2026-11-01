@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l7-007
+activityType: knowledge-check
+title: NetworkPolicy Diagnostics
+summary: Diagnose common NetworkPolicy problems using kubectl, exit codes, and policy inspection.
+track: kubernetes
+level: 7
+order: 22.5
+difficulty: intermediate
+estimatedMinutes: 9
+tags: [networkpolicy, diagnostics, kubectl, exit-codes, troubleshooting]
+relatedLabs: [k8s-0171, k8s-0172, k8s-0173]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Traffic to pod `api` in namespace `prod` is blocked unexpectedly. What is the first kubectl command to run to understand why?"
+    options:
+      - id: a
+        text: "kubectl logs api -n prod"
+      - id: b
+        text: "kubectl get networkpolicy -n prod"
+      - id: c
+        text: "kubectl describe pod api -n prod"
+      - id: d
+        text: "kubectl get events -n prod"
+    correctAnswer: b
+    explanation: "`kubectl get networkpolicy -n prod` lists all NetworkPolicy objects in the namespace. This immediately shows which policies exist and their pod selectors. From there you can `kubectl describe` each policy to see its rules. This is the fastest first step: if no policy exists, the block is coming from somewhere else; if one does, you can read its selectors and rules."
+    wrongExplanations:
+      a: "`kubectl logs` shows the application's stdout/stderr. If traffic is blocked at the network level, the application never receives the connection and produces no relevant log entry."
+      c: "`kubectl describe pod` shows the pod's status, events, and resource configuration. It does not show which NetworkPolicies are selecting the pod."
+      d: "Events show Kubernetes-level lifecycle events (image pulls, scheduling). Network-level blocks are enforced by the CNI silently and do not generate events."
+    tryCommand: "kubectl get networkpolicy -n <namespace>"
+
+  - id: q2
+    type: single-choice
+    prompt: "A pod previously selected by a NetworkPolicy's podSelector had its label `app=api` changed to `app=api-v2`. The policy now blocks traffic that was previously allowed. How do you verify which pods the policy currently selects?"
+    options:
+      - id: a
+        text: "kubectl describe networkpolicy <name> -n <ns> — it shows a live list of currently selected pods"
+      - id: b
+        text: "kubectl get pods -n <ns> -l <matchLabels from the policy's podSelector>"
+      - id: c
+        text: "kubectl get networkpolicy <name> -n <ns> -o jsonpath='{.status.selectedPods}'"
+      - id: d
+        text: "kubectl events networkpolicy <name> -n <ns>"
+    correctAnswer: b
+    explanation: "NetworkPolicy has no `.status.selectedPods` field. To find which pods a policy currently selects, copy the `podSelector.matchLabels` from the policy and run `kubectl get pods -n <ns> -l <those labels>`. This shows you exactly which pods are currently governed by that policy. If a pod's label changed, it will no longer appear in this list."
+    wrongExplanations:
+      a: "`kubectl describe networkpolicy` shows the policy's spec (selectors and rules) but does NOT show a live pod list. The describe output is static spec, not runtime state."
+      c: "NetworkPolicy has no `.status.selectedPods` field. The API only stores the spec (selectors and rules), not a computed list of matching pods."
+      d: "`kubectl events networkpolicy` is not a valid command. NetworkPolicy label changes do not generate observable events."
+    tryCommand: "kubectl get pods -n <namespace> -l <label-key>=<label-value> --show-labels"
+
+  - id: q3
+    type: single-choice
+    prompt: "A curl command exits with code 28 (timeout). Another exits with code 6 (couldn't resolve host). What type of block does each indicate?"
+    options:
+      - id: a
+        text: "Exit 28 = ingress block; exit 6 = egress block with DNS also blocked"
+      - id: b
+        text: "Exit 28 = TCP connection was dropped (ingress OR egress with DNS allowed); exit 6 = egress block with DNS also blocked"
+      - id: c
+        text: "Exit 28 = the server pod is not running; exit 6 = the Service has no endpoints"
+      - id: d
+        text: "Exit 28 = UDP egress blocked; exit 6 = TCP egress blocked"
+    correctAnswer: b
+    explanation: "Exit 28 (operation timed out) means curl sent the TCP SYN but received no response — the connection was silently dropped. This happens with an ingress block (server drops incoming packets) OR with an egress block where DNS was separately allowed (curl resolved the name but the TCP to the server was dropped). Exit 6 (couldn't resolve host) means DNS failed — this is the signature of an egress block that also blocks DNS (no DNS egress allow rule)."
+    wrongExplanations:
+      a: "Exit 28 is not exclusively an ingress block — it also occurs when egress TCP is blocked but DNS was allowed separately. The distinction between ingress and egress block is not always readable from the exit code alone."
+      c: "Exit 28 from a down server would be exit 7 (connection refused) or exit 28 only if the pod is simply not accepting connections. To confirm the server is running, check `kubectl get pod` first."
+      d: "Exit 28 and exit 6 are about TCP/DNS failures, not about UDP vs TCP blocking."
+
+  - id: q4
+    type: single-choice
+    prompt: "A NetworkPolicy selects `app=api` pods with `policyTypes: [Ingress, Egress]`. You want to add a new ingress allow rule without editing the existing policy. What is the correct approach?"
+    options:
+      - id: a
+        text: "You cannot add a rule without editing the existing policy; NetworkPolicy is immutable once created"
+      - id: b
+        text: "Create a second NetworkPolicy that also selects `app=api` pods and includes the new ingress rule; the two policies union together"
+      - id: c
+        text: "Create a separate NetworkPolicy that uses policyTypes: [Ingress] only; this overrides the existing policy's ingress rules"
+      - id: d
+        text: "Add the rule to the existing policy's egress section; ingress and egress rules share the same rule list"
+    correctAnswer: b
+    explanation: "You can create a second NetworkPolicy that selects the same pods. NetworkPolicies are additive: the allowed set becomes the union of all rules from all policies selecting those pods. The new policy can use `policyTypes: [Ingress]` and add only the new ingress rule, without affecting the existing policy's egress rules. This is the standard way to extend access without modifying live policies."
+    wrongExplanations:
+      a: "NetworkPolicy objects are mutable — they can be edited with `kubectl edit` or `kubectl apply`. But you can also ADD policies rather than editing, which is often safer."
+      c: "A second policy's `policyTypes: [Ingress]` does NOT override the first policy's ingress rules. It adds to them. The union of both policies' ingress rules is the effective allow set."
+      d: "Ingress and egress rules are in separate fields (`ingress:` and `egress:`). They do not share a rule list. Adding an ingress rule to the egress section has no effect."
+
+  - id: q5
+    type: single-choice
+    prompt: "How do you find all NetworkPolicies that are currently affecting a specific pod, for example pod `frontend` in namespace `shop`?"
+    options:
+      - id: a
+        text: "kubectl describe pod frontend -n shop — it lists selected NetworkPolicies under 'Network Policies'"
+      - id: b
+        text: "kubectl get networkpolicy -n shop and manually check each policy's podSelector against the pod's labels"
+      - id: c
+        text: "kubectl get networkpolicy -n shop -l app=frontend — this filters policies that target the pod"
+      - id: d
+        text: "kubectl get netpol --field-selector spec.podSelector.matchLabels.app=frontend -n shop"
+    correctAnswer: b
+    explanation: "There is no built-in kubectl command that automatically maps 'which policies select this pod'. You must list all NetworkPolicies in the namespace (`kubectl get networkpolicy -n shop -o yaml`), read each policy's `spec.podSelector`, and compare it against the pod's labels (`kubectl get pod frontend -n shop --show-labels`). Any policy whose `podSelector` matches the pod's labels is affecting it."
+    wrongExplanations:
+      a: "`kubectl describe pod` does not list NetworkPolicies in its output. This is a common misconception — pod describe shows resource requests, readiness, events, but not selected NetworkPolicies."
+      c: "This command filters policies by their own labels, not by which pods they select. It would find policies with the label `app=frontend`, not policies whose podSelector targets pods with that label."
+      d: "`--field-selector` does not support nested spec fields like `spec.podSelector.matchLabels.app`. Only a limited set of top-level fields support field selectors."
+    tryCommand: "kubectl get networkpolicy -n <namespace> -o yaml; kubectl get pod <name> -n <namespace> --show-labels"

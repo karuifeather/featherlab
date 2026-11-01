@@ -1,0 +1,71 @@
+schemaVersion: 1
+id: k8s-0155
+type: task
+title: NetworkPolicy Union — Multiple Policies
+summary: Add a second allow NetworkPolicy and confirm that multiple policies are additive rather than replacing each other.
+track: kubernetes
+level: 7
+order: 5
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [networkpolicy, ingress, policy-union, additive]
+prerequisites: [k8s-0154]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0155`: NetworkPolicy `allow-grader-b` has at least one ingress rule"
+  - "HTTP request from `grader-client` (covered by the pre-existing `allow-grader-a`) still succeeds"
+  - "HTTP request from `grader-client-b` (covered by the new `allow-grader-b`) succeeds"
+  - "Traffic from `deny-client` (not covered by either allow policy) remains blocked"
+
+hints:
+  - "Create `allow-grader-b` exactly like `allow-grader-a` but match `app=grader-client-b` instead."
+  - "Do NOT delete or modify `allow-grader-a` — the union of both policies is what the exercise tests."
+  - "Verify both clients: grader-client-b should reach api (`wget -qO- http://api:80/`); deny-client should still time out (`curl -s --max-time 5 http://api/`)."
+
+lifecycle:
+  namespaces: [fl-k8s-0155]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: netpol-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-grader-b has ingress rules
+    params:
+      name: allow-grader-b
+      namespace: fl-k8s-0155
+      hasIngressRules: true
+  - id: http-probe-a
+    type: k8s.http-probe
+    label: grader-client can still reach api (allow-grader-a remains active)
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0155
+      host: api
+      port: 80
+      contains: "Welcome to nginx"
+  - id: http-probe-b
+    type: k8s.http-probe
+    label: grader-client-b can reach api after allow-grader-b is added
+    params:
+      clientPod: grader-client-b
+      namespace: fl-k8s-0155
+      host: api
+      port: 80
+      contains: "Welcome to nginx"
+  - id: traffic-blocked
+    type: k8s.traffic-blocked
+    label: deny-client is still blocked by deny-all (not covered by either allow policy)
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0155
+      host: api
+      port: 80

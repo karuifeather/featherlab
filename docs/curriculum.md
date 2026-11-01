@@ -14,7 +14,8 @@ familiar concepts, never from mechanisms the learner has not met yet.
 | 4     | Resource management and scheduling                               | 19 (k8s-0079–0097) + 8 knowledge checks | M5.6 complete                  |
 | 5     | Services, DNS, blue/green, canary traffic                        | 27 (k8s-0098–0124) + 7 knowledge checks | M5.7 complete                  |
 | 6     | Ingress, Gateway API, HTTP routing, TLS, cross-namespace routing | 26 (k8s-0125–0150) + 6 knowledge checks | M5.8 complete                  |
-| 7+    | Storage, cluster administration, CKS hardening                   | none yet                                | planned                        |
+| 7     | NetworkPolicy & network isolation                                | 24 (k8s-0151–0174) + 7 knowledge checks | M5.9 complete                  |
+| 8+    | Storage, cluster administration, CKS hardening                   | none yet                                | planned                        |
 
 All scenarios, statements, setup manifests, hints, solutions and validators are original
 FeatherLab content. They are not endorsed by the CNCF and do not reproduce certification exam
@@ -515,6 +516,81 @@ hostnames are never used as network targets.
 - **mTLS and advanced TLS policies** — require cert-manager or OPA/policy controllers; out of scope for the single-node kind setup.
 - **Ingress annotations** — controller-specific and fragile across Traefik versions; Gateway API filters cover the same use cases more portably.
 - **TCPRoute and GRPCRoute** — Gateway API extension resources; not included in the standard channel v1.2.1 CRDs.
+
+---
+
+## Level 7: NetworkPolicy & Network Isolation (M5.9)
+
+Twenty-four exercises and seven knowledge checks covering Kubernetes NetworkPolicy: default-deny ingress and egress, label-based pod selectors, namespace selectors (including `kubernetes.io/metadata.name`), DNS egress allowlisting, multi-tier connectivity models, protocol and port restrictions, and diagnostics for common misconfiguration patterns. The mastery challenge requires implementing a complete three-tier NetworkPolicy model.
+
+All Level 7 exercises use the `kind-networkpolicy` environment profile. kindnet (the default kind CNI, v0.33.0+) enforces standard Kubernetes NetworkPolicy by default — no separate CNI installation is required. The `ensureNetworkPolicyCapable()` lifecycle check verifies kindnet readiness before any Level 7 exercise activates.
+
+Two new validators are introduced:
+
+- `k8s.networkpolicy-spec` — structural check: verifies `podSelector`, `policyTypes`, presence/absence of ingress and egress rules.
+- `k8s.traffic-blocked` — behavioral check: runs `curl` from a client Pod via `kubectl exec`, accepts exit codes 6 (DNS blocked), 7 (refused), or 28 (timeout) as proof of NetworkPolicy enforcement. Pre-checks that the server Pod is Running+Ready to prevent false positives.
+
+### Circuit A — Fundamentals (k8s-0151 to k8s-0155)
+
+| Order | ID        | Title                             | Difficulty   | Prerequisites |
+| ----- | --------- | --------------------------------- | ------------ | ------------- |
+| 1     | k8s-0151  | Traffic Without NetworkPolicy     | intermediate | 0150          |
+| 2     | k8s-0152  | Default-Deny Ingress              | intermediate | 0151          |
+| 3     | k8s-0153  | Allow Traffic from a Specific Pod | intermediate | 0152          |
+| 4     | k8s-0154  | Allow Traffic on a Specific Port  | intermediate | 0153          |
+| 5     | k8s-0155  | NetworkPolicy Union               | intermediate | 0154          |
+| 1.5   | kq-l7-001 | NetworkPolicy Fundamentals        | — (check)    | 0151          |
+
+### Circuit B — Egress & DNS (k8s-0156 to k8s-0160)
+
+| Order | ID        | Title                               | Difficulty   | Prerequisites |
+| ----- | --------- | ----------------------------------- | ------------ | ------------- |
+| 6     | k8s-0156  | Default-Deny Egress                 | intermediate | 0155          |
+| 7     | k8s-0157  | Allow DNS Egress                    | intermediate | 0156          |
+| 8     | k8s-0158  | Allow Egress to a Specific Service  | intermediate | 0157          |
+| 9     | k8s-0159  | Fix Isolation by Correcting a Label | intermediate | 0158          |
+| 10    | k8s-0160  | Egress Policy Union                 | intermediate | 0159          |
+| 2.5   | kq-l7-002 | Default-Deny Patterns               | — (check)    | 0152          |
+| 7.5   | kq-l7-003 | Egress and DNS                      | — (check)    | 0158          |
+
+### Circuit C — Namespace & Pod Selectors (k8s-0161 to k8s-0165)
+
+| Order | ID        | Title                                   | Difficulty   | Prerequisites |
+| ----- | --------- | --------------------------------------- | ------------ | ------------- |
+| 11    | k8s-0161  | Allow Traffic from a Namespace          | intermediate | 0160          |
+| 12    | k8s-0162  | Combined Namespace + Pod Selector (AND) | intermediate | 0161          |
+| 13    | k8s-0163  | Isolate a Namespace                     | intermediate | 0162          |
+| 14    | k8s-0164  | Broken Policy Diagnostics               | intermediate | 0163          |
+| 15    | k8s-0165  | Namespace Selector with metadata.name   | intermediate | 0164          |
+| 11.5  | kq-l7-004 | Namespace Selectors                     | — (check)    | 0161          |
+| 14.5  | kq-l7-005 | Policy Union and Interaction            | — (check)    | 0164          |
+
+### Circuit D — Combined Ingress+Egress (k8s-0166 to k8s-0169)
+
+| Order | ID       | Title                        | Difficulty   | Prerequisites |
+| ----- | -------- | ---------------------------- | ------------ | ------------- |
+| 16    | k8s-0166 | Bidirectional Isolation      | intermediate | 0165          |
+| 17    | k8s-0167 | Least-Privilege Microservice | advanced     | 0166          |
+| 18    | k8s-0168 | Fix a Policy Interaction Bug | intermediate | 0167          |
+| 19    | k8s-0169 | Multi-Tier Connectivity      | advanced     | 0168          |
+
+### Circuit E — Protocols & Ports (k8s-0170 to k8s-0173)
+
+| Order | ID        | Title                         | Difficulty   | Prerequisites |
+| ----- | --------- | ----------------------------- | ------------ | ------------- |
+| 20    | k8s-0170  | TCP Protocol Policy           | intermediate | 0169          |
+| 21    | k8s-0171  | Named Ports                   | intermediate | 0170          |
+| 22    | k8s-0172  | Egress with Port Restrictions | intermediate | 0171          |
+| 23    | k8s-0173  | Least-Privilege Review        | intermediate | 0172          |
+| 19.5  | kq-l7-006 | Protocol and Port Selection   | — (check)    | 0169          |
+| 22.5  | kq-l7-007 | NetworkPolicy Diagnostics     | — (check)    | 0172          |
+
+### Mastery Challenge
+
+| Order | ID       | Title                  | Difficulty | Prerequisites |
+| ----- | -------- | ---------------------- | ---------- | ------------- |
+| 24    | k8s-0174 | Three-Tier Application | advanced   | 0173          |
+
 - **NetworkPolicy** — continues to be deferred; see Level 5 deferred topics.
 
 ## Ownership, setup and reset

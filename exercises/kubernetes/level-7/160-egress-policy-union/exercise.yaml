@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0160
+type: task
+title: Egress Policy Union
+summary: Extend a client Pod's allowed egress by adding a second destination policy, demonstrating that multiple NetworkPolicies combine additively.
+track: kubernetes
+level: 7
+order: 10
+difficulty: intermediate
+estimatedMinutes: 14
+tags: [networkpolicy, egress, policy-union]
+prerequisites: [k8s-0159]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0160`: NetworkPolicy `allow-secondary-egress` selects pods with label `app=deny-client`, sets `policyTypes: [Egress]`, and has at least one egress rule"
+  - "Pod `grader-client` (unrestricted) can reach Service `api` — HTTP response contains `nginx`"
+  - "Pod `grader-client` (unrestricted) can reach Service `secondary` — HTTP response contains `nginx`"
+
+hints:
+  - "Model your new policy on the existing `allow-api-egress`: same podSelector (`app=deny-client`), same port (80), but target pods with label `app=secondary` instead."
+  - "After applying, check that deny-client reaches secondary: `kubectl exec deny-client -n fl-k8s-0160 -- curl -s --max-time 8 http://secondary.fl-k8s-0160/`"
+  - "List all policies to verify the union: `kubectl get networkpolicies -n fl-k8s-0160`"
+
+lifecycle:
+  namespaces: [fl-k8s-0160]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-secondary-egress selects app=deny-client with at least one egress rule
+    params:
+      name: allow-secondary-egress
+      namespace: fl-k8s-0160
+      podSelector:
+        matchLabels:
+          app: deny-client
+      policyTypes: ["Egress"]
+      hasEgressRules: true
+  - id: api-probe
+    type: k8s.http-probe
+    label: Pod grader-client can reach Service api
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0160
+      host: api.fl-k8s-0160
+      port: 80
+      contains: nginx
+  - id: secondary-probe
+    type: k8s.http-probe
+    label: Pod grader-client can reach Service secondary
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0160
+      host: secondary.fl-k8s-0160
+      port: 80
+      contains: nginx

@@ -1,0 +1,62 @@
+schemaVersion: 1
+id: k8s-0165
+type: task
+title: Namespace Selector with kubernetes.io/metadata.name
+summary: Use the automatic metadata.name label to allow traffic from exactly one namespace while blocking another.
+track: kubernetes
+level: 7
+order: 15
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [networkpolicy, namespace-selector, metadata-name]
+prerequisites: [k8s-0164]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "NetworkPolicy `allow-from-frontend` exists in namespace `fl-k8s-0165`"
+  - "NetworkPolicy `allow-from-frontend` has at least one ingress rule"
+  - "Pod `frontend-client` in `fl-k8s-0165-frontend` can reach `api.fl-k8s-0165.svc.cluster.local`"
+  - "Pod `deny-client` in `fl-k8s-0165` cannot reach `api.fl-k8s-0165.svc.cluster.local`"
+
+hints:
+  - "Every namespace automatically gets `kubernetes.io/metadata.name=<namespace-name>` — no labeling required."
+  - "Use `namespaceSelector.matchLabels: {kubernetes.io/metadata.name: fl-k8s-0165-frontend}` to match exactly the frontend namespace."
+  - "A `namespaceSelector: {}` (empty) would allow traffic from ALL namespaces — avoid this."
+
+lifecycle:
+  namespaces: [fl-k8s-0165, fl-k8s-0165-frontend, fl-k8s-0165-backend]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-exists
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-from-frontend exists with ingress rules
+    params:
+      name: allow-from-frontend
+      namespace: fl-k8s-0165
+      hasIngressRules: true
+  - id: frontend-allowed
+    type: k8s.http-probe
+    label: frontend-client in fl-k8s-0165-frontend can reach api
+    params:
+      clientPod: frontend-client
+      namespace: fl-k8s-0165-frontend
+      host: api.fl-k8s-0165.svc.cluster.local
+      port: 80
+      contains: nginx
+  - id: same-ns-blocked
+    type: k8s.traffic-blocked
+    label: deny-client in fl-k8s-0165 is blocked
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0165
+      host: api.fl-k8s-0165.svc.cluster.local
+      port: 80

@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0154
+type: task
+title: Allow Traffic on a Specific Port
+summary: Add a port restriction to an ingress rule so only TCP port 80 is permitted, regardless of which Pod initiates the connection.
+track: kubernetes
+level: 7
+order: 4
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [networkpolicy, ingress, ports, port-restriction]
+prerequisites: [k8s-0153]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0154`: NetworkPolicy `allow-port-80` has at least one ingress rule"
+  - "HTTP request from `grader-client` to Service `api` on port 80 succeeds"
+
+hints:
+  - "Use `spec.ingress[].ports` to restrict the rule to TCP port 80."
+  - "Omitting `from` in an ingress rule (or setting it to an empty list) allows traffic from any Pod in any namespace on the listed ports."
+  - "Verify: `kubectl exec grader-client -n fl-k8s-0154 -- wget -qO- http://api:80/`"
+
+lifecycle:
+  namespaces: [fl-k8s-0154]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: netpol-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-port-80 has ingress rules
+    params:
+      name: allow-port-80
+      namespace: fl-k8s-0154
+      hasIngressRules: true
+  - id: http-probe
+    type: k8s.http-probe
+    label: grader-client can reach api on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0154
+      host: api
+      port: 80
+      contains: "Welcome to nginx"

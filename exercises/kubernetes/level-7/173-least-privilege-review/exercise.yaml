@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: k8s-0173
+type: task
+title: Least-Privilege Review
+summary: Apply a least-privilege ingress NetworkPolicy and verify both the allowed path and the denied path simultaneously.
+track: kubernetes
+level: 7
+order: 23
+difficulty: advanced
+estimatedMinutes: 18
+tags: [networkpolicy, least-privilege, ingress, verification]
+prerequisites: [k8s-0172]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0173`: NetworkPolicy `api-access-control` exists"
+  - "Policy selects pods with label `app=api` and has policyTypes: [Ingress] with ingress rules"
+  - "Pod `grader-client` (role=monitor) can reach Service `api` on port 80"
+  - "Pod `deny-client` (role=worker) is blocked from reaching Service `api` on port 80"
+
+hints:
+  - "There are no pre-existing NetworkPolicies. Once you create `api-access-control` with `policyTypes: [Ingress]`, Kubernetes implicitly denies all ingress not covered by an ingress rule."
+  - "The policy must select `app=api` pods and allow ingress from `role=monitor` pods. The `deny-client` has `role=worker` — it will not match the from selector."
+  - "Verify the before state: without any policy, both clients can reach api. After applying your policy, only `grader-client` (role=monitor) should succeed."
+
+lifecycle:
+  namespaces: [fl-k8s-0173]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy api-access-control exists with correct selector and Ingress rules
+    params:
+      name: api-access-control
+      namespace: fl-k8s-0173
+      podSelector:
+        matchLabels:
+          app: api
+      policyTypes: ["Ingress"]
+      hasIngressRules: true
+
+  - id: http-probe
+    type: k8s.http-probe
+    label: grader-client (role=monitor) can reach api on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0173
+      host: api
+      port: 80
+      contains: "Welcome to nginx"
+
+  - id: traffic-blocked
+    type: k8s.traffic-blocked
+    label: deny-client (role=worker) is blocked from api on port 80
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0173
+      host: api
+      port: 80

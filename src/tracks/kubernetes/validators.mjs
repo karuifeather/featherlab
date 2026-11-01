@@ -2522,6 +2522,253 @@ const httpRouteWeights = resourceValidator({
   },
 });
 
+// ─── Level 7: NetworkPolicy & Connectivity Isolation validators ───────────────
+
+/**
+ * k8s.networkpolicy-spec — verifies static properties of a NetworkPolicy.
+ *
+ * Checks any subset of:
+ *   podSelector        — {matchLabels: {key: value}} or {} for "select all Pods"
+ *   policyTypes        — array subset: ["Ingress"] | ["Egress"] | ["Ingress","Egress"]
+ *   hasIngressRules    — true: at least one ingress rule present; false: ingress is empty / absent
+ *   hasEgressRules     — true: at least one egress rule present; false: egress is empty / absent
+ *
+ * Only the provided fields are graded; others are ignored.
+ * Always verifies the resource exists and is not being deleted.
+ */
+const networkPolicySpec = {
+  type: "k8s.networkpolicy-spec",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(
+      p,
+      ["name", "namespace", "podSelector", "policyTypes", "hasIngressRules", "hasEgressRules"],
+      problems,
+    );
+    check(p.name, NAME, "name", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    if (p.podSelector !== undefined)
+      check(p.podSelector, { type: "object", open: true }, "podSelector", problems);
+    if (p.policyTypes !== undefined)
+      check(
+        p.policyTypes,
+        {
+          type: "array",
+          required: true,
+          minItems: 1,
+          items: { type: "string", enum: ["Ingress", "Egress"] },
+        },
+        "policyTypes",
+        problems,
+      );
+    if (p.hasIngressRules !== undefined)
+      check(p.hasIngressRules, { type: "boolean" }, "hasIngressRules", problems);
+    if (p.hasEgressRules !== undefined)
+      check(p.hasEgressRules, { type: "boolean" }, "hasEgressRules", problems);
+    const fields = ["podSelector", "policyTypes", "hasIngressRules", "hasEgressRules"];
+    if (fields.every((f) => p[f] === undefined))
+      problems.add("", "set at least one NetworkPolicy field to check");
+  },
+  async run(p, ctx) {
+    const ref = { kind: "NetworkPolicy", name: p.name, namespace: p.namespace };
+    const policy = await ctx.query.get(ref);
+    if (!policy)
+      return {
+        passed: false,
+        feedback: `NetworkPolicy "${p.name}" was not found in namespace "${p.namespace}".`,
+      };
+    if (policy.metadata?.deletionTimestamp)
+      return { passed: false, feedback: `NetworkPolicy "${p.name}" is being deleted.` };
+
+    const spec = policy.spec ?? {};
+    const failures = [];
+
+    if (p.podSelector !== undefined) {
+      const actual = spec.podSelector ?? {};
+      const expectedLabels = p.podSelector.matchLabels ?? {};
+      const actualLabels = actual.matchLabels ?? {};
+      if (Object.keys(p.podSelector).length === 0 || Object.keys(expectedLabels).length === 0) {
+        // Expect empty podSelector (select all Pods in namespace)
+        if (
+          Object.keys(actualLabels).length !== 0 ||
+          Object.keys(actual.matchExpressions ?? []).length !== 0
+        )
+          failures.push(
+            `podSelector should be empty (selects all Pods) but has labels: ${JSON.stringify(actual)}`,
+          );
+      } else {
+        for (const [k, v] of Object.entries(expectedLabels)) {
+          if (actualLabels[k] !== v)
+            failures.push(
+              actualLabels[k] === undefined
+                ? `podSelector.matchLabels is missing "${k}"`
+                : `podSelector.matchLabels["${k}"] is "${actualLabels[k]}", expected "${v}"`,
+            );
+        }
+      }
+    }
+
+    if (p.policyTypes !== undefined) {
+      const actual = spec.policyTypes ?? [];
+      const missing = p.policyTypes.filter((t) => !actual.includes(t));
+      if (missing.length > 0) failures.push(`policyTypes is missing: ${missing.join(", ")}`);
+    }
+
+    if (p.hasIngressRules !== undefined) {
+      const hasRules = Array.isArray(spec.ingress) && spec.ingress.length > 0;
+      if (p.hasIngressRules && !hasRules)
+        failures.push("expected at least one ingress rule but none are defined");
+      if (!p.hasIngressRules && hasRules)
+        failures.push("expected no ingress rules (default deny) but rules are present");
+    }
+
+    if (p.hasEgressRules !== undefined) {
+      const hasRules = Array.isArray(spec.egress) && spec.egress.length > 0;
+      if (p.hasEgressRules && !hasRules)
+        failures.push("expected at least one egress rule but none are defined");
+      if (!p.hasEgressRules && hasRules)
+        failures.push("expected no egress rules (default deny) but rules are present");
+    }
+
+    return {
+      passed: failures.length === 0,
+      feedback:
+        failures.length === 0
+          ? `NetworkPolicy "${p.name}" has the required configuration.`
+          : `NetworkPolicy "${p.name}" is incorrect: ${failures.join("; ")}.`,
+    };
+  },
+};
+
+/**
+ * k8s.traffic-blocked — verifies that TCP/HTTP traffic from a named client Pod to a named
+ * server Pod (via its Service) is actually blocked by NetworkPolicy.
+ *
+ * Safety guards:
+ *  1. Both Pods must exist and be Running/Ready. A failing server (not a NetworkPolicy)
+ *     must not count as successful denial.
+ *  2. Curl exits 28 (timeout), 6 (DNS failure) or 7 (connection refused) are all accepted
+ *     as evidence of blocking. Other exit codes are treated as "connection environment error".
+ *  3. `host` must be an in-cluster Service DNS name or ClusterIP — no external addresses.
+ *     Use `serverPod` to confirm the server is Ready before asserting the block.
+ *
+ * Params:
+ *   clientPod  — name of the client Pod (setup must create it; curlimages/curl image)
+ *   serverPod  — name of the server Pod (must be Running and Ready)
+ *   namespace  — exercise namespace containing both Pods
+ *   host       — Service hostname (e.g. "api.fl-k8s-0156") or ClusterIP; no external hosts
+ *   port       — TCP port of the server Service
+ *   path       — HTTP path (default: "/")
+ */
+const trafficBlocked = {
+  type: "k8s.traffic-blocked",
+  track: "kubernetes",
+  validateParams(p, { problems }) {
+    rejectUnknown(p, ["clientPod", "serverPod", "namespace", "host", "port", "path"], problems);
+    check(p.clientPod, NAME, "clientPod", problems);
+    check(p.serverPod, NAME, "serverPod", problems);
+    check(
+      p.namespace,
+      { type: "string", required: true, pattern: DNS_LABEL },
+      "namespace",
+      problems,
+    );
+    check(
+      p.host,
+      { type: "string", required: true, pattern: SAFE_DNS_NAME, maxLength: 253 },
+      "host",
+      problems,
+    );
+    check(p.port, { type: "integer", required: true, min: 1, max: 65535 }, "port", problems);
+    if (p.path !== undefined)
+      check(p.path, { type: "string", pattern: SAFE_HTTP_PATH, maxLength: 200 }, "path", problems);
+  },
+  async run(p, ctx) {
+    // 1. Verify the client Pod is Running.
+    const clientRef = { kind: "Pod", name: p.clientPod, namespace: p.namespace };
+    const client = await ctx.query.get(clientRef);
+    if (!client)
+      return {
+        passed: false,
+        feedback: `Client Pod "${p.clientPod}" was not found in namespace "${p.namespace}".`,
+      };
+    if (client.status?.phase !== "Running")
+      return {
+        passed: false,
+        feedback: `Client Pod "${p.clientPod}" is not Running (phase: ${client.status?.phase ?? "unknown"}).`,
+      };
+
+    // 2. Verify the server Pod is Running and Ready.
+    const serverRef = { kind: "Pod", name: p.serverPod, namespace: p.namespace };
+    const server = await ctx.query.get(serverRef);
+    if (!server)
+      return {
+        passed: false,
+        feedback: `Server Pod "${p.serverPod}" was not found — cannot confirm the server is up before checking the block.`,
+      };
+    if (server.status?.phase !== "Running")
+      return {
+        passed: false,
+        feedback: `Server Pod "${p.serverPod}" is not Running — cannot distinguish a NetworkPolicy block from a downed server.`,
+      };
+    const serverReady = (server.status?.conditions ?? []).some(
+      (c) => c.type === "Ready" && c.status === "True",
+    );
+    if (!serverReady)
+      return {
+        passed: false,
+        feedback: `Server Pod "${p.serverPod}" is not Ready — cannot distinguish a NetworkPolicy block from an unready server.`,
+      };
+
+    // 3. Attempt connection; expect it to fail.
+    const path = p.path ?? "/";
+    const url = `http://${p.host}:${p.port}${path}`;
+    const result = await ctx.query.execArgv({
+      podName: p.clientPod,
+      namespace: p.namespace,
+      argv: ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", url],
+      timeoutMs: 12_000,
+    });
+
+    // curl exit codes that indicate a network-level block:
+    //   6  = couldn't resolve host (DNS egress blocked)
+    //   7  = failed to connect (TCP refused)
+    //   28 = operation timed out (TCP silently dropped — most common with NetworkPolicy)
+    const BLOCKED_EXIT_CODES = new Set([6, 7, 28]);
+    if (result.exitCode === 0) {
+      const code = result.stdout.trim();
+      return {
+        passed: false,
+        feedback: `Traffic from "${p.clientPod}" to "${url}" was allowed (HTTP ${code}), but the check expected it to be blocked. Make sure the NetworkPolicy is applied and restricts access from this client.`,
+        details: { url, httpCode: code },
+      };
+    }
+    if (!BLOCKED_EXIT_CODES.has(result.exitCode)) {
+      return {
+        passed: false,
+        feedback: `Unexpected curl exit code ${result.exitCode} for "${url}" — this may indicate a probe or environment error, not a NetworkPolicy block.`,
+        details: { url, exitCode: result.exitCode },
+      };
+    }
+    const reason =
+      result.exitCode === 6
+        ? "DNS lookup failed (egress to DNS is blocked)"
+        : result.exitCode === 7
+          ? "connection refused"
+          : "connection timed out (NetworkPolicy drop)";
+    return {
+      passed: true,
+      feedback: `Traffic from "${p.clientPod}" to "${url}" is blocked (${reason}) as expected.`,
+      details: { url, exitCode: result.exitCode },
+    };
+  },
+};
+
 export const kubernetesValidators = Object.freeze([
   resourceExists,
   resourceAbsent,
@@ -2577,4 +2824,7 @@ export const kubernetesValidators = Object.freeze([
   httpRouteAccepted,
   routingProbe,
   httpRouteWeights,
+  // Level 7 validators — NetworkPolicy & connectivity isolation
+  networkPolicySpec,
+  trafficBlocked,
 ]);

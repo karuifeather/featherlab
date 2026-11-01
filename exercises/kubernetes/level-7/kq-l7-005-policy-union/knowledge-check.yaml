@@ -1,0 +1,92 @@
+schemaVersion: 1
+id: kq-k8s-l7-005
+activityType: knowledge-check
+title: Policy Union and Interaction
+summary: Understand how multiple NetworkPolicies on the same pod interact, including the additive model and policyTypes enforcement.
+track: kubernetes
+level: 7
+order: 14.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [networkpolicy, policy-union, additive, policy-types, interaction]
+relatedLabs: [k8s-0164, k8s-0165]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Policy-A selects pod X and allows ingress from pod A. Policy-B selects pod X and allows ingress from pod B. Can pod C reach pod X?"
+    options:
+      - id: a
+        text: "Yes — when two policies select the same pod, the pod becomes unprotected and all traffic is allowed"
+      - id: b
+        text: "Yes — Policy-B's allow rule overrides Policy-A and opens pod X to all traffic"
+      - id: c
+        text: "No — only pod A and pod B are explicitly allowed; pod C is not listed in any allow rule"
+      - id: d
+        text: "No — the policies conflict and both are disabled, blocking everything including pods A and B"
+    correctAnswer: c
+    explanation: "NetworkPolicies are additive: the effective allowed set is the union of all rules across all policies selecting a pod. Pod A is allowed by Policy-A and pod B is allowed by Policy-B. Pod C does not appear in either policy's `from` rules, so it is blocked. Having multiple policies never creates a 'deny' that overrides an 'allow', but it also never opens traffic that no policy explicitly allows."
+    wrongExplanations:
+      a: "Multiple policies do NOT make a pod unprotected. The presence of any policy with `policyTypes: [Ingress]` activates enforcement; additional policies only add more allowed sources."
+      b: "Policies do not override each other. Each policy's rules are independent and additive. Policy-B adds an allow for pod B without affecting Policy-A's rule about pod A."
+      d: "There is no conflict mechanism. Policies are unioned, not compared. Both pod A and pod B are allowed."
+
+  - id: q2
+    type: single-choice
+    prompt: "Policy-A allows ingress to pod X from pod A. Can Policy-B explicitly deny ingress from pod A to pod X (overriding Policy-A's allow)?"
+    options:
+      - id: a
+        text: "Yes — adding a deny rule in Policy-B with the same podSelector will block pod A"
+      - id: b
+        text: "Yes — using policyTypes: [Ingress] in Policy-B with no ingress rules will block everything, overriding Policy-A"
+      - id: c
+        text: "No — standard Kubernetes NetworkPolicy has no deny rule; policies only add allows"
+      - id: d
+        text: "No — but you can delete Policy-A to remove the allow for pod A"
+    correctAnswer: c
+    explanation: "Standard Kubernetes NetworkPolicy (`networking.k8s.io/v1 NetworkPolicy`) has no explicit deny rule. Policies only add allow rules. The only way to block traffic that a policy currently allows is to remove or modify the allowing policy. Some CNIs offer custom resources (like Cilium's ClusterwidePolicies) with deny semantics, but these are not standard NetworkPolicy."
+    wrongExplanations:
+      a: "There is no `deny` rule in standard NetworkPolicy. The only valid entries in `ingress[].from` are pod and namespace selectors that allow traffic."
+      b: "A default-deny Policy-B would only affect its own scope (the pods it selects and the policyTypes it lists). It does not remove or override Policy-A's allow rules."
+      d: "While technically possible, deleting Policy-A is not how 'deny semantics' work — that is a workaround, not a deny rule. The answer highlights that standard NetworkPolicy cannot express deny-overrides-allow."
+    tryCommand: "kubectl explain networkpolicy.spec.ingress"
+
+  - id: q3
+    type: single-choice
+    prompt: "A NetworkPolicy has `policyTypes: [Egress]` in its spec, but the manifest also contains a hand-written `ingress:` rules array. Are those ingress rules enforced?"
+    options:
+      - id: a
+        text: "Yes — ingress rules in the spec are always enforced regardless of policyTypes"
+      - id: b
+        text: "Yes — the CNI reads all rules and enforces whichever apply"
+      - id: c
+        text: "No — only policyTypes listed in the spec are governed; ingress rules are ignored when Ingress is not in policyTypes"
+      - id: d
+        text: "No — a policy cannot have both policyTypes and explicit rule arrays; this is a validation error"
+    correctAnswer: c
+    explanation: "`policyTypes` is the authoritative switch. Only directions listed in `policyTypes` are actively governed by this policy. If `Ingress` is not listed, the `ingress:` rules array is present in the object but has no enforcement effect. The ingress direction remains at whatever its current state is (default-allow if no other Ingress policy selects these pods)."
+    wrongExplanations:
+      a: "Ingress rules require `Ingress` to be in `policyTypes` to be enforced. Having them in the spec without listing `Ingress` in policyTypes is a silent no-op for ingress."
+      b: "The CNI respects `policyTypes` as the gate. Rules for an unlisted direction are not enforced."
+      d: "The API server does not reject a policy that has ingress rules but no `Ingress` in policyTypes. The rules are stored but ignored."
+
+  - id: q4
+    type: single-choice
+    prompt: "What does `kubectl describe networkpolicy <name> -n <ns>` show that is useful for diagnosing why traffic is or is not flowing?"
+    options:
+      - id: a
+        text: "The current list of active TCP connections through the policy"
+      - id: b
+        text: "The policy's podSelector, policyTypes, and ingress/egress rules in human-readable format"
+      - id: c
+        text: "Which pods currently match the policy's podSelector (a live list of selected pods)"
+      - id: d
+        text: "The CNI's iptables rules generated from the policy"
+    correctAnswer: b
+    explanation: "`kubectl describe networkpolicy` shows the policy's key fields in readable form: PodSelector (which pods are controlled), PolicyTypes, and all Ingress/Egress rules with their selectors and ports. This lets you quickly check whether the policy actually selects the pod you think it does, and whether the from/to selectors match the labels on the pods involved in the traffic."
+    wrongExplanations:
+      a: "NetworkPolicy has no connection tracking at the Kubernetes API level. `kubectl describe` shows policy specification, not live traffic."
+      c: "`kubectl describe` shows the policy spec, not a live pod list. To see which pods match a podSelector, use `kubectl get pods -l <labels> -n <ns>`."
+      d: "iptables rules are generated by the CNI on the node, not exposed through `kubectl describe`. To inspect them, you would need node-level access."
+    tryCommand: "kubectl describe networkpolicy <name> -n <namespace>"

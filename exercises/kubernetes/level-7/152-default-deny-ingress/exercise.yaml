@@ -1,0 +1,53 @@
+schemaVersion: 1
+id: k8s-0152
+type: task
+title: Default-Deny Ingress
+summary: Create a NetworkPolicy that selects all Pods and blocks every inbound connection.
+track: kubernetes
+level: 7
+order: 2
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [networkpolicy, default-deny, ingress]
+prerequisites: [k8s-0151]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0152`: NetworkPolicy `default-deny` selects all Pods, declares `policyTypes: [Ingress]`, and has no ingress rules"
+  - "Inbound traffic from Pod `deny-client` to Service `api` on port 80 is blocked"
+
+hints:
+  - "Set `spec.podSelector: {}` (empty) to select every Pod in the namespace."
+  - "List `Ingress` in `policyTypes` and omit `spec.ingress` (or leave it empty) — no rules means no allowed sources."
+  - "Verify the block: `kubectl exec deny-client -n fl-k8s-0152 -- curl -s --max-time 5 http://api/` should time out."
+
+lifecycle:
+  namespaces: [fl-k8s-0152]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: netpol-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy default-deny selects all Pods with no ingress rules
+    params:
+      name: default-deny
+      namespace: fl-k8s-0152
+      podSelector: {}
+      policyTypes: ["Ingress"]
+      hasIngressRules: false
+  - id: traffic-blocked
+    type: k8s.traffic-blocked
+    label: Inbound traffic from deny-client to api is blocked
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0152
+      host: api
+      port: 80

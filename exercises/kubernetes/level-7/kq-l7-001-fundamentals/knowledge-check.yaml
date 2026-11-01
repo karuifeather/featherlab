@@ -1,0 +1,112 @@
+schemaVersion: 1
+id: kq-k8s-l7-001
+activityType: knowledge-check
+title: NetworkPolicy Fundamentals
+summary: Understand what NetworkPolicy is, what CNI enforcement means, and the default-allow model.
+track: kubernetes
+level: 7
+order: 1.5
+difficulty: beginner
+estimatedMinutes: 8
+tags: [networkpolicy, cni, enforcement, default-allow]
+relatedLabs: [k8s-0151, k8s-0152]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "Without any NetworkPolicy applied, what is the default traffic behavior between pods in a Kubernetes cluster?"
+    options:
+      - id: a
+        text: "All traffic is denied by default — you must create allow rules before pods can communicate"
+      - id: b
+        text: "Traffic is only allowed within the same namespace; cross-namespace traffic is denied"
+      - id: c
+        text: "All traffic is allowed by default — any pod can reach any other pod across namespaces"
+      - id: d
+        text: "Traffic is allowed only when both pods have matching labels"
+    correctAnswer: c
+    explanation: "Kubernetes has a default-allow model at the network layer. Without any NetworkPolicy objects, all pod-to-pod traffic is permitted regardless of namespace or labels. NetworkPolicy objects move selected pods from this open model to an explicitly controlled one."
+    wrongExplanations:
+      a: "Kubernetes does NOT default to deny. The default model is allow-all. Deny-all behavior requires you to create a NetworkPolicy with policyTypes: [Ingress] or [Egress] and no rules."
+      b: "There is no built-in namespace isolation. By default, a pod in namespace A can freely communicate with a pod in namespace B. Namespace isolation requires NetworkPolicy."
+      d: "Pod labels are not used for traffic control without a NetworkPolicy. Labels only matter when a NetworkPolicy's podSelector or namespaceSelector references them."
+    tryCommand: "kubectl run test --image=busybox:1.36 --restart=Never -- sleep 60; kubectl exec test -- wget -qO- http://kubernetes.default.svc/"
+
+  - id: q2
+    type: single-choice
+    prompt: "You create a NetworkPolicy object in a cluster running Flannel CNI, which does not support NetworkPolicy enforcement. What happens to the traffic?"
+    options:
+      - id: a
+        text: "The API server rejects the NetworkPolicy object because Flannel is not registered as a NetworkPolicy provider"
+      - id: b
+        text: "The NetworkPolicy is stored in etcd and displayed by kubectl, but no traffic is actually restricted"
+      - id: c
+        text: "Kubernetes falls back to a built-in software firewall that enforces the policy without CNI support"
+      - id: d
+        text: "The policy is enforced for pods on the same node but ignored for cross-node traffic"
+    correctAnswer: b
+    explanation: "The Kubernetes API server stores NetworkPolicy objects just like any other resource — it does not validate whether the CNI enforces them. Enforcement is entirely the CNI plugin's responsibility. With a non-supporting CNI like basic Flannel, NetworkPolicy objects are inert: they are visible in kubectl but have no effect on traffic."
+    wrongExplanations:
+      a: "The API server accepts NetworkPolicy objects regardless of which CNI is installed. It has no knowledge of CNI capabilities during object creation."
+      c: "Kubernetes has no built-in fallback firewall. If the CNI does not enforce NetworkPolicy, traffic is unrestricted."
+      d: "NetworkPolicy enforcement is all-or-nothing based on CNI support. A non-supporting CNI ignores all NetworkPolicy objects on all nodes."
+
+  - id: q3
+    type: single-choice
+    prompt: "A NetworkPolicy has `podSelector: {}` (empty) and `policyTypes: [Ingress]` with no ingress rules. Which pods does this policy apply to?"
+    options:
+      - id: a
+        text: "No pods — an empty podSelector is invalid and the policy is ignored"
+      - id: b
+        text: "Only pods with an explicit label `app: all` or similar catch-all label"
+      - id: c
+        text: "All pods in the namespace where the NetworkPolicy is created"
+      - id: d
+        text: "All pods in all namespaces across the cluster"
+    correctAnswer: c
+    explanation: "An empty podSelector `{}` (with no matchLabels or matchExpressions) selects ALL pods in the namespace where the NetworkPolicy resides. Combined with `policyTypes: [Ingress]` and no ingress rules, this creates a namespace-wide default-deny for ingress traffic — the classic 'lock down this namespace' pattern."
+    wrongExplanations:
+      a: "An empty podSelector is valid and intentional. It is the standard way to select all pods in a namespace."
+      b: "There is no special `app: all` convention. An empty podSelector selects every pod in the namespace regardless of labels."
+      d: "NetworkPolicy is namespace-scoped. Even an empty podSelector only affects pods in the same namespace as the NetworkPolicy."
+    tryCommand: "kubectl get networkpolicy -n <namespace> -o yaml"
+
+  - id: q4
+    type: single-choice
+    prompt: "Which kubectl command lists all NetworkPolicy objects across all namespaces?"
+    options:
+      - id: a
+        text: "kubectl get networkpolicy --all"
+      - id: b
+        text: "kubectl get netpol -A"
+      - id: c
+        text: "kubectl describe networkpolicies --cluster-wide"
+      - id: d
+        text: "kubectl list networkpolicy --namespaces=all"
+    correctAnswer: b
+    explanation: "`kubectl get netpol -A` uses the `netpol` short name for NetworkPolicy and `-A` as the short flag for `--all-namespaces`. The full equivalent is `kubectl get networkpolicy --all-namespaces`. Both forms display all NetworkPolicy objects across all namespaces."
+    wrongExplanations:
+      a: "`--all` is not a valid flag. The correct flag is `--all-namespaces` (or its short form `-A`)."
+      c: "`kubectl describe networkpolicies --cluster-wide` is not a valid command. Use `kubectl get netpol -A` or `kubectl describe networkpolicy -A`."
+      d: "`kubectl list` is not a valid kubectl verb. The correct verb is `get`."
+    tryCommand: "kubectl get netpol -A"
+
+  - id: q5
+    type: single-choice
+    prompt: "Pod X has two NetworkPolicies selecting it: Policy-A allows ingress from pod A, and Policy-B allows ingress from pod B. Can pod C send ingress traffic to pod X?"
+    options:
+      - id: a
+        text: "Yes — since multiple policies exist, the pod is effectively unprotected and all traffic is allowed"
+      - id: b
+        text: "Yes — each additional policy opens new allow rules but cannot restrict already-open traffic"
+      - id: c
+        text: "No — NetworkPolicies are additive; pod C is not listed in any allow rule, so it is blocked"
+      - id: d
+        text: "No — when two policies conflict, the more restrictive one wins and blocks all traffic"
+    correctAnswer: c
+    explanation: "NetworkPolicies are additive (union). The effective allowed set is the union of all rules across all policies selecting a pod. Pod A and pod B are both allowed by their respective policies. Pod C appears in neither policy's allow rules, so it is denied. There is no 'deny overrides allow' mechanism in standard NetworkPolicy — there are only allow rules, and anything not allowed is blocked."
+    wrongExplanations:
+      a: "Multiple policies do NOT make a pod unprotected. Once any policy with `policyTypes: [Ingress]` selects a pod, all ingress not explicitly allowed is blocked."
+      b: "This is backwards. New allow policies do open additional sources, but they never remove the implicit deny for unlisted sources. Pod C remains blocked."
+      d: "There is no conflict. The policies are unioned, not compared for strictness. Both pod A and pod B can send traffic; pod C cannot."

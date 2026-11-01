@@ -1,0 +1,110 @@
+schemaVersion: 1
+id: kq-k8s-l7-002
+activityType: knowledge-check
+title: Default-Deny Patterns
+summary: Understand how to create default-deny ingress and egress policies and what policyTypes controls.
+track: kubernetes
+level: 7
+order: 2.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [networkpolicy, default-deny, policy-types, ingress, egress]
+relatedLabs: [k8s-0152, k8s-0153]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "A namespace has no NetworkPolicy. Pod A can reach Pod B freely. You then apply a NetworkPolicy with `podSelector: {}`, `policyTypes: [Ingress]`, and no `ingress:` rules to that namespace. What is the effect?"
+    options:
+      - id: a
+        text: "No change — a policy with no ingress rules is a no-op and is ignored"
+      - id: b
+        text: "All ingress to all pods in the namespace is now blocked; no pod can receive any traffic"
+      - id: c
+        text: "Only inter-namespace ingress is blocked; pods within the same namespace can still communicate"
+      - id: d
+        text: "Only new connections are blocked; existing connections continue until they close"
+    correctAnswer: b
+    explanation: "A NetworkPolicy with `policyTypes: [Ingress]` and no `ingress:` rules is a default-deny for ingress. The empty podSelector selects all pods in the namespace. The absence of ingress rules means no source is allowed. All ingress traffic — including from pods within the same namespace — is blocked."
+    wrongExplanations:
+      a: "This is incorrect. A NetworkPolicy with `policyTypes: [Ingress]` and no ingress rules is the standard default-deny ingress pattern. It is not a no-op."
+      c: "Kubernetes NetworkPolicy does not distinguish same-namespace from cross-namespace traffic in this context. The deny applies to all sources."
+      d: "NetworkPolicy enforcement by kindnet and most CNIs is stateless at this level — existing TCP connections are also dropped when the policy is applied."
+
+  - id: q2
+    type: single-choice
+    prompt: "A NetworkPolicy has `policyTypes: [Ingress]` with ingress rules that allow traffic from pod A. Does this policy also restrict egress from the selected pods?"
+    options:
+      - id: a
+        text: "Yes — any NetworkPolicy that restricts ingress also implicitly restricts egress to the same sources"
+      - id: b
+        text: "Yes — Kubernetes automatically adds a matching egress default-deny when ingress rules are present"
+      - id: c
+        text: "No — egress is unrestricted unless `Egress` is listed in `policyTypes`"
+      - id: d
+        text: "No — egress is always unrestricted and cannot be controlled with NetworkPolicy"
+    correctAnswer: c
+    explanation: "`policyTypes` is the switch that activates enforcement for each direction independently. Listing only `Ingress` restricts inbound traffic to what the ingress rules allow, but leaves egress completely unrestricted. To control egress, you must add `Egress` to `policyTypes` and include appropriate egress rules."
+    wrongExplanations:
+      a: "Ingress and egress are independent in NetworkPolicy. An ingress allow rule has no effect on egress."
+      b: "Kubernetes does NOT add automatic egress restrictions when ingress rules are present. You must explicitly add `Egress` to `policyTypes`."
+      d: "Egress CAN be controlled with NetworkPolicy by including `Egress` in `policyTypes`."
+
+  - id: q3
+    type: single-choice
+    prompt: "You want to allow ingress to pod `api` from pod `frontend`. Which field and construct do you use in the NetworkPolicy's ingress rule?"
+    options:
+      - id: a
+        text: "Use `ingress[].from[].namespaceSelector` pointing to the frontend pod's namespace"
+      - id: b
+        text: "Use `ingress[].from[].podSelector` with `matchLabels` matching the frontend pod's labels"
+      - id: c
+        text: "Use `ingress[].sources[].pod` with the frontend pod's name"
+      - id: d
+        text: "Use `ingress[].allow[].selector` with the frontend pod's label"
+    correctAnswer: b
+    explanation: "In a NetworkPolicy ingress rule, the `from:` array accepts `podSelector`, `namespaceSelector`, or both. To allow ingress from a specific pod, use `podSelector` with `matchLabels` referencing that pod's labels. The API uses `from:` not `sources:` or `allow:`, and references pods by label, not by name."
+    wrongExplanations:
+      a: "`namespaceSelector` selects whole namespaces, not individual pods. To target a specific pod, use `podSelector` (optionally combined with `namespaceSelector` for AND logic)."
+      c: "`sources` is not a valid field. The correct field is `from`. NetworkPolicy also cannot reference pods by name — only by labels."
+      d: "`allow` is not a valid field in NetworkPolicy. The correct structure is `ingress[].from[].podSelector`."
+    tryCommand: "kubectl explain networkpolicy.spec.ingress.from"
+
+  - id: q4
+    type: single-choice
+    prompt: "A NetworkPolicy selects pods with label `app=web` and has `policyTypes: [Ingress]`. A new Pod is created without the `app=web` label. Is this new Pod affected by the policy?"
+    options:
+      - id: a
+        text: "Yes — once a namespace has a NetworkPolicy, all new pods are affected by it"
+      - id: b
+        text: "Yes — the new pod inherits the namespace's NetworkPolicy by default"
+      - id: c
+        text: "No — the NetworkPolicy only affects pods whose labels match the podSelector"
+      - id: d
+        text: "No — NetworkPolicies only apply to pods that existed when the policy was created"
+    correctAnswer: c
+    explanation: "NetworkPolicy enforcement is based entirely on label matching at the time of each connection. The `podSelector` in the NetworkPolicy only selects pods whose current labels match. A pod without `app=web` is not selected by this policy and therefore not affected by it — it remains in the default-allow state for its own traffic unless another policy selects it."
+    wrongExplanations:
+      a: "Only pods selected by a policy's `podSelector` are affected. A namespace having a NetworkPolicy does not mean all pods in it are restricted."
+      b: "There is no inheritance mechanism for NetworkPolicy. Pods are only affected by policies whose `podSelector` matches their labels."
+      d: "NetworkPolicy is evaluated dynamically. It applies to all currently-matching pods, including ones created after the policy was created."
+
+  - id: q5
+    type: single-choice
+    prompt: "A NetworkPolicy has `policyTypes: [Ingress, Egress]` but the spec has no `ingress:` or `egress:` rule arrays. What is the result?"
+    options:
+      - id: a
+        text: "The policy is invalid because both policyTypes require at least one rule"
+      - id: b
+        text: "All ingress and egress to and from selected pods is blocked (default-deny both directions)"
+      - id: c
+        text: "Ingress is blocked but egress defaults to allow because no egress rules are given"
+      - id: d
+        text: "The policy is a no-op — both directions default to allow when no rules are written"
+    correctAnswer: b
+    explanation: "Listing `Ingress` and `Egress` in `policyTypes` activates enforcement for both directions. With no `ingress:` rules, all ingress is denied. With no `egress:` rules, all egress is denied. This is a complete network isolation policy: selected pods can neither receive nor send any traffic."
+    wrongExplanations:
+      a: "The policy is valid. Absence of rule arrays is the default-deny pattern, not an error."
+      c: "Egress does NOT default to allow when `Egress` appears in `policyTypes`. The absence of egress rules means all egress is blocked."
+      d: "Once a direction is listed in `policyTypes`, its default changes from allow to deny. Empty rule arrays mean deny-all for that direction."

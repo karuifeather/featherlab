@@ -1,0 +1,53 @@
+schemaVersion: 1
+id: k8s-0164
+type: task
+title: Broken Policy Diagnostics
+summary: Find and fix a typo in a NetworkPolicy podSelector that prevents an authorized client from reaching the API server.
+track: kubernetes
+level: 7
+order: 14
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [networkpolicy, debugging, pod-selector]
+prerequisites: [k8s-0163]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Pod `grader-client` (role: admin) in `fl-k8s-0164` can reach `api.fl-k8s-0164.svc.cluster.local`"
+  - "Pod `deny-client` in `fl-k8s-0164` cannot reach `api.fl-k8s-0164.svc.cluster.local`"
+
+hints:
+  - "Inspect the existing NetworkPolicy: `kubectl get networkpolicy allow-admin -n fl-k8s-0164 -o yaml`"
+  - "Compare the policy's podSelector label value with the actual label on grader-client: `kubectl get pod grader-client -n fl-k8s-0164 --show-labels`"
+  - "Fix the typo with `kubectl apply` — edit the YAML and reapply, or `kubectl edit networkpolicy allow-admin -n fl-k8s-0164`."
+
+lifecycle:
+  namespaces: [fl-k8s-0164]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: probe-allowed
+    type: k8s.http-probe
+    label: grader-client with role=admin can reach api
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0164
+      host: api.fl-k8s-0164.svc.cluster.local
+      port: 80
+      contains: nginx
+  - id: deny-blocked
+    type: k8s.traffic-blocked
+    label: deny-client is still blocked
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0164
+      host: api.fl-k8s-0164.svc.cluster.local
+      port: 80

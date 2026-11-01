@@ -205,6 +205,38 @@ export const CURRICULUM = Object.freeze({
     // Level 6 Mastery
     "k8s-0150", // Level 6 Routing Mastery
   ],
+  7: [
+    // Circuit A — Default-Deny and Allow Fundamentals
+    "k8s-0151", // Traffic Without NetworkPolicy
+    "k8s-0152", // Default-Deny Ingress
+    "k8s-0153", // Allow Traffic from a Specific Pod
+    "k8s-0154", // Allow Traffic on a Specific Port
+    "k8s-0155", // NetworkPolicy Union — Multiple Policies
+    // Circuit B — Egress Fundamentals
+    "k8s-0156", // Default-Deny Egress
+    "k8s-0157", // Allow DNS Egress
+    "k8s-0158", // Allow Egress to a Specific Service
+    "k8s-0159", // Fix Isolation by Correcting a Label
+    "k8s-0160", // Egress Policy Union
+    // Circuit C — Namespace Selectors
+    "k8s-0161", // Allow Traffic from a Namespace
+    "k8s-0162", // Combined Namespace + Pod Selector (AND logic)
+    "k8s-0163", // Isolate a Namespace
+    // Circuit D — Policy Interaction and Diagnostics
+    "k8s-0164", // Broken Policy Diagnostics
+    "k8s-0165", // Namespace Selector with kubernetes.io/metadata.name
+    "k8s-0166", // Bidirectional Isolation — Ingress AND Egress
+    "k8s-0167", // Least-Privilege Microservice
+    "k8s-0168", // Fix a Policy Interaction Bug
+    // Circuit E — Protocols, Ports and Mastery
+    "k8s-0169", // Multi-Tier Connectivity
+    "k8s-0170", // TCP and UDP Protocol Policies
+    "k8s-0171", // Named Ports in NetworkPolicy
+    "k8s-0172", // Egress with Port Restrictions
+    "k8s-0173", // Least-Privilege Review
+    // Level 7 Mastery
+    "k8s-0174", // Three-Tier Application NetworkPolicy
+  ],
 });
 
 export const CURRICULUM_ORDER = Object.freeze(Object.values(CURRICULUM).flat());

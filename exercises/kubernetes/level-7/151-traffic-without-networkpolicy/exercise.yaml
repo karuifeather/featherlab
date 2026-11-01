@@ -1,0 +1,51 @@
+schemaVersion: 1
+id: k8s-0151
+type: task
+title: Traffic Without NetworkPolicy
+summary: Observe that all Pod-to-Pod traffic flows freely when no NetworkPolicy exists in the namespace.
+track: kubernetes
+level: 7
+order: 1
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [networkpolicy, connectivity, observation]
+prerequisites: [k8s-0150]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0151`: Service `api` exists and `grader-client` can reach it on port 80"
+  - "HTTP response from Service `api` contains `Welcome to nginx`"
+
+hints:
+  - "Run `kubectl exec grader-client -n fl-k8s-0151 -- wget -qO- http://api:80/` to verify connectivity from inside the cluster."
+  - "Try creating a one-shot Pod: `kubectl run test --rm -it --image=busybox:1.36 -n fl-k8s-0151 -- wget -qO- http://api/`"
+  - "List all NetworkPolicies in the namespace: `kubectl get networkpolicy -n fl-k8s-0151`. Without any, all traffic flows freely."
+
+lifecycle:
+  namespaces: [fl-k8s-0151]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: api-service-exists
+    type: k8s.resource-exists
+    label: Service api exists in fl-k8s-0151
+    params:
+      kind: Service
+      name: api
+      namespace: fl-k8s-0151
+  - id: http-probe
+    type: k8s.http-probe
+    label: grader-client can reach the api Service on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0151
+      host: api
+      port: 80
+      contains: "Welcome to nginx"

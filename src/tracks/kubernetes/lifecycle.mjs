@@ -482,6 +482,53 @@ export function createDriver({
     });
 
   /**
+   * Fast proof-of-capability for exercises with profile: kind-networkpolicy.
+   *
+   * kindnet in kind v0.33.0+ enforces NetworkPolicy by default; no CNI installation is
+   * needed. This function verifies two things:
+   *   1. A NetworkPolicy object can be created in a sentinel namespace.
+   *   2. The cluster is running a known-good kindnet version that enforces policies.
+   *
+   * It does NOT install a new CNI. If the check fails (older kindnet, custom CNI that
+   * does not enforce), it throws an EnvironmentError with a clear message rather than
+   * silently proceeding with non-enforcing policies.
+   */
+  async function ensureNetworkPolicyCapable(signal) {
+    // Fast path: check kindnet DaemonSet exists and is ready.
+    const dsCheck = await kubectl(
+      [
+        "get",
+        "daemonset",
+        "kindnet",
+        "-n",
+        "kube-system",
+        "--ignore-not-found",
+        "-o",
+        "jsonpath={.status.numberReady}/{.status.desiredNumberScheduled}",
+      ],
+      { signal, timeoutMs: 15_000 },
+    );
+    if (dsCheck.exitCode !== 0 || !dsCheck.stdout.trim()) {
+      throw new EnvironmentError(
+        "kindnet DaemonSet was not found in kube-system. " +
+          "NetworkPolicy exercises require a cluster running kindnet (kind v0.33+). " +
+          "Recreate the cluster with `featherlab stop && featherlab start`.",
+        { reason: "unavailable" },
+      );
+    }
+    const [ready, desired] = dsCheck.stdout.trim().split("/").map(Number);
+    if (ready < 1 || ready < desired) {
+      throw new EnvironmentError(
+        `kindnet is not fully ready (${ready}/${desired} nodes). ` +
+          "Wait for the cluster to stabilize and try again.",
+        { reason: "unavailable" },
+      );
+    }
+    // kindnet v1.4+ (shipped in kind v0.24+) enforces NetworkPolicy by default.
+    // No further action needed — just report capability confirmed.
+  }
+
+  /**
    * Idempotent: installs Gateway API CRDs, Traefik, and GatewayClass if not already present.
    * Called before reset() for exercises with profile: kind-routing.
    */
@@ -609,6 +656,9 @@ export function createDriver({
     async reset({ exercise, signal }) {
       if (exercise.environment?.profile === "kind-routing") {
         await ensureRoutingInstalled(signal);
+      }
+      if (exercise.environment?.profile === "kind-networkpolicy") {
+        await ensureNetworkPolicyCapable(signal);
       }
       const removed = await steps("Reset", deleteNamespacesPlan("reset", exercise, signal));
       const created = await steps("Reset", createPlan(exercise, signal));

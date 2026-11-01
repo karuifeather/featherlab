@@ -1,0 +1,62 @@
+schemaVersion: 1
+id: k8s-0162
+type: task
+title: Combined Namespace + Pod Selector (AND logic)
+summary: Use a single from entry combining namespaceSelector and podSelector to implement AND logic — both conditions must match.
+track: kubernetes
+level: 7
+order: 12
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [networkpolicy, namespace-selector, pod-selector, and-logic]
+prerequisites: [k8s-0161]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "NetworkPolicy `allow-prod-frontend` exists in namespace `fl-k8s-0162`"
+  - "NetworkPolicy `allow-prod-frontend` has at least one ingress rule"
+  - "Pod `authorized-client` in `fl-k8s-0162-client` (role: frontend) can reach `api.fl-k8s-0162.svc.cluster.local`"
+  - "Pod `deny-client` in `fl-k8s-0162` cannot reach `api.fl-k8s-0162.svc.cluster.local`"
+
+hints:
+  - "To require BOTH conditions, put namespaceSelector and podSelector in the same `from` list entry (one dash). Two separate entries (two dashes) give you OR logic."
+  - "Use `kubernetes.io/metadata.name: fl-k8s-0162-client` to match the client namespace."
+  - "The authorized-client has label `role: frontend`; the unauthorized-client has `role: backend`."
+
+lifecycle:
+  namespaces: [fl-k8s-0162, fl-k8s-0162-client]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-exists
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-prod-frontend exists with ingress rules
+    params:
+      name: allow-prod-frontend
+      namespace: fl-k8s-0162
+      hasIngressRules: true
+  - id: cross-ns-allowed
+    type: k8s.http-probe
+    label: authorized-client in fl-k8s-0162-client can reach api
+    params:
+      clientPod: authorized-client
+      namespace: fl-k8s-0162-client
+      host: api.fl-k8s-0162.svc.cluster.local
+      port: 80
+      contains: nginx
+  - id: same-ns-blocked
+    type: k8s.traffic-blocked
+    label: deny-client in fl-k8s-0162 is blocked
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0162
+      host: api.fl-k8s-0162.svc.cluster.local
+      port: 80

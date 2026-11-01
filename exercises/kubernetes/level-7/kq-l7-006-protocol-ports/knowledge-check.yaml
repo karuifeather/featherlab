@@ -1,0 +1,92 @@
+schemaVersion: 1
+id: kq-k8s-l7-006
+activityType: knowledge-check
+title: Protocol and Port Selection
+summary: Understand how protocols and ports work in NetworkPolicy rules, including named ports and protocol defaults.
+track: kubernetes
+level: 7
+order: 19.5
+difficulty: intermediate
+estimatedMinutes: 7
+tags: [networkpolicy, protocol, ports, named-ports, tcp, udp]
+relatedLabs: [k8s-0166, k8s-0167, k8s-0168, k8s-0169, k8s-0170]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "What is the default protocol if `protocol` is omitted in a NetworkPolicy port rule?"
+    options:
+      - id: a
+        text: "UDP"
+      - id: b
+        text: "TCP"
+      - id: c
+        text: "SCTP"
+      - id: d
+        text: "All protocols (TCP + UDP + SCTP) are matched when protocol is omitted"
+    correctAnswer: b
+    explanation: "When `protocol` is omitted from a NetworkPolicy port rule, it defaults to TCP. This means `port: 80` is equivalent to `{protocol: TCP, port: 80}`. If you need UDP or SCTP on the same port, you must write a separate port entry with the explicit protocol."
+    wrongExplanations:
+      a: "UDP is not the default. The default protocol is TCP."
+      c: "SCTP is not the default. The default is TCP."
+      d: "Omitting protocol does NOT match all protocols. It matches TCP only. To allow multiple protocols on the same port, you need separate port entries."
+    tryCommand: "kubectl explain networkpolicy.spec.ingress.ports"
+
+  - id: q2
+    type: single-choice
+    prompt: "A NetworkPolicy port rule allows `{protocol: TCP, port: 80}`. Does this also allow UDP port 80 traffic to the selected pod?"
+    options:
+      - id: a
+        text: "Yes — allowing a port number implicitly allows all protocols on that port"
+      - id: b
+        text: "Yes — TCP and UDP on the same port are treated as the same flow by the CNI"
+      - id: c
+        text: "No — `protocol: TCP` restricts the rule to TCP only; UDP port 80 requires a separate rule"
+      - id: d
+        text: "No — UDP is never allowed through an ingress rule; use an egress rule for UDP"
+    correctAnswer: c
+    explanation: "Protocol specificity is exact: `{protocol: TCP, port: 80}` allows only TCP port 80. A UDP datagram on port 80 is not covered by this rule and will be blocked (assuming any policy with `policyTypes: [Ingress]` selects the pod). To allow UDP port 80 as well, add a second port entry: `{protocol: UDP, port: 80}`."
+    wrongExplanations:
+      a: "Specifying a protocol restricts the rule to that protocol only. Allowing TCP port 80 does not implicitly open UDP port 80."
+      b: "TCP and UDP are distinct Layer 4 protocols. The CNI tracks them separately. An allow for TCP does not cover UDP on the same port number."
+      d: "UDP can be allowed through ingress rules. The restriction is protocol-specific, not direction-specific."
+
+  - id: q3
+    type: single-choice
+    prompt: "You want a NetworkPolicy to allow port 53 for both UDP and TCP. Which port entry structure is correct?"
+    options:
+      - id: a
+        text: "One entry: `{port: 53, protocol: UDP+TCP}`"
+      - id: b
+        text: "One entry: `{port: 53}` — omitting protocol allows all protocols on that port"
+      - id: c
+        text: "Two separate entries in the `ports:` array: `{protocol: UDP, port: 53}` and `{protocol: TCP, port: 53}`"
+      - id: d
+        text: "One entry: `{port: 53, protocols: [UDP, TCP]}`"
+    correctAnswer: c
+    explanation: "To allow multiple protocols on the same port, write a separate port entry for each protocol in the `ports:` array. There is no multi-protocol shorthand. The DNS pattern is always written as two entries: `{protocol: UDP, port: 53}` and `{protocol: TCP, port: 53}`."
+    wrongExplanations:
+      a: "`protocol: UDP+TCP` is not valid YAML or a valid NetworkPolicy field value. Protocols must be specified individually."
+      b: "Omitting `protocol` defaults to TCP only, not all protocols. `{port: 53}` would allow only TCP/53."
+      d: "`protocols` (plural) is not a valid field in the NetworkPolicy port spec. The correct field name is `protocol` (singular)."
+    tryCommand: "kubectl explain networkpolicy.spec.ingress.ports"
+
+  - id: q4
+    type: single-choice
+    prompt: "A pod's container declares `ports: [{name: http, containerPort: 80}]`. Can a NetworkPolicy reference this port by its name `http` in a port rule?"
+    options:
+      - id: a
+        text: "No — NetworkPolicy port rules only accept numeric port numbers"
+      - id: b
+        text: "No — named ports only work with Service targetPort, not NetworkPolicy"
+      - id: c
+        text: "Yes — a NetworkPolicy can use `port: http` and the CNI resolves it against the target Pod's containerPort names"
+      - id: d
+        text: "Yes — but the name must match the Service port name, not the containerPort name"
+    correctAnswer: c
+    explanation: "NetworkPolicy port rules accept either a numeric port or a named port that resolves against the **target Pod's** `containerPort` names. Writing `port: http` in a NetworkPolicy means: allow the port number associated with the name `http` in the target pod's containerPort list. If the pod declares `{name: http, containerPort: 80}`, the rule allows TCP port 80."
+    wrongExplanations:
+      a: "NetworkPolicy port rules DO accept named ports. The API field is `port` and its type accepts either an integer or a string (the port name)."
+      b: "Named ports in NetworkPolicy resolve against container ports, not Service ports. It is the Pod's containerPort `name` that matters."
+      d: "The name resolves against the target Pod's `containerPort.name`, not the Service's port name. They are independent (though often matching by convention)."

@@ -17,7 +17,8 @@ export function createKubernetesTrack({ runner, cluster, driverOptions = {} }) {
     // Each profile names an environment shape.
     // kind-default: plain single-node kind cluster (Levels 0–5).
     // kind-routing: kind cluster with Traefik v3 + Gateway API CRDs pre-installed (Level 6+).
-    profiles: ["kind-default", "kind-routing"],
+    // kind-networkpolicy: same base cluster; kindnet CNI enforces NetworkPolicy (Level 7).
+    profiles: ["kind-default", "kind-routing", "kind-networkpolicy"],
     validators: kubernetesValidators,
     compileLifecycle,
     validateCheckScope,

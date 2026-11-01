@@ -1,0 +1,61 @@
+schemaVersion: 1
+id: k8s-0153
+type: task
+title: Allow Traffic from a Specific Pod
+summary: Add a selective ingress allow rule so only Pods with a matching label can reach the server while all others remain blocked.
+track: kubernetes
+level: 7
+order: 3
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [networkpolicy, ingress, label-selector, allow-rule]
+prerequisites: [k8s-0152]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0153`: NetworkPolicy `allow-frontend` has at least one ingress rule"
+  - "HTTP request from `grader-client` (label `role=frontend`) to Service `api` on port 80 succeeds"
+  - "Traffic from `deny-client` (no `role=frontend` label) to Service `api` remains blocked"
+
+hints:
+  - "Use `spec.ingress[].from[].podSelector.matchLabels` to restrict ingress to Pods carrying a specific label."
+  - "Target only the `api` Pod with `spec.podSelector.matchLabels.app: api` so the rule is scoped to the server."
+  - "Verify allowed and blocked: `kubectl exec grader-client -n fl-k8s-0153 -- wget -qO- http://api/` should succeed; `kubectl exec deny-client -n fl-k8s-0153 -- curl -s --max-time 5 http://api/` should time out."
+
+lifecycle:
+  namespaces: [fl-k8s-0153]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: netpol-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-frontend has at least one ingress rule
+    params:
+      name: allow-frontend
+      namespace: fl-k8s-0153
+      hasIngressRules: true
+  - id: http-probe
+    type: k8s.http-probe
+    label: grader-client (role=frontend) can reach api on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0153
+      host: api
+      port: 80
+      contains: "Welcome to nginx"
+  - id: traffic-blocked
+    type: k8s.traffic-blocked
+    label: deny-client (no role=frontend label) is still blocked from api
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0153
+      host: api
+      port: 80

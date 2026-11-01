@@ -1,0 +1,93 @@
+schemaVersion: 1
+id: k8s-0174
+type: task
+title: Three-Tier Application NetworkPolicy
+summary: Apply a complete three-tier security model to a frontend/api/db application using three separate NetworkPolicies.
+track: kubernetes
+level: 7
+order: 24
+difficulty: advanced
+estimatedMinutes: 25
+tags: [networkpolicy, three-tier, ingress, least-privilege, mastery]
+prerequisites: [k8s-0173]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0174`: NetworkPolicy `frontend-open` allows ingress to `app=frontend` from any pod on port 80"
+  - "NetworkPolicy `api-from-frontend` allows ingress to `app=api` only from `app=frontend` on port 80"
+  - "NetworkPolicy `db-from-api` allows ingress to `app=db` only from `app=api` on port 80"
+  - "Pod `grader-client` (external) can reach Service `frontend` on port 80"
+  - "Pod `deny-client` (external) is blocked from reaching Service `api` directly on port 80"
+
+hints:
+  - "Create three separate NetworkPolicies, each selecting a different tier by `app` label. Setting `policyTypes: [Ingress]` on each one creates an implicit default-deny for all unlisted ingress to that tier."
+  - "For `frontend-open`, use an empty `from: []` rule or a `from: [{}]` entry (empty podSelector selects all pods in the namespace). Any pod in the namespace — including `grader-client` — can then reach `frontend`."
+  - "For `api-from-frontend`, the `from` podSelector must match `app=frontend` (only frontend reaches api). For `db-from-api`, match `app=api`. `deny-client` has neither label and will be blocked from both protected tiers."
+
+lifecycle:
+  namespaces: [fl-k8s-0174]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: frontend-open-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy frontend-open selects frontend with Ingress rules
+    params:
+      name: frontend-open
+      namespace: fl-k8s-0174
+      podSelector:
+        matchLabels:
+          app: frontend
+      policyTypes: ["Ingress"]
+      hasIngressRules: true
+
+  - id: api-from-frontend-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy api-from-frontend selects api with Ingress rules
+    params:
+      name: api-from-frontend
+      namespace: fl-k8s-0174
+      podSelector:
+        matchLabels:
+          app: api
+      policyTypes: ["Ingress"]
+      hasIngressRules: true
+
+  - id: db-from-api-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy db-from-api selects db with Ingress rules
+    params:
+      name: db-from-api
+      namespace: fl-k8s-0174
+      podSelector:
+        matchLabels:
+          app: db
+      policyTypes: ["Ingress"]
+      hasIngressRules: true
+
+  - id: frontend-reachable
+    type: k8s.http-probe
+    label: grader-client (external) can reach frontend on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0174
+      host: frontend
+      port: 80
+      contains: "Welcome to nginx"
+
+  - id: api-blocked
+    type: k8s.traffic-blocked
+    label: deny-client (external) is blocked from api on port 80
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0174
+      host: api
+      port: 80

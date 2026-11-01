@@ -1,0 +1,56 @@
+schemaVersion: 1
+id: k8s-0163
+type: task
+title: Isolate a Namespace
+summary: Apply a default-deny-all policy that blocks both ingress and egress to quarantine a compromised namespace.
+track: kubernetes
+level: 7
+order: 13
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [networkpolicy, default-deny, ingress, egress, isolation]
+prerequisites: [k8s-0162]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "NetworkPolicy `isolate-namespace` exists in namespace `fl-k8s-0163`"
+  - "NetworkPolicy `isolate-namespace` selects all pods (empty podSelector)"
+  - "NetworkPolicy `isolate-namespace` declares both Ingress and Egress policyTypes with no rules"
+  - "Pod `deny-client` in `fl-k8s-0163` cannot reach `api.fl-k8s-0163.svc.cluster.local`"
+
+hints:
+  - "An empty `spec.ingress` list (or absent field) with policyTypes including Ingress means default-deny ingress. Same for Egress."
+  - "To isolate all pods in a namespace, use `podSelector: {}` (selects all pods)."
+  - "Combining both in policyTypes: [Ingress, Egress] with no rules blocks everything in and out."
+
+lifecycle:
+  namespaces: [fl-k8s-0163, fl-k8s-0163-safe]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-exists
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy isolate-namespace exists with correct spec
+    params:
+      name: isolate-namespace
+      namespace: fl-k8s-0163
+      podSelector: {}
+      policyTypes: ["Ingress", "Egress"]
+      hasIngressRules: false
+      hasEgressRules: false
+  - id: egress-blocked
+    type: k8s.traffic-blocked
+    label: deny-client in fl-k8s-0163 cannot reach api
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0163
+      host: api.fl-k8s-0163.svc.cluster.local
+      port: 80

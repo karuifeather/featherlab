@@ -1,0 +1,63 @@
+schemaVersion: 1
+id: k8s-0172
+type: task
+title: Egress with Port Restrictions
+summary: Restore egress connectivity for a locked-down client by creating precise egress policies for DNS and the target service.
+track: kubernetes
+level: 7
+order: 22
+difficulty: advanced
+estimatedMinutes: 18
+tags: [networkpolicy, egress, dns, ports, protocol]
+prerequisites: [k8s-0171]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0172`: NetworkPolicy `allow-dns-egress` exists with policyTypes: [Egress] and egress rules"
+  - "NetworkPolicy `allow-api-egress` exists with policyTypes: [Egress] and egress rules"
+  - "Pod `grader-client` (unrestricted) can reach Service `api` on port 80"
+
+hints:
+  - "DNS requires BOTH UDP port 53 AND TCP port 53. Put two separate port entries in the egress rule: `{protocol: UDP, port: 53}` and `{protocol: TCP, port: 53}`."
+  - "Target kube-dns by label using a namespaceSelector for kube-system combined with a podSelector for `k8s-app=kube-dns`. This is more portable than an ipBlock since the kube-dns ClusterIP can change."
+  - "The `allow-api-egress` policy allows TCP port 80 egress from `app=deny-client` to `app=api` pods within the same namespace (no namespaceSelector needed)."
+
+lifecycle:
+  namespaces: [fl-k8s-0172]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: dns-egress-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-dns-egress exists with Egress rules
+    params:
+      name: allow-dns-egress
+      namespace: fl-k8s-0172
+      policyTypes: ["Egress"]
+      hasEgressRules: true
+
+  - id: api-egress-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-api-egress exists with Egress rules
+    params:
+      name: allow-api-egress
+      namespace: fl-k8s-0172
+      policyTypes: ["Egress"]
+      hasEgressRules: true
+
+  - id: http-probe
+    type: k8s.http-probe
+    label: grader-client (unrestricted) can reach api on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0172
+      host: api
+      port: 80
+      contains: "Welcome to nginx"

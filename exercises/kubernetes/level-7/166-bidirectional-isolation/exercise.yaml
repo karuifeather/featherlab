@@ -1,0 +1,58 @@
+schemaVersion: 1
+id: k8s-0166
+type: task
+title: Bidirectional Isolation — Ingress AND Egress
+summary: Apply a NetworkPolicy that blocks both ingress and egress for a specific pod, isolating it from the rest of the cluster.
+track: kubernetes
+level: 7
+order: 16
+difficulty: intermediate
+estimatedMinutes: 10
+tags: [networkpolicy, egress, ingress, isolation, pod-selector]
+prerequisites: [k8s-0165]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "NetworkPolicy `isolate-client` exists in namespace `fl-k8s-0166`"
+  - "NetworkPolicy `isolate-client` selects pods with `app=client`"
+  - "NetworkPolicy `isolate-client` declares both Ingress and Egress with no rules"
+  - "Pod `client` in `fl-k8s-0166` cannot reach `api.fl-k8s-0166.svc.cluster.local`"
+
+hints:
+  - "The policy must target only the `client` pod, not all pods — use `podSelector: {matchLabels: {app: client}}`."
+  - "With both Ingress and Egress in policyTypes and no rules, the selected pod cannot send or receive any traffic."
+  - "Egress isolation also blocks DNS queries — `curl` will exit 6 (can't resolve host)."
+
+lifecycle:
+  namespaces: [fl-k8s-0166]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-exists
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy isolate-client exists with correct spec
+    params:
+      name: isolate-client
+      namespace: fl-k8s-0166
+      podSelector:
+        matchLabels:
+          app: client
+      policyTypes: ["Ingress", "Egress"]
+      hasIngressRules: false
+      hasEgressRules: false
+  - id: client-blocked
+    type: k8s.traffic-blocked
+    label: client pod cannot reach api
+    params:
+      clientPod: client
+      serverPod: api
+      namespace: fl-k8s-0166
+      host: api.fl-k8s-0166.svc.cluster.local
+      port: 80

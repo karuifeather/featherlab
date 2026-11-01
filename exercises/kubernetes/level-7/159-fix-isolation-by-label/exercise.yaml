@@ -1,0 +1,63 @@
+schemaVersion: 1
+id: k8s-0159
+type: task
+title: Fix Isolation by Correcting a Label
+summary: Restore access for a Pod that is missing the right label to match an existing allow-ingress NetworkPolicy, without editing any policy.
+track: kubernetes
+level: 7
+order: 9
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [networkpolicy, ingress, labels, kubectl-label]
+prerequisites: [k8s-0158]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Pod `isolated-client` in namespace `fl-k8s-0159` carries label `role=frontend`"
+  - "Pod `isolated-client` can reach Service `api` — HTTP response contains `nginx`"
+  - "Pod `deny-client` (no `role=frontend` label) still cannot reach Service `api`"
+
+hints:
+  - "Inspect the existing `allow-frontend` NetworkPolicy: `kubectl describe networkpolicy allow-frontend -n fl-k8s-0159`. What label does it require on client Pods?"
+  - "Add the required label to `isolated-client` without editing the policy: `kubectl label pod isolated-client role=frontend -n fl-k8s-0159`"
+  - "After labeling, verify access: `kubectl exec isolated-client -n fl-k8s-0159 -- wget -qO- -T5 http://api.fl-k8s-0159:80/`"
+
+lifecycle:
+  namespaces: [fl-k8s-0159]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: label
+    type: k8s.labels
+    label: Pod isolated-client carries label role=frontend
+    params:
+      kind: Pod
+      name: isolated-client
+      namespace: fl-k8s-0159
+      labels:
+        role: frontend
+  - id: probe
+    type: k8s.http-probe
+    label: Pod isolated-client can reach Service api (allow-frontend now selects it)
+    params:
+      clientPod: isolated-client
+      namespace: fl-k8s-0159
+      host: api.fl-k8s-0159
+      port: 80
+      contains: nginx
+  - id: blocked
+    type: k8s.traffic-blocked
+    label: Pod deny-client (no role=frontend) still cannot reach Service api
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0159
+      host: api.fl-k8s-0159
+      port: 80

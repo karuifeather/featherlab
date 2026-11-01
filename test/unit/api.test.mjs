@@ -43,7 +43,7 @@ test("GET /api/status", async () => {
   const { status, body } = await call("/api/status");
   assert.equal(status, 200);
   // The v0.1 `track`/`exercise` fields were removed with the /api/check alias (M5.1).
-  assert.deepEqual(body, { ready: true, cluster: "featherlab", exercises: 150 });
+  assert.deepEqual(body, { ready: true, cluster: "featherlab", exercises: 174 });
 });
 
 test("GET /api/exercises lists summaries and supports filters", async () => {
@@ -82,6 +82,7 @@ test("GET /api/exercises lists summaries and supports filters", async () => {
       "k8s-0020",
       "k8s-0003",
       "k8s-0007",
+      "k8s-0159",
     ],
   );
   assert.deepEqual(

@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0156
+type: task
+title: Default-Deny Egress
+summary: Apply a default-deny egress NetworkPolicy to a client Pod and confirm all outbound traffic — including DNS — is blocked.
+track: kubernetes
+level: 7
+order: 6
+difficulty: intermediate
+estimatedMinutes: 12
+tags: [networkpolicy, egress, dns]
+prerequisites: [k8s-0155]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0156`: NetworkPolicy `deny-egress-client` selects pods with label `app=deny-client`, sets `policyTypes: [Egress]`, and has no egress rules (default-deny all outbound)"
+  - "Pod `deny-client` cannot reach Service `api` — curl exits with code 6 (DNS blocked) or 28 (TCP timeout)"
+
+hints:
+  - "A NetworkPolicy with `policyTypes: [Egress]` and no `egress:` field blocks all outbound traffic from the selected Pods — including DNS resolution."
+  - "Use `kubectl apply -f deny-egress.yaml -n fl-k8s-0156` to create the policy. Verify with `kubectl describe networkpolicy deny-egress-client -n fl-k8s-0156`."
+  - "Test the block manually: `kubectl exec deny-client -n fl-k8s-0156 -- curl -s --max-time 5 http://api.fl-k8s-0156/` — you should get an error (code 6 or 28), not a response."
+
+lifecycle:
+  namespaces: [fl-k8s-0156]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy deny-egress-client selects app=deny-client and has no egress rules
+    params:
+      name: deny-egress-client
+      namespace: fl-k8s-0156
+      podSelector:
+        matchLabels:
+          app: deny-client
+      policyTypes: ["Egress"]
+      hasEgressRules: false
+  - id: blocked
+    type: k8s.traffic-blocked
+    label: Pod deny-client cannot reach Service api (egress blocked)
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0156
+      host: api.fl-k8s-0156
+      port: 80

@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0169
+type: task
+title: Multi-Tier Connectivity
+summary: Apply NetworkPolicies to a three-tier application so frontend is open, backend is protected from direct external access, and db is accessible only from the backend.
+track: kubernetes
+level: 7
+order: 19
+difficulty: advanced
+estimatedMinutes: 18
+tags: [networkpolicy, ingress, multi-tier, least-privilege]
+prerequisites: [k8s-0168]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0169`: NetworkPolicy `backend-access` restricts ingress to the `backend` Pod to pods with `app=frontend` only"
+  - "Pod `grader-client` can reach `frontend.fl-k8s-0169` on port 80"
+  - "Pod `deny-client` cannot reach `backend.fl-k8s-0169` directly on port 80"
+
+hints:
+  - "A NetworkPolicy with policyTypes: [Ingress] and at least one ingress rule creates an implicit default-deny for all other ingress to the selected pods."
+  - "To allow ingress only from pods with label `app=frontend`, use `from: [{podSelector: {matchLabels: {app: frontend}}}]`."
+  - "Check both paths: grader-client → frontend should succeed (frontend has no NetworkPolicy); deny-client → backend should time out (blocked by backend-access)."
+
+lifecycle:
+  namespaces: [fl-k8s-0169]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: backend-access-policy
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy backend-access selects backend and restricts Ingress
+    params:
+      name: backend-access
+      namespace: fl-k8s-0169
+      podSelector:
+        matchLabels:
+          app: backend
+      policyTypes: ["Ingress"]
+      hasIngressRules: true
+  - id: frontend-reachable
+    type: k8s.http-probe
+    label: grader-client can reach frontend Service on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0169
+      host: frontend.fl-k8s-0169
+      port: 80
+      contains: nginx
+  - id: backend-blocked
+    type: k8s.traffic-blocked
+    label: deny-client cannot reach backend Service directly
+    params:
+      clientPod: deny-client
+      serverPod: backend
+      namespace: fl-k8s-0169
+      host: backend.fl-k8s-0169
+      port: 80

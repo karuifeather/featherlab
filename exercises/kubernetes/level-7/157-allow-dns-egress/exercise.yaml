@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0157
+type: task
+title: Allow DNS Egress
+summary: Restore DNS resolution for a Pod under a default-deny egress policy by permitting outbound traffic to the kube-dns ClusterIP on port 53.
+track: kubernetes
+level: 7
+order: 7
+difficulty: intermediate
+estimatedMinutes: 14
+tags: [networkpolicy, egress, dns, coredns]
+prerequisites: [k8s-0156]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0157`: NetworkPolicy `allow-dns` selects pods with label `app=deny-client`, sets `policyTypes: [Egress]`, and has at least one egress rule"
+  - "Pod `deny-client` still cannot reach Service `api` via TCP — curl exits 28 (TCP blocked) now that DNS resolves but the server is not yet permitted"
+
+hints:
+  - "kube-dns runs in the `kube-system` namespace. Find its ClusterIP: `kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}'`. In a standard kind cluster this is `10.96.0.10`."
+  - "Use `ipBlock: {cidr: 10.96.0.10/32}` as the egress destination, with ports 53 on both `UDP` and `TCP` protocols."
+  - "After applying, test DNS: `kubectl exec deny-client -n fl-k8s-0157 -- nslookup api.fl-k8s-0157`. You should get an answer — but `curl http://api.fl-k8s-0157/` still times out (exit 28) because only DNS is permitted."
+
+lifecycle:
+  namespaces: [fl-k8s-0157]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-dns selects app=deny-client with at least one egress rule
+    params:
+      name: allow-dns
+      namespace: fl-k8s-0157
+      podSelector:
+        matchLabels:
+          app: deny-client
+      policyTypes: ["Egress"]
+      hasEgressRules: true
+  - id: blocked
+    type: k8s.traffic-blocked
+    label: Pod deny-client still cannot reach api (TCP still blocked, DNS now resolves)
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0157
+      host: api.fl-k8s-0157
+      port: 80

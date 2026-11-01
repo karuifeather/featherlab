@@ -1,0 +1,55 @@
+schemaVersion: 1
+id: k8s-0158
+type: task
+title: Allow Egress to a Specific Service
+summary: Add an egress rule that permits a client Pod to reach a specific server Pod by label, completing the DNS-plus-destination egress pattern.
+track: kubernetes
+level: 7
+order: 8
+difficulty: intermediate
+estimatedMinutes: 14
+tags: [networkpolicy, egress, pod-selector]
+prerequisites: [k8s-0157]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0158`: NetworkPolicy `allow-api-egress` selects pods with label `app=deny-client`, sets `policyTypes: [Egress]`, and has at least one egress rule"
+  - "Pod `grader-client` (no egress restriction) can reach Service `api` — HTTP response contains `nginx`"
+
+hints:
+  - "The egress `to` field in a NetworkPolicy can target Pods by label using `podSelector`. Target pods with `app: api` on port 80."
+  - "Your policy should look similar to the `allow-dns` policy you created in the previous exercise, but target `app=api` pods on TCP port 80 instead of the kube-dns IP on port 53."
+  - "Verify grader-client can reach api: `kubectl exec grader-client -n fl-k8s-0158 -- wget -qO- -T5 http://api.fl-k8s-0158:80/`"
+
+lifecycle:
+  namespaces: [fl-k8s-0158]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-api-egress selects app=deny-client with at least one egress rule
+    params:
+      name: allow-api-egress
+      namespace: fl-k8s-0158
+      podSelector:
+        matchLabels:
+          app: deny-client
+      policyTypes: ["Egress"]
+      hasEgressRules: true
+  - id: api-probe
+    type: k8s.http-probe
+    label: Pod grader-client (unrestricted) reaches Service api
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0158
+      host: api.fl-k8s-0158
+      port: 80
+      contains: nginx

@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: k8s-0170
+type: task
+title: TCP and UDP Protocol Policies
+summary: Create a NetworkPolicy that explicitly targets TCP port 80 and verify that only pods with the allowed label can reach the API server.
+track: kubernetes
+level: 7
+order: 20
+difficulty: advanced
+estimatedMinutes: 15
+tags: [networkpolicy, protocol, tcp, udp, ports]
+prerequisites: [k8s-0169]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0170`: NetworkPolicy `allow-role-allowed` exists"
+  - "Policy `allow-role-allowed` has policyTypes: [Ingress] with at least one ingress rule"
+  - "Pod `grader-client` (label `role=allowed`) can reach Service `api` on TCP port 80"
+  - "Pod `deny-client` (label `role=blocked`) is blocked from reaching Service `api` on port 80"
+
+hints:
+  - "A pre-existing `deny-all` policy already blocks all ingress to `app=api`. Add a separate NetworkPolicy that explicitly allows ingress from pods with label `role=allowed`."
+  - "To restrict to TCP specifically, set `protocol: TCP` in the port entry: `ports: [{protocol: TCP, port: 80}]`. Without `protocol`, the default is TCP anyway — but making it explicit is the lesson."
+  - "Verify the pod labels: `kubectl get pods -n fl-k8s-0170 --show-labels`. The `grader-client` has `role=allowed`; the `deny-client` has `role=blocked`."
+
+lifecycle:
+  namespaces: [fl-k8s-0170]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-spec
+    type: k8s.networkpolicy-spec
+    label: NetworkPolicy allow-role-allowed exists with Ingress rules
+    params:
+      name: allow-role-allowed
+      namespace: fl-k8s-0170
+      policyTypes: ["Ingress"]
+      hasIngressRules: true
+
+  - id: http-probe
+    type: k8s.http-probe
+    label: grader-client (role=allowed) can reach api on port 80
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0170
+      host: api
+      port: 80
+      contains: "Welcome to nginx"
+
+  - id: traffic-blocked
+    type: k8s.traffic-blocked
+    label: deny-client (role=blocked) is blocked from api on port 80
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0170
+      host: api
+      port: 80

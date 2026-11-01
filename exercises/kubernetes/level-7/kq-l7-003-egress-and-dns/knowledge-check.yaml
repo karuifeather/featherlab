@@ -1,0 +1,111 @@
+schemaVersion: 1
+id: kq-k8s-l7-003
+activityType: knowledge-check
+title: Egress and DNS
+summary: Understand how egress NetworkPolicy affects DNS resolution and how to restore it correctly.
+track: kubernetes
+level: 7
+order: 7.5
+difficulty: intermediate
+estimatedMinutes: 8
+tags: [networkpolicy, egress, dns, coredns, ports]
+relatedLabs: [k8s-0156, k8s-0157, k8s-0158]
+contentRevision: "1.0"
+
+questions:
+  - id: q1
+    type: single-choice
+    prompt: "You apply a default-deny egress policy to pod A. Pod A then tries `curl http://api.my-namespace.svc.cluster.local/`. What curl exit code do you expect and why?"
+    options:
+      - id: a
+        text: "Exit 28 — the TCP connection to api times out because TCP egress to port 80 is blocked"
+      - id: b
+        text: "Exit 6 — curl cannot resolve the hostname because DNS egress on port 53 is also blocked"
+      - id: c
+        text: "Exit 7 — the connection is refused because the api Service is not running"
+      - id: d
+        text: "Exit 0 — DNS is always allowed even with a default-deny egress policy"
+    correctAnswer: b
+    explanation: "A default-deny egress policy blocks ALL outbound traffic including DNS (UDP/TCP port 53). Without DNS, curl cannot resolve `api.my-namespace.svc.cluster.local` and exits with code 6 ('Couldn't resolve host'). The TCP connection to port 80 never even starts — the block happens at the DNS lookup stage."
+    wrongExplanations:
+      a: "Exit 28 (timeout) occurs when TCP is blocked but DNS still works (because DNS was explicitly allowed). With a complete default-deny, DNS fails first and the exit code is 6."
+      c: "Exit 7 (connection refused) means the TCP connection reached the server but was actively rejected. This requires DNS to work first. With egress blocked, you never get past DNS."
+      d: "DNS is NOT exempt from egress NetworkPolicy. It runs over UDP and TCP port 53, which are blocked like any other traffic."
+
+  - id: q2
+    type: single-choice
+    prompt: "Which kube-system Service must be allowed in an egress rule to restore DNS resolution for a pod with a default-deny egress policy?"
+    options:
+      - id: a
+        text: "The `kubernetes` Service (ClusterIP for the API server)"
+      - id: b
+        text: "The `kube-dns` Service (CoreDNS)"
+      - id: c
+        text: "The `kube-proxy` Service"
+      - id: d
+        text: "The `etcd-client` Service"
+    correctAnswer: b
+    explanation: "`kube-dns` is the Service name for CoreDNS, the in-cluster DNS resolver. Pods send DNS queries to the kube-dns ClusterIP on port 53 (UDP for normal queries, TCP for large responses). To restore DNS in an egress policy, you must allow egress to the `kube-dns` Service or its backing pods."
+    wrongExplanations:
+      a: "The `kubernetes` Service provides access to the Kubernetes API server, not DNS. It is needed for pods that call the API, not for general DNS resolution."
+      c: "`kube-proxy` manages Service ClusterIPs via iptables rules. It does not answer DNS queries."
+      d: "`etcd-client` is the etcd API endpoint, used by the API server. It has nothing to do with pod DNS resolution."
+    tryCommand: "kubectl get svc kube-dns -n kube-system"
+
+  - id: q3
+    type: single-choice
+    prompt: "What is the default kube-dns ClusterIP in most Kubernetes clusters (including kind clusters)?  This IP is commonly used in egress ipBlock rules, though targeting CoreDNS by label is more portable."
+    options:
+      - id: a
+        text: "10.0.0.1"
+      - id: b
+        text: "10.96.0.10"
+      - id: c
+        text: "172.17.0.1"
+      - id: d
+        text: "10.0.0.53"
+    correctAnswer: b
+    explanation: "10.96.0.10 is the conventional kube-dns ClusterIP used by kubeadm and kind clusters with default service CIDR 10.96.0.0/12. However, this IP can differ across clusters, so targeting CoreDNS pods by label (`k8s-app=kube-dns` in namespace `kube-system`) is more portable than hardcoding the IP."
+    wrongExplanations:
+      a: "10.0.0.1 is not the standard kube-dns IP. The typical default is 10.96.0.10 for kubeadm-based clusters."
+      c: "172.17.0.1 is typically the Docker bridge gateway, not the kube-dns address."
+      d: "While 53 is the DNS port, 10.0.0.53 is not the standard kube-dns ClusterIP. The standard is 10.96.0.10 for most clusters."
+    tryCommand: "kubectl get svc kube-dns -n kube-system -o jsonpath='{.spec.clusterIP}'"
+
+  - id: q4
+    type: single-choice
+    prompt: "A NetworkPolicy has `policyTypes: [Egress]` with no egress rules. The same pod also has an ingress NetworkPolicy that allows ingress from pod B. Does the egress policy affect ingress?"
+    options:
+      - id: a
+        text: "Yes — adding Egress to policyTypes also creates an implicit ingress default-deny"
+      - id: b
+        text: "Yes — the absence of egress rules makes all traffic (both directions) blocked"
+      - id: c
+        text: "No — policyTypes are independent; Egress in policyTypes only controls egress"
+      - id: d
+        text: "No — ingress rules override any egress-only policy"
+    correctAnswer: c
+    explanation: "`policyTypes` controls which directions are governed by the policy. A policy listing only `Egress` affects only outbound traffic from selected pods. Ingress is governed by separate NetworkPolicy objects that list `Ingress` in their `policyTypes`. The two directions are completely independent."
+    wrongExplanations:
+      a: "Only listing `Ingress` in `policyTypes` creates an ingress default-deny. An egress-only policy has no effect on ingress behavior."
+      b: "Absence of egress rules creates an egress default-deny only when `Egress` is in `policyTypes`. It has no effect on ingress."
+      d: "Ingress and egress policies do not override each other. They operate on different directions and are evaluated independently."
+
+  - id: q5
+    type: single-choice
+    prompt: "Why must you allow BOTH UDP port 53 AND TCP port 53 in a DNS egress rule?"
+    options:
+      - id: a
+        text: "UDP port 53 is for queries from pods; TCP port 53 is for responses from CoreDNS"
+      - id: b
+        text: "DNS normally uses UDP for queries, but falls back to TCP for large responses (truncated UDP replies)"
+      - id: c
+        text: "Kubernetes requires TCP for DNS in production; UDP port 53 is only used in development"
+      - id: d
+        text: "Allowing only one protocol would block half of the DNS servers in the cluster"
+    correctAnswer: b
+    explanation: "DNS uses UDP by default because it is connectionless and low-overhead for small queries. However, DNS responses exceeding 512 bytes (or 4096 bytes with EDNS0) are truncated and the client retries over TCP. Modern queries (AAAA, SRV, DNSSEC) often exceed these limits. If TCP port 53 is blocked, DNS resolution can silently fail for certain hostnames, causing intermittent connectivity issues."
+    wrongExplanations:
+      a: "This is incorrect. Both client requests and server responses use the same protocol (UDP or TCP) for a given query. The fallback is the client switching from UDP to TCP when it receives a truncated UDP response."
+      c: "TCP port 53 is not a production-vs-development distinction. Both UDP and TCP port 53 are used in production DNS for the reasons described."
+      d: "CoreDNS instances listen on both UDP/53 and TCP/53. This is about protocol fallback, not multiple servers."

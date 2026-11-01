@@ -1,0 +1,63 @@
+schemaVersion: 1
+id: k8s-0168
+type: task
+title: Fix a Policy Interaction Bug
+summary: Diagnose and fix a NetworkPolicy whose policyTypes declaration is missing Ingress, causing the ingress allow rules to be silently ignored.
+track: kubernetes
+level: 7
+order: 18
+difficulty: intermediate
+estimatedMinutes: 15
+tags: [networkpolicy, debugging, policy-types, ingress]
+prerequisites: [k8s-0167]
+
+environment:
+  profile: kind-networkpolicy
+
+content:
+  description: description.md
+  solution: solution.md
+
+requirements:
+  - "Namespace `fl-k8s-0168`: NetworkPolicy `allow-frontend-buggy` has policyTypes that includes both Ingress and Egress"
+  - "NetworkPolicy `allow-frontend-buggy` has at least one ingress rule"
+  - "Pod `grader-client` (role: frontend) can reach `api.fl-k8s-0168.svc.cluster.local`"
+  - "Pod `deny-client` cannot reach `api.fl-k8s-0168.svc.cluster.local`"
+
+hints:
+  - "Inspect the broken policy: `kubectl get networkpolicy allow-frontend-buggy -n fl-k8s-0168 -o yaml`"
+  - "Look at `spec.policyTypes`. What types are listed? What is missing? When `policyTypes` does not include `Ingress`, the ingress rules are silently ignored."
+  - "Fix: add `Ingress` to the `policyTypes` list and reapply with `kubectl apply`."
+
+lifecycle:
+  namespaces: [fl-k8s-0168]
+  setup:
+    manifests: [setup/resources.yaml]
+
+checks:
+  - id: policy-fixed
+    type: k8s.networkpolicy-spec
+    label: allow-frontend-buggy has policyTypes [Ingress, Egress] with ingress rules
+    params:
+      name: allow-frontend-buggy
+      namespace: fl-k8s-0168
+      policyTypes: ["Ingress", "Egress"]
+      hasIngressRules: true
+  - id: grader-allowed
+    type: k8s.http-probe
+    label: grader-client (role=frontend) can reach api
+    params:
+      clientPod: grader-client
+      namespace: fl-k8s-0168
+      host: api.fl-k8s-0168.svc.cluster.local
+      port: 80
+      contains: nginx
+  - id: deny-blocked
+    type: k8s.traffic-blocked
+    label: deny-client cannot reach api
+    params:
+      clientPod: deny-client
+      serverPod: api
+      namespace: fl-k8s-0168
+      host: api.fl-k8s-0168.svc.cluster.local
+      port: 80
