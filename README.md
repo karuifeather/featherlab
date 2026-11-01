@@ -1,177 +1,164 @@
 # FeatherLab
 
-A local-first Kubernetes practice playground. It includes the npm CLI, a Docker workstation, a real kind cluster, a React launcher, a browser terminal, and a data-driven exercise engine with graded Kubernetes exercises.
+A local-first Kubernetes practice environment. Real cluster, real kubectl, guided exercises, and automated grading.
 
-## Prerequisites
+## What is FeatherLab?
 
-- Linux host (initially developed for Fedora/Nobara; macOS is exploratory, Windows/WSL2 is not validated).
-- Node.js >= 22.14 and npm.
-- Docker Engine with daemon running and access for the current user (`docker info`).
-- `kind` CLI; recommended v0.33.0. https://kind.sigs.k8s.io/docs/user/quick-start/
-- Internet access on first start for the workstation, kind node image, and practice workload image. Afterwards some work is possible offline if images are cached.
+FeatherLab is a self-contained Kubernetes learning environment that runs on your machine. It manages a [kind](https://kind.sigs.k8s.io/) cluster and a browser-based workspace so you can develop real Kubernetes skills without signing up for a hosted platform or provisioning cloud infrastructure.
 
-The CLI uses your **host Docker + kind** to create `kind-featherlab` and a separate workstation container. It does **not** mount the Docker socket into the learner workstation.
+Every exercise runs against an actual Kubernetes cluster. When you create a Deployment, it schedules Pods. When you misconfigure a probe, it fails. When you fix a broken service selector, traffic flows. Grading inspects actual cluster state — not commands typed, not simulated output.
 
-## Run locally from source
+The curriculum is structured to build skill progressively: guided labs introduce concepts one or two at a time, independent exercises apply them, troubleshooting tasks require diagnosis, and mastery activities combine what you have learned. Interleaved knowledge checks reinforce commands, flags, and operational reasoning. Progress is tracked locally in SQLite and survives restarts.
+
+FeatherLab is being developed toward broad coverage of CKA, CKAD, CKS, KCNA, and KCSA — the CNCF Kubernetes certification family. The current curriculum covers foundations through advanced networking. Storage, RBAC, cluster administration, and security hardening are planned.
+
+## What you can do
+
+**Practice on real Kubernetes.** Work against a real kind cluster using `kubectl`. No simulation layer, no fake terminal.
+
+**Learn progressively.** Move through levels that introduce one concept at a time before combining them or breaking them on purpose.
+
+**Solve hands-on challenges.** Create, modify, troubleshoot, and recover Kubernetes resources — Pods, Deployments, Services, Ingress, NetworkPolicies, and more.
+
+**Get meaningful feedback.** Checks inspect actual Kubernetes state. A check that fails tells you what it found, not just "wrong".
+
+**Build command fluency.** Knowledge checks cover `kubectl` commands, flags, output formats, and operational decisions — not just recall, but choosing the right tool.
+
+**Track progress.** Completion, attempt history, and prerequisite unlocking are stored locally and persist across sessions. Start where you left off.
+
+**Work locally.** No account required, no data sent to a server, no time limit.
+
+**Resume safely.** Reopening an exercise you already started leaves your work intact. Switching to a different exercise prepares a fresh environment. The cluster and its workloads are preserved across `featherlab stop` and restart.
+
+## See it in action
+
+<img src="docs/screenshots/launcher.png" width="800" alt="Launcher with progress">
+
+_The launcher shows your progress across levels and resumes where you left off._
+
+<img src="docs/screenshots/workspace.png" width="800" alt="Exercise workspace with live terminal">
+
+_Each exercise has a description, requirements, and a live terminal connected to a real Kubernetes cluster._
+
+<img src="docs/screenshots/grading.png" width="800" alt="Grading results">
+
+_Grading checks actual cluster state and tells you exactly which conditions passed or failed._
+
+## Getting started
+
+### Prerequisites
+
+- Linux. macOS is exploratory but not regularly tested. Windows and WSL2 are not validated.
+- [Node.js](https://nodejs.org/) 22.14 or later and npm.
+- [Docker Engine](https://docs.docker.com/engine/install/) with the daemon running and accessible to the current user (`docker info` should succeed).
+- [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) CLI. Version 0.33.0 is recommended.
+- Internet access on first launch and when opening Level 6 exercises for the first time (kind node image, workstation image, and Traefik). Most subsequent use is offline if images are cached.
+
+### Install
 
 ```bash
-npm install
-npm run build
-npm test
-
-docker build -t featherlab-workstation:dev docker
-FEATHERLAB_IMAGE=featherlab-workstation:dev npm start
+npm install -g featherlab
+featherlab doctor
+featherlab
 ```
 
-On first launch the CLI creates the isolated kind cluster; later launches reuse it. The CLI opens `http://127.0.0.1:4317` in the default browser. This **HTTP localhost endpoint is intentional** for development; HTTPS for trusted LAN hosting will be a separate feature. The UI defaults to localhost-only and must not be placed directly on the public internet.
+`featherlab doctor` checks that Docker and kind are reachable. `featherlab` (or `featherlab start`) creates the practice cluster on first launch, starts the browser workspace, and opens `http://127.0.0.1:4317` in your default browser.
 
-Alternatively, test the actual packaged CLI without an npm registry publication:
+Later launches reuse the existing cluster and workstation.
+
+### What happens on start
+
+1. FeatherLab checks prerequisites and provisions the kind cluster if it does not exist.
+2. A non-root workstation container joins the cluster's Docker network. This is where you run `kubectl`.
+3. A local HTTP server starts and opens the browser workspace.
+4. The launcher shows your progress and resume state. Select an exercise to begin.
+
+### Removing FeatherLab
 
 ```bash
-npm run build
-npm pack
-npm install -g ./featherlab-0.2.0.tgz
-FEATHERLAB_IMAGE=featherlab-workstation:dev featherlab
+featherlab stop
+docker rm featherlab-workstation
+kind delete cluster --name featherlab
+rm -rf ~/.featherlab          # kubeconfigs, progress database, PID file
+npm uninstall -g featherlab
 ```
-
-This `npm pack` approach exercises the same tarball structure users will install when published. You must build the image first as shown above.
 
 ## CLI
 
 ```bash
-featherlab             # start workstation and browser UI (alias: featherlab start)
-featherlab stop        # gracefully stop a running featherlab, or stop resources directly
-featherlab update      # upgrade to the latest version from npm
-featherlab doctor      # check Docker daemon and kind
-featherlab status      # show runtime status
-featherlab exercises   # list available exercises
-featherlab reset [id] [--yes]  # reset an exercise (default k8s-0001); --yes if another holds the cluster
-featherlab validate-content [dir]  # validate exercise definitions offline (no Docker needed)
-featherlab --version   # print version (alias: -V)
+featherlab                     # start workstation and open browser (alias: featherlab start)
+featherlab stop                # gracefully stop a running instance, or stop containers directly
+featherlab doctor              # check Docker and kind prerequisites
+featherlab status              # show cluster and workstation state
+featherlab exercises           # list available exercises
+featherlab reset [id] [--yes]  # reset an exercise (default: k8s-0001); --yes takes the environment from another
+featherlab update              # upgrade to the latest version from npm
+featherlab --version
 featherlab --help
 ```
 
-Environment overrides:
+`featherlab update` refuses to run while a server is active — stop it first. Commands other than `start` and `update` never make network requests.
 
-| Variable               | Default                                                 | Notes                     |
-| ---------------------- | ------------------------------------------------------- | ------------------------- |
-| `FEATHERLAB_IMAGE`     | `ghcr.io/karuifeather/featherlab-workstation:<version>` | Workstation image         |
-| `FEATHERLAB_PORT`      | `4317`                                                  | HTTP port; must be ≥ 1024 |
-| `FEATHERLAB_STATE_DIR` | `~/.featherlab`                                         | Kubeconfigs, PID file     |
+Three environment variables override defaults:
 
-**Graceful shutdown:** `featherlab stop` reads `~/.featherlab/featherlab.pid`. If the file exists and the recorded process is still the FeatherLab CLI (verified by entry-point path and process start time, not just the PID), it sends SIGTERM and waits up to 15 seconds for a clean exit. If no running instance is found, it stops the workstation container and kind node containers directly. The cluster and its workloads are always preserved; only the containers are stopped.
+| Variable               | Default                                                 | Notes                                    |
+| ---------------------- | ------------------------------------------------------- | ---------------------------------------- |
+| `FEATHERLAB_IMAGE`     | `ghcr.io/karuifeather/featherlab-workstation:<version>` | Workstation image                        |
+| `FEATHERLAB_PORT`      | `4317`                                                  | HTTP port                                |
+| `FEATHERLAB_STATE_DIR` | `~/.featherlab`                                         | Kubeconfigs, progress database, PID file |
 
-Ctrl+C while `featherlab` is running triggers the same graceful shutdown. A second Ctrl+C returns the terminal immediately; the `docker stop` processes run in their own process group, so the containers still finish stopping in the background and no manual `docker stop` is needed.
+## What's included
 
-**Upgrading:** `featherlab update` performs a fresh version check against the npm registry (bypassing the local cache), then runs `npm install -g featherlab@<latest>`. It refuses to run while a `featherlab` process is live — stop the server first. If the npm install fails due to permissions, it prints the manual command (`sudo npm install -g …`) rather than escalating automatically. After a successful upgrade, if the running workstation container was built with an older image, the command notes the mismatch and reminds you that the existing workstation has not been modified; the updated image will be used the next time a new workstation is created.
+174 hands-on exercises and 54 knowledge checks across eight levels:
 
-Other commands (`status`, `reset`, `exercises`, …) never make network requests. They read a version cache warmed by `featherlab start` and display a one-line update notice when the cache indicates a newer version is available.
+| Level | Theme                                                                               | Exercises | Checks |
+| ----- | ----------------------------------------------------------------------------------- | --------- | ------ |
+| 0     | Kubernetes foundations — Pods, namespaces, labels, Deployments                      | 10        | 7      |
+| 1     | Deployment lifecycle — rolling updates, rollback, release management                | 18        | 6      |
+| 2     | Configuration, health, and recovery — ConfigMaps, Secrets, probes                   | 25        | 6      |
+| 3     | Application patterns — init containers, native sidecars, Jobs, CronJobs, DaemonSets | 25        | 7      |
+| 4     | Resource management and scheduling — requests, limits, QoS, affinity, HPA           | 19        | 8      |
+| 5     | Services and DNS — ClusterIP, EndpointSlices, DNS, blue/green, canary               | 27        | 7      |
+| 6     | Ingress and Gateway API — HTTP routing, TLS, cross-namespace routing                | 26        | 6      |
+| 7     | NetworkPolicy — default-deny, egress, namespace selectors, multi-tier isolation     | 24        | 7      |
 
-To completely remove the local lab: `featherlab stop`, then `docker rm featherlab-workstation`, `kind delete cluster --name featherlab`, and optionally delete `~/.featherlab`. **Never run these cleanup commands for clusters you wish to keep.**
+Each level mixes guided labs, independent exercises, troubleshooting, and mastery activities. Knowledge checks are interleaved throughout rather than grouped at the end.
 
-## Release pipeline: test distribution from day one
+See [docs/curriculum.md](docs/curriculum.md) for the full exercise list with prerequisites, difficulty ratings, and skill coverage notes.
 
-One GitHub repository (`karuifeather/featherlab` assumed; change package.json and image defaults if the owner differs):
+## What's coming
 
-1. Push this source to the chosen public GitHub repository. GitHub Actions CI runs formatting, lint, content validation and unit tests, builds the frontend, verifies and installs the npm tarball, and then (in a separate job) runs the kind lifecycle and Playwright browser tests against disposable clusters. The release workflow reuses the same gates before publishing.
-2. Confirm `featherlab` is free on the public npm registry, or change `package.json` name to a scoped package such as `@karuifeather/featherlab` (the executable still remains `featherlab`).
-3. Configure **npm trusted publishing** for the exact repository and `.github/workflows/release.yml`, allowing direct `npm publish`. For a brand-new package, follow npm's bootstrap/publisher setup UI instructions. npm trusted publishing needs Node 22.14+, npm 11.5.1+, and GitHub Actions `id-token: write`; this workflow uses Node 24. https://docs.npmjs.com/trusted-publishers/
-4. Tag and push the version matching `package.json`:
+The current curriculum ends at Level 7. In development:
 
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+- **Level 8 — Storage**: PersistentVolumes, PersistentVolumeClaims, StorageClasses, stateful workloads.
+- **Level 9 — ServiceAccounts and RBAC**: permissions, roles, bindings, and admission basics.
+- **Level 10 — Kustomize, Helm, and CRDs**: packaging and delivering applications.
+- **Levels 11–12**: Integrated CKAD mastery and structured troubleshooting.
+- **Levels 13–15**: Cluster administration, node maintenance, etcd, and CKA readiness.
+- **Levels 16–21**: Cloud-native security, workload hardening, supply chain, and CKS readiness.
 
-5. The release workflow builds and pushes `ghcr.io/<your-user>/featherlab-workstation:0.1.0` and `:latest`, then publishes the compiled CLI on npm. GHCR uses the built-in GITHUB_TOKEN (no PAT required). **Set the GHCR package visibility to Public** after the first push so that anonymous users can pull.
-6. On a clean machine test the actual release:
+The long-term goal is to cover all five CNCF certifications through original, verified lab content. Progress is made in small batches: each exercise is validated on a real cluster before release.
 
-   ```bash
-   npm install -g featherlab
-   featherlab doctor
-   featherlab
-   ```
+## Safety and local use
 
-   If using a scoped npm package, install that name instead.
+FeatherLab is a **single-user, local-first tool**. It is not a multi-tenant sandbox and makes no attempt to defend against the learner.
 
-7. The release workflow's smoke job and the manual **Real kind smoke test** workflow validate the full Docker → kind → browser API → grading path with the real `featherlab` names on a CI runner.
+- Run it on a trusted machine. The CLI controls Docker on your host.
+- The default server binds to `127.0.0.1:4317`. Do not expose it over a public tunnel or bind it to a public address.
+- The learner workstation holds cluster-admin credentials for the dedicated practice cluster. That cluster is isolated and disposable; it holds no real data.
+- `featherlab reset` deletes and recreates only the namespaces owned by the target exercise. Your cluster, other namespaces, and workstation files are never touched.
+- kind must be installed separately. FeatherLab does not auto-download it.
 
-**Release consistency:** the default workstation image tag is derived from the `package.json` version at runtime, and the release workflow checks that the git tag matches it. Once published, do not move version-specific tags; only `latest` may move.
+See [docs/security.md](docs/security.md) for the full threat model and operational safety rules.
 
-## Architecture
+## Development and contributing
 
-```text
-npm CLI (host Node.js process)
-  ├─ LifecycleCoordinator — state machine (stopped/starting/running/stopping/failed);
-  │    idempotent requestShutdown(); SIGINT/SIGTERM → graceful teardown
-  ├─ local HTTP server: serves bundled React UI and the exercise API
-  │    └─ application service → exercise engine (YAML-defined exercises, validators, lifecycle)
-  ├─ WebSocket: Docker exec API TTY stream (interactive terminal, close frame on shutdown)
-  ├─ kind CLI: controls isolated real Kubernetes cluster
-  │    └─ kind-nodes helper — stopClusterNodes/startClusterNodes (ownership-verified via
-  │         io.x-k8s.kind.cluster label); waitForClusterReady (exponential backoff poll)
-  ├─ Docker CLI: pulls and creates learner workstation
-  └─ management runner: allow-listed `kubectl` via docker exec, for grading and reset
+| Document                                     | Covers                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| [docs/development.md](docs/development.md)   | Building from source, testing, project structure, release workflow |
+| [docs/architecture.md](docs/architecture.md) | Module boundaries, lifecycle, persistence, frontend progression    |
+| [docs/authoring.md](docs/authoring.md)       | Adding exercises, validators, and tracks                           |
+| [docs/curriculum.md](docs/curriculum.md)     | Implemented curriculum with full exercise tables                   |
+| [docs/security.md](docs/security.md)         | Threat model, trust boundaries, lifecycle safety                   |
 
-Docker: kind network
-  ├─ kind-featherlab-control-plane [real Kubernetes]
-  └─ featherlab-workstation [non-root Linux + kubectl, no Docker socket]
-```
-
-Exercises live in `exercises/` as YAML and Markdown and are discovered automatically; grading
-inspects the resulting Kubernetes state through reusable validators. See
-[docs/architecture.md](docs/architecture.md) for module boundaries and
-[docs/authoring.md](docs/authoring.md) for adding exercises, validators and tracks.
-
-### API
-
-`GET /api/exercises[?track=&level=&difficulty=&tag=]`, `GET /api/exercises/:id`,
-`GET /api/exercises/:id/hints/:n`, `POST /api/exercises/:id/{activate,check,reset}`,
-`POST /api/exercises/:id/select`, `GET /api/exercises/:id/progress`,
-`GET /api/progress/track/:trackId`, `GET /api/resume`, and `GET /api/status` (`ready`, `cluster`,
-`exercises` count). Only the exercise that currently owns the practice environment can be
-checked, so open it (`activate`) before `check`. Errors are `{error, code}`. Requests must use a
-loopback `Host` header (`127.0.0.1:<port>` or `localhost:<port>`). The v0.1 `POST /api/check`
-alias and the v0.1 `track`/`exercise` fields of `/api/status` were removed in M5.1.
-
-### Tests
-
-| Command                             | What it covers                                                                                                                                                                                                                | Needs Docker/kind |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `npm test`                          | Unit tests with a fake cluster, content validation, API/security, CLI exit codes, isolation guard, and a packaging test that packs the project and runs it from the unpacked tarball.                                         | no                |
-| `npm run validate-content`          | Validates every packaged exercise definition. Also a CI and release gate.                                                                                                                                                     | no                |
-| `npm run pack:check`                | Verifies the tarball contains the runtime files (including `dist/web`) and nothing else.                                                                                                                                      | no                |
-| `npm run test:kind`                 | Every exercise in the curriculum solved for real (baseline, solution, alternatives, wrong variants, switch, revisit), namespace isolation and recovery, stop/resume, on a **disposable** `featherlab-test-<id>` kind cluster. | yes               |
-| `npm run build && npm run test:e2e` | Playwright browser workflow (launcher → exercise → terminal → grading → reset → reconnect → failure display) against the real backend and a disposable cluster.                                                               | yes               |
-
-The Docker/kind suites create and delete their own cluster, workstation and state directory, and
-refuse to run against the `featherlab` cluster; your practice environment and `~/.kube/config`
-are never touched. They need `FEATHERLAB_IMAGE` (for example `featherlab-workstation:dev`) when the
-published image for the current version does not exist yet. A third kind cluster can exhaust the host's
-inotify limit; if cluster creation fails with "Too many open files", raise
-`fs.inotify.max_user_instances` (for example `sudo sysctl -w fs.inotify.max_user_instances=512`).
-Locally, `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e` reuses an installed Chrome; otherwise run
-`npx playwright install chromium` first.
-
-### Security constraints / limitations
-
-See [docs/security.md](docs/security.md) for the threat model, lifecycle safety rules and the
-shared cluster-admin credential limitation.
-
-- This is a **local trusted-user application**, not a multi-tenant sandbox and not a secure hosted service. The learner holds admin credentials for the _dedicated kind training cluster_, never your existing clusters.
-- Start the UI on loopback only. Do not expose it over a public tunnel or bind to a public address without auth, TLS, and additional security review.
-- The CLI can control Docker on the host, so only install it from a trusted release. The learner workstation cannot access the Docker socket.
-- `featherlab stop` validates the PID file by checking both the process entry-point path (`bin/featherlab.mjs`) and its start time before sending any signal. A stale PID file or a recycled PID never causes an unrelated application to be signaled.
-- Only task exercises exist: an 18-exercise Kubernetes curriculum, a ten-exercise Level 0 foundations course followed by the first Level 1 and Level 2 workload labs ([docs/curriculum.md](docs/curriculum.md)). Cluster-wide CKA/CKS administration labs need disposable per-lab environments, which are not included yet.
-- The CLI currently **requires kind installed** rather than auto-downloading its binary. This is deliberate for the first working milestone; auto-bootstrap can follow.
-- The terminal uses real Docker exec TTY streams and WebSockets. Comprehensive cross-platform PTY testing and backpressure handling remain to be completed.
-- The learner workstation is restarted rather than replaced between sessions. Each exercise works in its own `fl-<id>` namespace(s); `reset` deletes and recreates only those (after verifying FeatherLab owns them), never workstation files, other namespaces or cluster-wide configuration. Use `kubectl -n <namespace>`: the workstation's kubeconfig is read-only.
-- Publication (GHCR push, npm trusted publishing) can only be verified by running the release workflow.
-
-## Next increments
-
-- Lockfile, dependency pin review, Docker image vulnerability scanning, release artifact attestation.
-- Persist solved progress and problem history (SQLite).
-- Guided hints, better per-check feedback, and adjustable terminal/workspace split.
-- Optional kind bootstrap and robust runtime repair/update across CLI versions.
-- Add tasks in tiny batches, always test each task against a fresh cluster.
+Issues and pull requests: [github.com/karuifeather/featherlab](https://github.com/karuifeather/featherlab)
