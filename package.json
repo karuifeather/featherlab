@@ -81,9 +81,5 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public"
-  },
-  "lint-staged": {
-    "**/*.{js,mjs,ts,vue,css,scss,html,json,md}": "prettier --write",
-    "**/*.{js,mjs,ts,vue}": "eslint --max-warnings=0"
   }
 }
