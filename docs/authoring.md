@@ -213,7 +213,7 @@ Every exercise is tested three ways, and all three are required.
    state the real setup creates, on the fake cluster. Add a scenario with `solve` (a
    converged solved state) and a `partial` solution that fails exactly the listed checks.
 3. **Real Kubernetes** (`test/helpers/level0-scenarios.mjs`, run by
-   `test/integration/level0-circuit.test.mjs` via `npm run test:kind`): `solve(k)` runs the
+   `test/integration/circuit.test.mjs` via `npm run test:kind`): `solve(k)` runs the
    reference solution as kubectl commands in the test workstation; `alternatives` are other
    correct solutions; `variants` are plausible mistakes, each starting from a fresh reset,
    with the exact list of checks that must fail. The harness also verifies the namespaces

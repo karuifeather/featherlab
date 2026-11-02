@@ -648,9 +648,8 @@ Every exercise has the three layers required by `authoring.md`:
 - **Fake-cluster grading tests** — `test/unit/level0-content.test.mjs` (all Level 0 exercises),
   `test/unit/validators-workloads.test.mjs` (all Level 2 recovery labs), and
   `test/unit/validators.test.mjs` (460 validator cases total, covering all M5.4 validators).
-- **Real-kind circuit** — `test/integration/level0-circuit.test.mjs` with scenarios in
-  `test/helpers/level0-scenarios.mjs` (all 34 pre-M5.4 exercises); M5.4 exercises pending
-  real-kind circuit authoring.
+- **Real-kind circuit** — `test/integration/circuit.test.mjs` with scenarios in
+  `test/helpers/level0-scenarios.mjs` (all Level 0 exercises); all levels share one cluster.
 - **Compatibility** — `test/unit/learning/curriculum-compat.test.mjs` verifies pre-revision
   learning history survives M5.4 prerequisite additions.
 

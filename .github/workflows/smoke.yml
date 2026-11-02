@@ -9,8 +9,9 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    # test:kind provisions three disposable clusters (the Level 0 circuit alone takes ~15 min
-    # locally) and test:e2e a fourth; GitHub runners are slower and start with a cold image cache.
+    # test:kind provisions four disposable clusters (circuit.test.mjs shares one; lifecycle,
+    # level6-routing-proof and level7-networkpolicy-proof each get their own) and test:e2e a
+    # fifth; GitHub runners are slower and start with a cold image cache.
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v6
