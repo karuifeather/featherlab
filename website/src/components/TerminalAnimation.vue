@@ -16,10 +16,12 @@
             {{ " " }}
             <span :class="{ 'term-typing': i === visibleLines.length - 1 && isTyping }">{{
               line.text
-            }}</span><span
+            }}</span
+            ><span
               v-if="i === visibleLines.length - 1 && showCursor && !isTyping"
               class="term-cursor"
-            >█</span>
+              >█</span
+            >
           </template>
           <template v-else-if="line.type === 'header'">
             <span class="term-muted">{{ line.text }}</span>
@@ -32,7 +34,8 @@
         <span
           v-if="showCursor && visibleLines[visibleLines.length - 1]?.type !== 'prompt'"
           class="term-cursor"
-        >█</span>
+          >█</span
+        >
       </div>
     </div>
     <p class="term-caption">Illustration — the real terminal connects to your cluster</p>

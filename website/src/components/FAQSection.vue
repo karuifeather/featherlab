@@ -28,11 +28,11 @@ const FAQS = [
   },
   {
     q: "Do I need a cloud account?",
-    a: "No. FeatherLab runs a real <a href=\"https://kind.sigs.k8s.io/\" target=\"_blank\" rel=\"noopener noreferrer\">kind</a> (Kubernetes in Docker) cluster entirely on your own machine. You need Docker and Node.js — no cloud provider or account required.",
+    a: 'No. FeatherLab runs a real <a href="https://kind.sigs.k8s.io/" target="_blank" rel="noopener noreferrer">kind</a> (Kubernetes in Docker) cluster entirely on your own machine. You need Docker and Node.js — no cloud provider or account required.',
   },
   {
     q: "Is FeatherLab open source?",
-    a: "Yes. Source code is on <a href=\"https://github.com/karuifeather/featherlab\" target=\"_blank\" rel=\"noopener noreferrer\">GitHub</a> under the MIT license. Contributions are welcome.",
+    a: 'Yes. Source code is on <a href="https://github.com/karuifeather/featherlab" target="_blank" rel="noopener noreferrer">GitHub</a> under the MIT license. Contributions are welcome.',
   },
   {
     q: "What certifications does FeatherLab help prepare for?",
