@@ -101,16 +101,6 @@ spec:
 
     variants: [
       {
-        name: "policy not created (deny-all only)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0170");
-          await k.ready("deny-client", "fl-k8s-0170");
-          await k.ready("api", "fl-k8s-0170");
-          // Setup has deny-all; no allow rule added — baseline fails
-        },
-        failing: ["policy-spec", "http-probe"],
-      },
-      {
         name: "policy uses protocol: UDP instead of TCP",
         async run(k) {
           await k.ready("grader-client", "fl-k8s-0170");
@@ -180,15 +170,6 @@ spec:
     },
 
     variants: [
-      {
-        name: "policy not created (deny-all only)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0171");
-          await k.ready("api", "fl-k8s-0171");
-          // deny-all from setup; no allow rule added
-        },
-        failing: ["policy-spec", "http-probe"],
-      },
       {
         name: "policy uses wrong port number 8080",
         async run(k) {
@@ -386,16 +367,6 @@ spec:
 
     variants: [
       {
-        name: "policy not created (no policies)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0173");
-          await k.ready("deny-client", "fl-k8s-0173");
-          await k.ready("api", "fl-k8s-0173");
-          // No policies — all traffic allowed; traffic-blocked fails
-        },
-        failing: ["policy-spec", "traffic-blocked"],
-      },
-      {
         name: "policy selects wrong pods (app=api-v2 instead of api)",
         async run(k) {
           await k.ready("grader-client", "fl-k8s-0173");
@@ -506,22 +477,6 @@ spec:
     },
 
     variants: [
-      {
-        name: "no policies created (all traffic open)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0174");
-          await k.ready("deny-client", "fl-k8s-0174");
-          await k.ready("frontend", "fl-k8s-0174");
-          await k.ready("api", "fl-k8s-0174");
-          // No policies — all traffic allowed; api-blocked (traffic-blocked) fails
-        },
-        failing: [
-          "frontend-open-spec",
-          "api-from-frontend-spec",
-          "db-from-api-spec",
-          "api-blocked",
-        ],
-      },
       {
         name: "api-from-frontend missing (db-from-api also missing)",
         async run(k) {

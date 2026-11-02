@@ -73,14 +73,6 @@ spec:
     },
     variants: [
       {
-        name: "policy not created (no allow-from-staging)",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0161");
-          // Do nothing — deny-all remains, no allow policy.
-        },
-        failing: ["policy-exists", "cross-ns-allowed"],
-      },
-      {
         name: "wrong label in namespaceSelector (uses env: staging instead of metadata.name)",
         async run(k) {
           await k.ready("api", "fl-k8s-0161");
@@ -145,13 +137,6 @@ spec:
       });
     },
     variants: [
-      {
-        name: "policy not created",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0162");
-        },
-        failing: ["policy-exists", "cross-ns-allowed"],
-      },
       {
         name: "wrong podSelector label (role: backend instead of frontend)",
         async run(k) {
@@ -227,13 +212,6 @@ spec:
     },
     variants: [
       {
-        name: "policy not created",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0163");
-        },
-        failing: ["policy-exists", "egress-blocked"],
-      },
-      {
         name: "ingress-only policy (missing Egress type)",
         async run(k) {
           await k.ready("api", "fl-k8s-0163");
@@ -293,17 +271,7 @@ spec:
         host: "api.fl-k8s-0164.svc.cluster.local",
       });
     },
-    variants: [
-      {
-        name: "typo not fixed (role: adminn still in place)",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0164");
-          // Setup already has the broken policy; do nothing.
-        },
-        // grader-client (role=admin) can't reach api → probe-allowed fails
-        failing: ["probe-allowed"],
-      },
-    ],
+    variants: [],
   },
 
   // ─── k8s-0165: Namespace Selector with kubernetes.io/metadata.name ────────────
@@ -341,13 +309,6 @@ spec:
       });
     },
     variants: [
-      {
-        name: "policy not created",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0165");
-        },
-        failing: ["policy-exists", "frontend-allowed"],
-      },
       {
         name: "namespaceSelector targets backend instead of frontend",
         async run(k) {

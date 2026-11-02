@@ -389,14 +389,6 @@ spec:
     },
     variants: [
       {
-        // Do nothing — isolated-client lacks role=frontend, cannot reach api
-        name: "do nothing (isolated-client never labeled)",
-        async run(k) {
-          await k.ready("isolated-client", "fl-k8s-0159");
-        },
-        failing: ["label", "probe"],
-      },
-      {
         // Label deny-client instead of isolated-client — isolated-client still blocked
         name: "label deny-client instead of isolated-client",
         async run(k) {

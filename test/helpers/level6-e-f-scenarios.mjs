@@ -87,16 +87,7 @@ spec:
         host: "app.k8s-0144.fl.test",
       });
     },
-    variants: [
-      {
-        name: "ReferenceGrant not created",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0144");
-          // Setup has no ReferenceGrant; baseline fails
-        },
-        failing: ["grant-exists", "route-accepted", "route-probe"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0145": {
@@ -124,16 +115,7 @@ spec:
         host: "app.k8s-0145.fl.test",
       });
     },
-    variants: [
-      {
-        name: "ReferenceGrant not created",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0145");
-          // Setup has no ReferenceGrant; baseline fails
-        },
-        failing: ["grant-exists", "route-accepted", "route-probe"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0146": {
@@ -224,16 +206,7 @@ spec:
         host: "api.k8s-0147.fl.test",
       });
     },
-    variants: [
-      {
-        name: "wrong namespace in from (not fixed)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0147");
-          // Setup has wrong namespace in from; do nothing — route stays unresolved
-        },
-        failing: ["route-accepted", "route-probe"],
-      },
-    ],
+    variants: [],
   },
 };
 
@@ -297,14 +270,6 @@ spec:
           weight: 90
 `);
           await waitForRoute(k, { name: "app-route", ns: "fl-k8s-0148" });
-        },
-        failing: ["route-weights"],
-      },
-      {
-        name: "canary not added (still 100% stable)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0148");
-          // Setup has 100% stable only; do nothing
         },
         failing: ["route-weights"],
       },

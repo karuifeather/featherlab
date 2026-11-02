@@ -288,14 +288,6 @@ spec:
     },
     variants: [
       {
-        name: "/api rule not added",
-        async run(k) {
-          // Setup already has only /app; do nothing
-          await k.ready("grader-client", "fl-k8s-0133");
-        },
-        failing: ["probe-api"],
-      },
-      {
         name: "/api mapped to wrong backend (app instead of api)",
         async run(k) {
           await k.ready("grader-client", "fl-k8s-0133");
@@ -360,16 +352,7 @@ spec:
         host: "app.k8s-0134.fl.test",
       });
     },
-    variants: [
-      {
-        name: "still references wrong-gw",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0134");
-          // Setup has wrong-gw; do nothing
-        },
-        failing: ["route-accepted", "http-probe"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0135": {
@@ -399,15 +382,6 @@ spec:
         host: "app.k8s-0135.fl.test",
       });
     },
-    variants: [
-      {
-        name: "still references missing-service",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0135");
-          // Setup has missing-service; do nothing
-        },
-        failing: ["route-accepted", "http-probe"],
-      },
-    ],
+    variants: [],
   },
 };

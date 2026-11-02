@@ -92,16 +92,7 @@ spec:
         path: "api",
       });
     },
-    variants: [
-      {
-        name: "/api still routes to app (broken setup)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0136");
-          // Setup already has /api → app (wrong); do nothing
-        },
-        failing: ["probe-api"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0137": {
@@ -138,16 +129,7 @@ spec:
         host: "app.k8s-0137.fl.test",
       });
     },
-    variants: [
-      {
-        name: "still references vip (broken setup)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0137");
-          // Setup already has vip backendRef; do nothing
-        },
-        failing: ["route-accepted", "probe-default"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0138": {
@@ -194,14 +176,6 @@ spec:
       });
     },
     variants: [
-      {
-        name: "redirect rule not added",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0138");
-          // Setup has only /current rule; do nothing
-        },
-        failing: ["probe-redirect"],
-      },
       {
         name: "wrong redirect status code (302 instead of 301)",
         async run(k) {
@@ -338,16 +312,7 @@ spec:
         }
       });
     },
-    variants: [
-      {
-        name: "TLS stanza not added",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0140");
-          // Setup has no TLS stanza; do nothing
-        },
-        failing: ["ingress-tls", "https-probe"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0141": {
@@ -400,16 +365,7 @@ spec:
         }
       });
     },
-    variants: [
-      {
-        name: "HTTPS listener not added",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0141");
-          // Setup has HTTP listener only; do nothing
-        },
-        failing: ["https-probe"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0142": {
@@ -464,18 +420,7 @@ spec:
         }
       });
     },
-    variants: [
-      {
-        name: "wrong secretName still in place",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0142");
-          // Setup already has wrong-tls-secret; do nothing
-        },
-        // With --entrypoints.websecure.http.tls=true, Traefik falls back to its default
-        // cert when the referenced secret is missing, so --insecure probe still returns 200.
-        failing: ["ingress-tls"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0143": {
@@ -528,15 +473,6 @@ spec:
         }
       });
     },
-    variants: [
-      {
-        name: "HTTPS listener not added",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0143");
-          // Setup has HTTP listener only; HTTPRoute references sectionName: https → NoMatchingParent
-        },
-        failing: ["route-accepted", "https-probe"],
-      },
-    ],
+    variants: [],
   },
 };

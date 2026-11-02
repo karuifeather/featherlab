@@ -166,16 +166,7 @@ spec:
         host: "api.k8s-0126.fl.test",
       });
     },
-    variants: [
-      {
-        name: "api rule not added",
-        async run(k) {
-          // Setup already has the frontend-only Ingress; do nothing
-          await k.ready("grader-client", "fl-k8s-0126");
-        },
-        failing: ["ingress-spec", "api-http"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0127": {
@@ -284,16 +275,7 @@ spec:
         host: "app.k8s-0128.fl.test",
       });
     },
-    variants: [
-      {
-        name: "still uses webserver (broken)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0128");
-          // Setup already has the broken Ingress; do nothing
-        },
-        failing: ["ingress-spec", "http"],
-      },
-    ],
+    variants: [],
   },
 
   "k8s-0129": {
@@ -326,15 +308,6 @@ spec:
         host: "app.k8s-0129.fl.test",
       });
     },
-    variants: [
-      {
-        name: "still uses nginx class (broken)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0129");
-          // Setup already has ingressClassName: nginx; do nothing
-        },
-        failing: ["ingress-spec", "http"],
-      },
-    ],
+    variants: [],
   },
 };

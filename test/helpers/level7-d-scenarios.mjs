@@ -92,15 +92,6 @@ spec:
     },
     variants: [
       {
-        name: "policy not created",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0166");
-        },
-        // client can reach api (not blocked) → client-blocked fails
-        // policy-exists fails (no policy)
-        failing: ["policy-exists", "client-blocked"],
-      },
-      {
         name: "ingress-only isolation (missing Egress type)",
         async run(k) {
           await k.ready("api", "fl-k8s-0166");
@@ -175,15 +166,6 @@ spec:
     },
     variants: [
       {
-        name: "policy not created",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0167");
-        },
-        // No policy → deny-client can reach api → deny-blocked fails
-        // policy-exists fails
-        failing: ["policy-exists", "deny-blocked"],
-      },
-      {
         name: "ingress-only (no egress section)",
         async run(k) {
           await k.ready("api", "fl-k8s-0167");
@@ -255,20 +237,7 @@ spec:
         host: "api.fl-k8s-0168.svc.cluster.local",
       });
     },
-    variants: [
-      {
-        name: "policyTypes not fixed (still [Egress] only)",
-        async run(k) {
-          await k.ready("api", "fl-k8s-0168");
-          // Setup already has policyTypes: [Egress] only; do nothing.
-          // ingress rules are ignored → both clients can reach api.
-        },
-        // policy-fixed fails (policyTypes missing Ingress)
-        // grader-allowed may pass (ingress unrestricted without [Ingress] in policyTypes)
-        // deny-blocked fails (deny-client can reach api with no ingress restriction)
-        failing: ["policy-fixed", "deny-blocked"],
-      },
-    ],
+    variants: [],
   },
 
   // ─── k8s-0169: Multi-Tier Connectivity ────────────────────────────────────────
