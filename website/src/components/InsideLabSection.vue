@@ -346,7 +346,7 @@ import type { ComponentPublicInstance } from "vue";
 
 .stage-crop-center {
   overflow: hidden;
-  aspect-ratio: 500 / 780;
+  aspect-ratio: 500 / 360;
 
   .stage-screenshot {
     max-width: none;
@@ -355,6 +355,7 @@ import type { ComponentPublicInstance } from "vue";
     aspect-ratio: auto;
     object-fit: fill;
     margin-left: -46%;
+    margin-top: -84%;
   }
 }
 
