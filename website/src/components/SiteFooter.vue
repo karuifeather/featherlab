@@ -2,7 +2,7 @@
   <footer class="footer">
     <div class="page-container footer-inner">
       <div class="footer-brand">
-        <span class="footer-mark" aria-hidden="true">✦</span>
+        <img class="footer-mark" src="/feather-icon.png" alt="" aria-hidden="true" width="20" height="20" />
         <span class="footer-name">featherlab</span>
       </div>
       <div class="footer-meta">
@@ -42,14 +42,11 @@
 }
 
 .footer-mark {
-  display: inline-grid;
-  place-items: center;
+  display: block;
   width: 20px;
   height: 20px;
   border-radius: var(--radius-sm);
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-size: 9px;
+  object-fit: contain;
 }
 
 .footer-name {

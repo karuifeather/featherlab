@@ -2,7 +2,7 @@
   <nav class="nav" aria-label="Site navigation">
     <div class="nav-inner page-container">
       <a href="#main-content" class="nav-logo" aria-label="FeatherLab — back to top">
-        <span class="nav-mark" aria-hidden="true">✦</span>
+        <img class="nav-mark" src="/feather-icon.png" alt="" aria-hidden="true" width="24" height="24" />
         <span class="nav-name">featherlab</span>
       </a>
       <div class="nav-links">
@@ -67,14 +67,11 @@
 }
 
 .nav-mark {
-  display: inline-grid;
-  place-items: center;
+  display: block;
   width: 24px;
   height: 24px;
   border-radius: var(--radius-sm);
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-size: 11px;
+  object-fit: contain;
 }
 
 .nav-name {
