@@ -283,10 +283,10 @@ spec:
         async run(k) {
           await k.ready("grader-client", "fl-k8s-0139");
           // Setup has admin-route at PathPrefix /; do nothing.
-          // app-route was created first and wins the conflict, so / still routes to app
-          // (probe-root passes) but /admin also routes to app (probe-admin fails).
+          // admin-route wins the conflict, so / routes to admin-panel
+          // (probe-root fails) while /admin also routes to admin-panel (probe-admin passes).
         },
-        failing: ["probe-admin"],
+        failing: ["probe-root"],
       },
     ],
   },
