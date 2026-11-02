@@ -6,6 +6,7 @@
     <GradingSection />
     <CurriculumSection />
     <GettingStartedSection />
+    <FAQSection />
   </main>
   <SiteFooter />
 </template>
@@ -17,5 +18,6 @@ import InsideLabSection from "./components/InsideLabSection.vue";
 import GradingSection from "./components/GradingSection.vue";
 import CurriculumSection from "./components/CurriculumSection.vue";
 import GettingStartedSection from "./components/GettingStartedSection.vue";
+import FAQSection from "./components/FAQSection.vue";
 import SiteFooter from "./components/SiteFooter.vue";
 </script>

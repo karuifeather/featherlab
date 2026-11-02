@@ -33,6 +33,7 @@
             npm package
           </a>
         </div>
+        <p class="hero-oss-note">Free and open source &middot; MIT license</p>
       </div>
 
       <div class="hero-frame-wrap">
@@ -191,6 +192,12 @@ import CopyButton from "./CopyButton.vue";
     color: var(--text-primary);
     border-color: var(--border-strong);
   }
+}
+
+.hero-oss-note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
 }
 
 // Frame

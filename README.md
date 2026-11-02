@@ -1,6 +1,11 @@
 # FeatherLab
 
-A local-first Kubernetes practice environment. Real cluster, real kubectl, guided exercises, and automated grading.
+**Free, open-source (MIT) Kubernetes practice labs** — spin up a real [kind](https://kind.sigs.k8s.io/) cluster on your machine and learn Kubernetes with 170+ guided exercises, automated grading, and no cloud account required.
+
+**Landing page:** https://karuifeather.github.io/featherlab/  
+**Install:** `npm install -g featherlab`
+
+A local-first Kubernetes learning environment. Real cluster, real kubectl, guided exercises, and automated grading toward CKA, CKAD, CKS, KCNA, and KCSA.
 
 ## What is FeatherLab?
 

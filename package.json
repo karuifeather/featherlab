@@ -1,7 +1,24 @@
 {
   "name": "featherlab",
   "version": "1.2.1",
-  "description": "Local-first hands-on Kubernetes training",
+  "description": "Free, open-source Kubernetes practice labs — real kind cluster, guided exercises, automated grading. CKA, CKAD, CKS readiness.",
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "kubernetes-labs",
+    "learn-kubernetes",
+    "kubernetes-practice",
+    "cka",
+    "ckad",
+    "cks",
+    "kubectl",
+    "kind",
+    "devops",
+    "devops-learning",
+    "container-orchestration",
+    "open-source"
+  ],
+  "homepage": "https://karuifeather.github.io/featherlab/",
   "type": "module",
   "bin": {
     "featherlab": "./bin/featherlab.mjs"
