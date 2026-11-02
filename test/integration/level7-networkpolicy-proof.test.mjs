@@ -20,6 +20,8 @@
  * environment. Level 7 exercises MUST NOT run on a non-enforcing cluster.
  *
  * Verified: kind v0.33.0, kindest/node:v1.37.0, 2026-11-01.
+ * Note: DNS egress (test 7) must target CoreDNS pods via namespaceSelector+podSelector,
+ * NOT via ipBlock on the kube-dns ClusterIP — kube-proxy DNAT runs before NetworkPolicy.
  *
  * Known deny signatures (documented in src/tracks/kubernetes/networkpolicy/README.md):
  *   Ingress block  → curl exit 28 (timeout — TCP silently dropped)
@@ -253,12 +255,9 @@ spec:
 // ─── 7. Egress allow restores connectivity ────────────────────────────────────
 
 test("restoring DNS + server egress allows client-a to reach server again", options, () => {
-  // Discover kube-dns IP at runtime to build a portable egress allow rule.
-  const dnsIP = env
-    .kubectl("get", "svc", "kube-dns", "-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")
-    .trim();
-  assert.ok(dnsIP, "kube-dns Service IP must be discoverable");
-
+  // Use namespaceSelector+podSelector (AND) to target CoreDNS pods directly.
+  // ipBlock with kube-dns ClusterIP does not work: kube-proxy DNAT rewrites the
+  // destination to a CoreDNS Pod IP before NetworkPolicy sees the packet.
   applyPolicy(`
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -273,8 +272,12 @@ spec:
   - Egress
   egress:
   - to:
-    - ipBlock:
-        cidr: ${dnsIP}/32
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
     ports:
     - protocol: UDP
       port: 53

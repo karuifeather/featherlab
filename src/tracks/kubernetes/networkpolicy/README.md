@@ -47,5 +47,7 @@ a successful NetworkPolicy block, after first confirming the server Pod is Ready
 - No cluster-scoped NetworkPolicy (GlobalNetworkPolicy) is used; only standard
   `networking.k8s.io/v1 NetworkPolicy`.
 - The kube-system namespace is protected; exercises may not create resources there.
-- CoreDNS labels and the kube-dns Service IP must be queried at setup time, not
-  hardcoded, when building DNS egress allow rules in reference solutions.
+- DNS egress allow rules must target CoreDNS **pods** via `namespaceSelector` +
+  `podSelector` (label `k8s-app: kube-dns` in `kube-system`), **not** the kube-dns
+  Service ClusterIP via `ipBlock`. kube-proxy DNAT rewrites the ClusterIP to a CoreDNS
+  Pod IP before NetworkPolicy sees the packet, so an `ipBlock` rule never matches.

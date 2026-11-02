@@ -114,6 +114,7 @@ spec:
         name: "policy uses protocol: UDP instead of TCP",
         async run(k) {
           await k.ready("grader-client", "fl-k8s-0170");
+          await k.ready("deny-client", "fl-k8s-0170");
           await k.ready("api", "fl-k8s-0170");
 
           k.apply(`
@@ -137,7 +138,8 @@ spec:
         - protocol: UDP
           port: 80
 `);
-          // Policy exists with Ingress rules but http-probe (TCP/wget) fails
+          // Confirm deny-all is enforced before settle() checks; http-probe (TCP/wget) should fail
+          await waitForBlock(k, { ns: "fl-k8s-0170", host: "api" });
         },
         failing: ["http-probe"],
       },
