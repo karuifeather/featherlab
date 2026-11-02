@@ -95,8 +95,50 @@ export class IsolatedEnvironment {
     this.runner = createWorkstationRunner({ container: config.workstation });
   }
 
+  /**
+   * Delete any featherlab-test-* clusters and their workstation containers left behind
+   * by prior interrupted runs (SIGKILL, OOM, closed terminal). Called at the top of
+   * start() so each run begins with a clean slate. Never touches real clusters.
+   */
+  #sweepOrphans() {
+    let existing;
+    try {
+      existing = this.#exec("kind", ["get", "clusters"]).trim().split(/\s+/).filter(Boolean);
+    } catch {
+      return; // kind unavailable or no clusters at all
+    }
+    // Exclude this run's own cluster — the collision check in start() handles that case.
+    const orphans = existing.filter((c) => CLUSTER_PATTERN.test(c) && c !== this.config.cluster);
+    if (orphans.length === 0) return;
+    this.log.warn?.(
+      `[IsolatedEnvironment] sweeping ${orphans.length} orphaned cluster(s) from a prior run: ${orphans.join(", ")}`,
+    );
+    for (const name of orphans) {
+      try {
+        this.#exec("docker", ["rm", "-f", `${name}-workstation`]);
+      } catch {
+        // workstation may not exist — ignore
+      }
+      try {
+        this.#exec("kind", ["delete", "cluster", "--name", name], { timeout: 60_000 });
+      } catch (error) {
+        this.log.error?.(
+          `[IsolatedEnvironment] failed to delete orphaned cluster ${name}: ${error.message}`,
+        );
+        // Fallback: force-remove the control-plane container so it stops consuming resources
+        try {
+          this.#exec("docker", ["rm", "-f", `${name}-control-plane`]);
+        } catch {
+          // ignore — container may not exist
+        }
+      }
+    }
+  }
+
   /** Create the cluster and workstation. Fails, touching nothing, on a name collision. */
   start() {
+    this.#sweepOrphans();
+
     const { cluster, workstation } = this.config;
     const clusters = this.#exec("kind", ["get", "clusters"]).trim().split(/\s+/);
     if (clusters.includes(cluster))

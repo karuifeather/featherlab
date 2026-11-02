@@ -234,7 +234,7 @@ import CopyButton from "./CopyButton.vue";
 
 .hero-terminal-overlay {
   position: absolute;
-  top: 11%;
+  top: 9.5%;
   left: 52.5%;
   width: 46%;
   display: flex;
@@ -246,7 +246,6 @@ import CopyButton from "./CopyButton.vue";
   color: var(--terminal-fg);
   background: var(--terminal-bg);
   padding: 8px 10px;
-  border-radius: 4px;
   pointer-events: none;
   user-select: none;
 }
