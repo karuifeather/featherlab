@@ -236,14 +236,17 @@ import CopyButton from "./CopyButton.vue";
   position: absolute;
   top: 11%;
   left: 52.5%;
-  width: 45%;
+  width: 46%;
   display: flex;
   flex-direction: column;
   gap: 0.15em;
   font-family: var(--font-mono);
-  font-size: 1.25cqw;
+  font-size: 0.95cqw;
   line-height: 1.55;
   color: var(--terminal-fg);
+  background: var(--terminal-bg);
+  padding: 8px 10px;
+  border-radius: 4px;
   pointer-events: none;
   user-select: none;
 }
@@ -293,15 +296,6 @@ import CopyButton from "./CopyButton.vue";
   color: var(--terminal-muted);
   pointer-events: none;
   user-select: none;
-}
-
-@media (max-width: 640px) {
-  .hero-terminal-overlay {
-    font-size: 1.8cqw;
-    top: 8%;
-    left: 51%;
-    width: 47%;
-  }
 }
 
 @media (max-width: 400px) {

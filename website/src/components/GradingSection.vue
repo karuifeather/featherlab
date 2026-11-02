@@ -17,7 +17,7 @@
         </p>
       </div>
 
-      <div class="grading-diagram" aria-label="Grading flow diagram" role="img">
+      <div class="grading-diagram">
         <div class="diag-node diag-kubectl">
           <span class="diag-icon">⌨</span>
           <span>kubectl</span>

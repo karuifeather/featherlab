@@ -47,24 +47,36 @@
                 <p class="stage-desc">{{ stage.description }}</p>
               </div>
               <div class="stage-visual">
-                <img
-                  v-if="stage.image"
-                  :src="stage.image"
-                  :alt="stage.imageAlt"
-                  class="stage-screenshot"
-                  :style="stage.crop ? `object-position: ${stage.crop}` : undefined"
-                  loading="lazy"
-                  decoding="async"
-                  width="1400"
-                  height="860"
-                />
+                <template v-if="stage.image">
+                  <div v-if="stage.cropStyle === 'center-panel'" class="stage-crop-center">
+                    <img
+                      :src="stage.image"
+                      :alt="stage.imageAlt"
+                      class="stage-screenshot"
+                      loading="lazy"
+                      decoding="async"
+                      width="1400"
+                      height="860"
+                    />
+                  </div>
+                  <img
+                    v-else
+                    :src="stage.image"
+                    :alt="stage.imageAlt"
+                    class="stage-screenshot"
+                    :style="stage.crop ? `object-position: ${stage.crop}` : undefined"
+                    loading="lazy"
+                    decoding="async"
+                    width="1400"
+                    height="860"
+                  />
+                </template>
                 <TerminalAnimation v-else-if="stage.terminal" />
                 <div v-else-if="stage.completion" class="stage-completion">
                   <div class="completion-badge">Exercise completed</div>
-                  <button type="button" class="next-btn">
-                    Next: Kubernetes Basics
-                    <span aria-hidden="true"> →</span>
-                  </button>
+                  <div class="next-btn">
+                    Next: Kubernetes Basics <span aria-hidden="true">→</span>
+                  </div>
                   <p class="next-note">
                     Opens in a fresh environment: this exercise's cluster resources are reset. Your
                     completion stays saved.
@@ -93,6 +105,7 @@ interface Stage {
   image?: string;
   imageAlt?: string;
   crop?: string;
+  cropStyle?: "center-panel";
   terminal?: true;
   completion?: true;
 }
@@ -113,8 +126,8 @@ const stages: Stage[] = [
     description:
       'Each exercise opens with a short scenario, a requirements checklist, and optional hints. For "Your first Pod": create a Pod named web running nginx:1.27 in namespace fl-k8s-0001.',
     image: workspaceImg,
-    imageAlt: "Exercise workspace showing the scenario panel and an empty terminal",
-    crop: "top left",
+    imageAlt: "Exercise workspace showing the scenario panel and requirements checklist",
+    cropStyle: "center-panel" as const,
   },
   {
     label: "Work in the terminal",
@@ -151,7 +164,10 @@ function setStageRef(el: Element | ComponentPublicInstance | null, i: number): v
 }
 
 function scrollToStage(i: number): void {
-  stageRefs.value[i]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const behavior: ScrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "instant"
+    : "smooth";
+  stageRefs.value[i]?.scrollIntoView({ behavior, block: "start" });
 }
 
 onMounted(() => {
@@ -328,6 +344,20 @@ import type { ComponentPublicInstance } from "vue";
   display: block;
 }
 
+.stage-crop-center {
+  overflow: hidden;
+  aspect-ratio: 500 / 780;
+
+  .stage-screenshot {
+    max-width: none;
+    width: 280%;
+    height: auto;
+    aspect-ratio: auto;
+    object-fit: fill;
+    margin-left: -46%;
+  }
+}
+
 // Completion stage
 .stage-completion {
   display: flex;
@@ -358,16 +388,15 @@ import type { ComponentPublicInstance } from "vue";
 .next-btn {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 10px 20px;
   background: var(--primary);
   color: var(--primary-foreground);
-  border: none;
   border-radius: var(--radius-sm);
   font-size: 0.9375rem;
   font-weight: 500;
   width: fit-content;
-  cursor: default;
-  transition: background var(--dur-fast) var(--ease-out);
+  user-select: none;
 }
 
 .next-note {
