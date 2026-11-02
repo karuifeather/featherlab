@@ -1,3 +1,19 @@
 npm run check
-docker build -t featherlab-workstation:dev docker
-FEATHERLAB_IMAGE=featherlab-workstation:dev npm run test:kind
+
+# Skip kind tests if all changes are web/docs only
+read -r local_ref local_sha remote_ref remote_sha
+
+if [ -n "$remote_sha" ] && [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+  base="$remote_sha"
+else
+  base=$(git merge-base HEAD origin/main 2>/dev/null || git rev-list --max-parents=0 HEAD)
+fi
+
+changed=$(git diff --name-only "$base" "$local_sha" 2>/dev/null)
+
+skip_patterns='^(web/|website/|docs/|[^/]*\.md$)'
+
+if [ -n "$changed" ] && echo "$changed" | grep -qvE "$skip_patterns"; then
+  docker build -t featherlab-workstation:dev docker
+  FEATHERLAB_IMAGE=featherlab-workstation:dev npm run test:kind
+fi
