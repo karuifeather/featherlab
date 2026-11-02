@@ -28,16 +28,18 @@
           <span>cluster</span>
         </div>
         <div class="diag-arrow" aria-hidden="true">→</div>
-        <div class="diag-node diag-validators">
-          <span class="diag-icon">◈</span>
-          <span>validators</span>
-        </div>
-        <div class="diag-arrow diag-arrow--down" aria-hidden="true">↓</div>
-        <div class="diag-results">
-          <div class="diag-result pass">✓ Pod exists in fl-k8s-0001</div>
-          <div class="diag-result pass">✓ Container uses nginx:1.27</div>
-          <div class="diag-result pass">✓ Pod is Running</div>
-          <div class="diag-result pass">✓ Pod Ready condition is True</div>
+        <div class="diag-validators-col">
+          <div class="diag-node diag-validators">
+            <span class="diag-icon">◈</span>
+            <span>validators</span>
+          </div>
+          <div class="diag-arrow diag-arrow--down" aria-hidden="true">↓</div>
+          <div class="diag-results">
+            <div class="diag-result pass">✓ Pod exists in fl-k8s-0001</div>
+            <div class="diag-result pass">✓ Container uses nginx:1.27</div>
+            <div class="diag-result pass">✓ Pod is Running</div>
+            <div class="diag-result pass">✓ Pod Ready condition is True</div>
+          </div>
         </div>
       </div>
 
@@ -89,7 +91,8 @@
 // Diagram
 .grading-diagram {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
   padding: 28px 32px;
@@ -135,13 +138,19 @@
   font-size: 1.25rem;
   color: var(--text-muted);
   flex-shrink: 0;
+  padding-top: 18px;
+}
+
+.diag-validators-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .diag-arrow--down {
-  align-self: stretch;
-  display: flex;
-  align-items: flex-end;
-  padding-bottom: 4px;
+  font-size: 1.25rem;
+  color: var(--text-muted);
 }
 
 .diag-results {

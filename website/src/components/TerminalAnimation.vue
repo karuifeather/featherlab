@@ -16,7 +16,10 @@
             {{ " " }}
             <span :class="{ 'term-typing': i === visibleLines.length - 1 && isTyping }">{{
               line.text
-            }}</span>
+            }}</span><span
+              v-if="i === visibleLines.length - 1 && showCursor && !isTyping"
+              class="term-cursor"
+            >█</span>
           </template>
           <template v-else-if="line.type === 'header'">
             <span class="term-muted">{{ line.text }}</span>
@@ -26,7 +29,10 @@
           </template>
           <template v-else>{{ line.text }}</template>
         </span>
-        <span v-if="showCursor" class="term-cursor">█</span>
+        <span
+          v-if="showCursor && visibleLines[visibleLines.length - 1]?.type !== 'prompt'"
+          class="term-cursor"
+        >█</span>
       </div>
     </div>
     <p class="term-caption">Illustration — the real terminal connects to your cluster</p>
@@ -70,8 +76,9 @@ const SCRIPT: Array<{ line: Line; delayAfter: number }> = [
       prefix: "web     1/1     ",
       suffix: "   0          12s",
     },
-    delayAfter: 1800,
+    delayAfter: 300,
   },
+  { line: { type: "prompt", text: "" }, delayAfter: 1600 },
 ];
 
 const linesEl = ref<HTMLElement | null>(null);
@@ -203,6 +210,7 @@ onUnmounted(() => {
 .term-body {
   padding: 16px 18px;
   min-height: 210px;
+  overflow: hidden;
 }
 
 .term-lines {

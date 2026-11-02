@@ -127,7 +127,7 @@ const stages: Stage[] = [
       'Each exercise opens with a short scenario, a requirements checklist, and optional hints. For "Your first Pod": create a Pod named web running nginx:1.27 in namespace fl-k8s-0001.',
     image: workspaceImg,
     imageAlt: "Exercise workspace showing the scenario panel and requirements checklist",
-    cropStyle: "center-panel" as const,
+    crop: "0% 15%",
   },
   {
     label: "Work in the terminal",
@@ -216,6 +216,7 @@ import type { ComponentPublicInstance } from "vue";
 .lab-nav {
   position: sticky;
   top: calc(var(--nav-height) + 24px);
+  min-width: 0;
 }
 
 .stage-nav-list {
@@ -290,6 +291,7 @@ import type { ComponentPublicInstance } from "vue";
   display: flex;
   flex-direction: column;
   gap: 80px;
+  min-width: 0;
 }
 
 .lab-stage {
@@ -332,12 +334,14 @@ import type { ComponentPublicInstance } from "vue";
 .stage-visual {
   border-radius: var(--radius-lg);
   overflow: hidden;
+  min-width: 0;
   border: 1px solid var(--border-default);
   box-shadow: var(--shadow-2);
 }
 
 .stage-screenshot {
   width: 100%;
+  min-width: 0;
   height: auto;
   aspect-ratio: 1400 / 520;
   object-fit: cover;
@@ -349,13 +353,11 @@ import type { ComponentPublicInstance } from "vue";
   aspect-ratio: 500 / 360;
 
   .stage-screenshot {
-    max-width: none;
-    width: 280%;
-    height: auto;
+    width: 100%;
+    height: 100%;
     aspect-ratio: auto;
-    object-fit: fill;
-    margin-left: -46%;
-    margin-top: -84%;
+    object-fit: cover;
+    object-position: 0% 15%;
   }
 }
 
