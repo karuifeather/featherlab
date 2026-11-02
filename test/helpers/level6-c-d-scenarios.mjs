@@ -277,18 +277,7 @@ spec:
         path: "admin",
       });
     },
-    variants: [
-      {
-        name: "admin-route still matches / (not fixed)",
-        async run(k) {
-          await k.ready("grader-client", "fl-k8s-0139");
-          // Setup has admin-route at PathPrefix /; do nothing.
-          // admin-route wins the conflict, so / routes to admin-panel
-          // (probe-root fails) while /admin also routes to admin-panel (probe-admin passes).
-        },
-        failing: ["probe-root"],
-      },
-    ],
+    variants: [],
   },
 };
 
