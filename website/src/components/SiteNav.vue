@@ -2,7 +2,14 @@
   <nav class="nav" aria-label="Site navigation">
     <div class="nav-inner page-container">
       <a href="#main-content" class="nav-logo" aria-label="FeatherLab — back to top">
-        <img class="nav-mark" src="/feather-icon.png" alt="" aria-hidden="true" width="24" height="24" />
+        <img
+          class="nav-mark"
+          src="/feather-icon.png"
+          alt=""
+          aria-hidden="true"
+          width="24"
+          height="24"
+        />
         <span class="nav-name">featherlab</span>
       </a>
       <div class="nav-links">

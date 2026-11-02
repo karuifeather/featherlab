@@ -2,7 +2,14 @@
   <footer class="footer">
     <div class="page-container footer-inner">
       <div class="footer-brand">
-        <img class="footer-mark" src="/feather-icon.png" alt="" aria-hidden="true" width="20" height="20" />
+        <img
+          class="footer-mark"
+          src="/feather-icon.png"
+          alt=""
+          aria-hidden="true"
+          width="20"
+          height="20"
+        />
         <span class="footer-name">featherlab</span>
       </div>
       <div class="footer-meta">
