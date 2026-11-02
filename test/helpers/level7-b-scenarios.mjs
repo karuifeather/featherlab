@@ -76,10 +76,13 @@ spec:
     },
     variants: [
       {
-        // Omitting policyTypes causes the API to default to [Ingress], not [Egress]
-        name: "omit policyTypes (defaults to Ingress, not Egress)",
+        // egress: [{}] means "allow all egress" — the deny disappears even though
+        // policyTypes: [Egress] is present.  Both spec (hasEgressRules must be false)
+        // and blocked (traffic flows freely) should fail.
+        name: "egress allow-all rule (egress: [{}]) instead of deny-all",
         async run(k) {
           await k.ready("deny-client", "fl-k8s-0156");
+          await k.ready("api", "fl-k8s-0156");
           k.apply(`
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -90,15 +93,42 @@ spec:
   podSelector:
     matchLabels:
       app: deny-client
+  policyTypes:
+    - Egress
+  egress:
+    - {}
 `);
+          // Wait for the allow-all to take effect so the grader sees stable traffic.
+          await k.until("deny-client reaches api (allow-all variant)", () => {
+            try {
+              k.run(
+                "exec",
+                "deny-client",
+                "-n",
+                "fl-k8s-0156",
+                "--",
+                "curl",
+                "-s",
+                "-o",
+                "/dev/null",
+                "--max-time",
+                "5",
+                "http://api.fl-k8s-0156/",
+              );
+              return true;
+            } catch {
+              return false;
+            }
+          });
         },
         failing: ["spec", "blocked"],
       },
       {
-        // Wrong podSelector: selects api, not deny-client
+        // Wrong podSelector: selects api, not deny-client — deny-client keeps full egress.
         name: "podSelector targets app=api instead of app=deny-client",
         async run(k) {
           await k.ready("deny-client", "fl-k8s-0156");
+          await k.ready("api", "fl-k8s-0156");
           k.apply(`
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -112,6 +142,28 @@ spec:
   policyTypes:
     - Egress
 `);
+          // Confirm traffic from deny-client is still allowed (wrong selector, not blocked).
+          await k.until("deny-client reaches api (wrong-selector variant)", () => {
+            try {
+              k.run(
+                "exec",
+                "deny-client",
+                "-n",
+                "fl-k8s-0156",
+                "--",
+                "curl",
+                "-s",
+                "-o",
+                "/dev/null",
+                "--max-time",
+                "5",
+                "http://api.fl-k8s-0156/",
+              );
+              return true;
+            } catch {
+              return false;
+            }
+          });
         },
         failing: ["spec", "blocked"],
       },
