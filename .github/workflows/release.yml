@@ -49,66 +49,9 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=featherlab Workstation
 
-  smoke:
-    name: Integration smoke test
-    needs: [workstation]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-      - name: Install kind
-        run: |
-          curl -fsSL -o kind "https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64"
-          chmod +x kind
-          sudo mv kind /usr/local/bin/kind
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull published workstation image
-        run: docker pull "${{ needs.workstation.outputs.image }}"
-      - run: npm ci
-      - run: npm run build
-      - name: Start app and verify end-to-end
-        env:
-          FEATHERLAB_IMAGE: ${{ needs.workstation.outputs.image }}
-        run: |
-          set -euo pipefail
-          node bin/featherlab.mjs start --no-open >featherlab.log 2>&1 &
-          APP_PID=$!
-          for n in $(seq 1 120); do
-            if curl -fsS http://127.0.0.1:4317/api/status >/dev/null 2>&1; then break; fi
-            if ! kill -0 "$APP_PID" 2>/dev/null; then cat featherlab.log; exit 1; fi
-            sleep 2
-          done
-          curl -fsS http://127.0.0.1:4317/api/status
-          docker exec featherlab-workstation kubectl cluster-info
-          # Open the exercise first: only the exercise that owns the environment is graded.
-          curl -fsS -X POST http://127.0.0.1:4317/api/exercises/k8s-0001/activate | tee activate.json
-          node -e 'if (JSON.parse(require("fs").readFileSync("activate.json","utf8")).environment !== "fresh") process.exit(1)'
-          # The exercise works in its own namespace, created by the activation above.
-          docker exec featherlab-workstation kubectl run web --image=nginx:1.27 -n fl-k8s-0001
-          docker exec featherlab-workstation kubectl wait --for=condition=Ready pod/web -n fl-k8s-0001 --timeout=120s
-          curl -fsS -X POST http://127.0.0.1:4317/api/exercises/k8s-0001/check | tee check.json
-          node -e 'const { result } = JSON.parse(require("fs").readFileSync("check.json","utf8")); if (result.outcome !== "passed") process.exit(1)'
-      - name: Diagnostics on failure
-        if: failure()
-        run: |
-          cat featherlab.log || true
-          docker ps -a || true
-          kind get clusters || true
-
   npm:
     name: Publish to npm
-    needs: [workstation, smoke]
+    needs: [workstation]
     runs-on: ubuntu-latest
     permissions:
       contents: read

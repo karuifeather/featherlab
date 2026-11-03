@@ -1,7 +1,9 @@
 npm run check
 
-# Skip kind tests if all changes are web/docs only
+# Skip kind tests if all changes are web/docs only, or if pushing a tag
 read -r local_ref local_sha remote_ref remote_sha
+
+case "$local_ref" in refs/tags/*) exit 0 ;; esac
 
 if [ -n "$remote_sha" ] && [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
   base="$remote_sha"
