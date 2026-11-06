@@ -32,6 +32,7 @@ exit ${exitCode}
   chmodSync(path.join(dir, "docker"), 0o755);
   const result = spawnSync(process.execPath, [bin, ...args], {
     encoding: "utf8",
+    timeout: 30_000,
     // FEATHERLAB_NO_UPDATE_CHECK suppresses background network calls so tests stay fast and offline-safe.
     env: {
       ...process.env,
