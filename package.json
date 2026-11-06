@@ -1,6 +1,6 @@
 {
   "name": "featherlab",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Free, open-source Kubernetes practice labs — real kind cluster, guided exercises, automated grading. CKA, CKAD, CKS readiness.",
   "keywords": [
     "kubernetes",
