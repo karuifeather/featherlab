@@ -10,6 +10,7 @@ import { run as runValidateContent } from "./validate-content.mjs";
 import { run as runReset } from "./reset.mjs";
 import { run as runStop } from "./stop.mjs";
 import { run as runUpdate } from "./update.mjs";
+import { run as runUpgradeWorkstation } from "./upgrade-workstation.mjs";
 import { run as runStart } from "./start.mjs";
 
 /**
@@ -19,6 +20,7 @@ import { run as runStart } from "./start.mjs";
 export const NO_UPDATE_NOTICE = new Set([
   "start",
   "update",
+  "upgrade-workstation",
   "--version",
   "-V",
   "--help",
@@ -45,5 +47,6 @@ export const COMMANDS = new Map([
   ["reset", runReset],
   ["stop", runStop],
   ["update", runUpdate],
+  ["upgrade-workstation", runUpgradeWorkstation],
   ["start", runStart],
 ]);

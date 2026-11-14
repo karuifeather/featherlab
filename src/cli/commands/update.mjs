@@ -98,30 +98,33 @@ export async function run({ stateDir, version }) {
   // Clear the update-check cache so the notification doesn't immediately re-fire.
   rmSync(path.join(stateDir, "update-check.json"), { force: true });
 
-  // Warn if the running workstation container uses an image from an older release. (D5)
-  // Skip this check when FEATHERLAB_IMAGE is set — the user controls the image directly.
+  // Upgrade the workstation container to the new image while preserving learner files. (D5)
+  // Skip when FEATHERLAB_IMAGE is set — the user controls the image directly.
+  // This runs in the newly installed CLI's process so it uses the correct version.
   if (!process.env.FEATHERLAB_IMAGE) {
     try {
       const wsState = rt.containerState(); // "true" | "false" | "missing"
       if (wsState === "true" || wsState === "false") {
-        const { stdout: wsOut } = spawnSync(
-          "docker",
-          ["inspect", "--format", "{{.Config.Image}}", rt.config.workstation],
-          { encoding: "utf8" },
-        );
-        const wsImage = wsOut.trim();
+        const wsImage = rt.containerImage();
         const expectedImage = `ghcr.io/karuifeather/featherlab-workstation:${info.latest}`;
         if (wsImage && wsImage !== expectedImage) {
-          printWarn(`Workstation image does not match the new CLI version.`);
-          printInfo(`  Running:  ${wsImage}`);
-          printInfo(`  Expected: ${expectedImage}`);
-          printInfo(`Your existing workstation has not been modified. The updated image will`);
-          printInfo(`be used when a new workstation is created. Replacing the existing`);
-          printInfo(`container may delete files stored only inside it.`);
+          printStep("Upgrading workstation to the new image (files are preserved)...");
+          // Spawn the newly installed CLI so the upgrade runs with the correct version.
+          // `featherlab update` exits non-zero if npm fails, so we reach this point only
+          // when npm install succeeded and the new binary is on PATH.
+          const upgradeResult = spawnSync("featherlab", ["upgrade-workstation"], {
+            stdio: "inherit",
+            encoding: "utf8",
+          });
+          if (upgradeResult.error || upgradeResult.status !== 0) {
+            printWarn("Workstation upgrade could not complete right now.");
+            printInfo("Run `featherlab start` — the upgrade will happen safely then.");
+            printInfo("Your files inside the workstation are preserved.");
+          }
         }
       }
     } catch {
-      // Docker unavailable or inspect failed — skip the mismatch check.
+      // Docker unavailable or inspect failed — skip silently; provision() will handle it.
     }
   }
 }

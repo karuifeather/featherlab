@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
 import {
   DEFAULT_CLUSTER,
@@ -39,6 +39,150 @@ export function run(binary, args, options = {}) {
     const details = error.stderr?.toString().trim() || error.message;
     throw new Error(`${binary} ${args.join(" ")}: ${details}`);
   }
+}
+
+/**
+ * Builds the `docker run` arguments for a workstation container so both initial
+ * creation and post-upgrade creation use an identical spec and can't drift.
+ *
+ * @param {import('../infrastructure/environment.mjs').EnvironmentConfig} config
+ * @param {string} kubeconfigPath  absolute path to the host kubeconfig file
+ * @returns {string[]}
+ */
+function buildWorkstationRunArgs(config, kubeconfigPath) {
+  return [
+    "--name",
+    config.workstation,
+    ...Object.entries(config.labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+    "--network",
+    "kind",
+    "--security-opt",
+    "no-new-privileges",
+    "--cap-drop",
+    "ALL",
+    "--pids-limit",
+    "256",
+    "--memory",
+    "512m",
+    "--user",
+    "learner",
+    "-e",
+    "KUBECONFIG=/home/learner/.kube/config",
+    "--mount",
+    `type=bind,src=${kubeconfigPath},dst=/home/learner/.kube/config,readonly`,
+    config.image,
+  ];
+}
+
+/** Suffix appended to the original container name during an in-progress upgrade. */
+export const UPGRADE_BACKUP_SUFFIX = "-pre-upgrade";
+
+/**
+ * Safely upgrade the workstation container to `config.image` while preserving
+ * `/home/learner` from the old container.
+ *
+ * Recovery contract: a `<name>-pre-upgrade` container is the durable checkpoint.
+ * If this function throws after the rename step, the caller MUST check for that
+ * container and rename it back — `provision()` does this automatically.
+ *
+ * Order of operations:
+ *   1. Ensure the target image is available locally (pull if not).
+ *   2. Stop the existing container if running.
+ *   3. `docker cp` /home/learner from old container to a host backup directory.
+ *   4. `docker rename` the old container to `<name>-pre-upgrade` (safe checkpoint).
+ *   5. `docker run -d` the new container with the new image.
+ *   6. `docker cp` the backup back into the new container's /home/learner.
+ *   7. `docker rm` the renamed backup container.
+ *
+ * On any failure after step 4: the new container is force-removed (if created)
+ * and the old one is renamed back.  The host backup directory is kept regardless.
+ *
+ * @param {import('../infrastructure/environment.mjs').EnvironmentConfig} config
+ * @param {string} kubeconfigPath
+ * @param {(binary: string, args: string[], options?: object) => string} exec
+ * @param {{ log: Function, warn: Function, error: Function }} log
+ * @returns {{ backupDir: string }}
+ */
+function _upgradeWorkstation(config, kubeconfigPath, exec, log) {
+  const name = config.workstation;
+  const backup = name + UPGRADE_BACKUP_SUFFIX;
+  const backupDir = path.join(config.stateDir, "workstation-home-backup");
+
+  // ── 1. Ensure target image is available ───────────────────────────────────
+  let imageLocal = false;
+  try {
+    exec("docker", ["image", "inspect", "--format", "{{.Id}}", config.image]);
+    imageLocal = true;
+  } catch {
+    // Not available locally.
+  }
+  if (!imageLocal) {
+    log.log(`Pulling updated workstation image: ${config.image}`);
+    exec("docker", ["pull", config.image], { timeout: 360000, stdio: "inherit" });
+  }
+
+  // ── 2. Stop existing container if running ─────────────────────────────────
+  let wsRunning = "";
+  try {
+    wsRunning = exec("docker", ["inspect", "--format", "{{.State.Running}}", name]).trim();
+  } catch {
+    // Container doesn't exist — handled later.
+  }
+  if (wsRunning === "true") {
+    log.log("Stopping workstation for upgrade...");
+    exec("docker", ["stop", "-t", "5", name]);
+  }
+
+  // ── 3. Back up /home/learner to the host ──────────────────────────────────
+  log.log("Backing up learner files...");
+  // Remove any stale backup dir from a previous partial attempt.
+  rmSync(backupDir, { recursive: true, force: true });
+  mkdirSync(backupDir, { recursive: true });
+  // "container:/home/learner/." — trailing dot = copy *contents* of /home/learner into backupDir.
+  exec("docker", ["cp", `${name}:/home/learner/.`, backupDir]);
+
+  // ── 4–7: Rename → create → restore → cleanup (with rollback on failure) ───
+  let newCreated = false;
+  try {
+    // 4. Safe checkpoint: rename old container.
+    exec("docker", ["rename", name, backup]);
+
+    // 5. Create the new container with the target image.
+    exec("docker", ["run", "-d", ...buildWorkstationRunArgs(config, kubeconfigPath)]);
+    newCreated = true;
+
+    // 6. Restore /home/learner into the new container.
+    //    Non-fatal: the container is fully usable even if restore fails; the host
+    //    backup preserves the files for manual recovery.
+    log.log("Restoring learner files to upgraded workstation...");
+    try {
+      // "backupDir/." — trailing dot = copy *contents* of backupDir into /home/learner.
+      exec("docker", ["cp", `${backupDir}/.`, `${name}:/home/learner`]);
+    } catch (restoreErr) {
+      log.warn(`Could not restore all files: ${restoreErr.message}`);
+      log.warn(`Your files are safely backed up at: ${backupDir}`);
+    }
+
+    // 7. Remove the renamed backup container now that upgrade is confirmed good.
+    exec("docker", ["rm", backup]);
+  } catch (error) {
+    // Rollback: remove the new container if it was created, then rename the old one back.
+    if (newCreated) {
+      try {
+        exec("docker", ["rm", "-f", name]);
+      } catch {
+        // Best effort.
+      }
+    }
+    try {
+      exec("docker", ["rename", backup, name]);
+    } catch {
+      // Best effort.
+    }
+    throw error;
+  }
+
+  return { backupDir };
 }
 
 /**
@@ -143,7 +287,56 @@ export function createRuntime(
     // The learner container uses UID 1000; its read-only bind mount must be readable.
     // The parent state directory remains owner-only (0700).
     chmodSync(kubeconfigPath, 0o644);
-    const status = containerState();
+
+    let status = containerState();
+
+    // Recovery: an interrupted upgrade leaves a `<name>-pre-upgrade` container behind.
+    // If the main container is gone but the backup still exists, restore it so the user
+    // isn't left without a workstation.
+    if (status === "missing" && !process.env.FEATHERLAB_IMAGE) {
+      const backupName = config.workstation + UPGRADE_BACKUP_SUFFIX;
+      let backupState = "";
+      try {
+        backupState = exec("docker", [
+          "inspect",
+          "--format",
+          "{{.State.Running}}",
+          backupName,
+        ]).trim();
+      } catch {
+        // No backup container either — normal "missing" path.
+      }
+      if (backupState === "true" || backupState === "false") {
+        log.log("Recovering workstation from interrupted upgrade...");
+        exec("docker", ["rename", backupName, config.workstation]);
+        exec("docker", ["start", config.workstation]);
+        return;
+      }
+    }
+
+    // Image-mismatch upgrade: when the CLI was updated and an existing workstation
+    // container uses an older image, upgrade it in-place while preserving /home/learner.
+    // Skipped when FEATHERLAB_IMAGE is set — the user controls the image directly.
+    if ((status === "true" || status === "false") && !process.env.FEATHERLAB_IMAGE) {
+      let wsImage = "";
+      try {
+        wsImage = exec("docker", [
+          "inspect",
+          "--format",
+          "{{.Config.Image}}",
+          config.workstation,
+        ]).trim();
+      } catch {
+        // Non-fatal — if we can't inspect, treat as no mismatch.
+      }
+      if (wsImage && wsImage !== config.image) {
+        log.log(`Upgrading workstation: ${wsImage} → ${config.image}`);
+        const { backupDir } = _upgradeWorkstation(config, kubeconfigPath, exec, log);
+        log.log(`Workstation upgraded successfully. Files preserved at: ${backupDir}`);
+        return;
+      }
+    }
+
     if (status === "true") return;
     if (status === "false") {
       log.log("Starting existing workstation...");
@@ -167,30 +360,7 @@ export function createRuntime(
     }
 
     log.log("Creating isolated learner workstation...");
-    exec("docker", [
-      "run",
-      "-d",
-      "--name",
-      config.workstation,
-      ...Object.entries(config.labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
-      "--network",
-      "kind",
-      "--security-opt",
-      "no-new-privileges",
-      "--cap-drop",
-      "ALL",
-      "--pids-limit",
-      "256",
-      "--memory",
-      "512m",
-      "--user",
-      "learner",
-      "-e",
-      "KUBECONFIG=/home/learner/.kube/config",
-      "--mount",
-      `type=bind,src=${kubeconfigPath},dst=/home/learner/.kube/config,readonly`,
-      config.image,
-    ]);
+    exec("docker", ["run", "-d", ...buildWorkstationRunArgs(config, kubeconfigPath)]);
   }
 
   async function stop() {
@@ -226,6 +396,33 @@ export function createRuntime(
     }
   }
 
+  /**
+   * Returns the image tag of the existing workstation container, or an empty string
+   * if the container does not exist or Docker is unavailable.
+   */
+  function containerImage() {
+    try {
+      return exec("docker", [
+        "inspect",
+        "--format",
+        "{{.Config.Image}}",
+        config.workstation,
+      ]).trim();
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * Upgrade the workstation container to match `config.image` while preserving
+   * `/home/learner`.  Throws on failure — callers should surface the error.
+   * Returns `{ backupDir }`.
+   */
+  function upgradeWorkstation() {
+    const kubeconfigPath = path.join(config.stateDir, "workstation-kubeconfig");
+    return _upgradeWorkstation(config, kubeconfigPath, exec, log);
+  }
+
   function status() {
     log.log(`Cluster: ${clusterExists() ? config.cluster : "not created"}`);
     log.log(`Workstation: ${containerState()}`);
@@ -241,6 +438,8 @@ export function createRuntime(
     stopInBackground,
     status,
     containerState,
+    containerImage,
+    upgradeWorkstation,
     clusterExists,
   };
 }
