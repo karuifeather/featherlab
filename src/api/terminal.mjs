@@ -1,9 +1,27 @@
+import { randomUUID } from "node:crypto";
 import Docker from "dockerode";
 import { WebSocketServer } from "ws";
 import { DEFAULT_WORKSTATION } from "../infrastructure/environment.mjs";
 import { hostAllowed, originAllowed } from "./http.mjs";
 
 const MAX_SESSIONS = 8;
+
+// Every process a terminal session starts inherits this variable, which is how the
+// session's processes are found again when its socket closes.
+const SESSION_ENV = "FEATHERLAB_TERMINAL_SESSION";
+
+// Closing the attach stream does not end an exec: the daemon keeps the PTY open, so the
+// shell never sees a hangup and would run on, with whatever it had in the foreground,
+// until the workstation stops. Each closed tab or page reload would leave one behind,
+// counting against the container's pids limit. This sends the hangup a closing terminal
+// normally delivers. Bash saves its history and exits on it; `nohup` jobs survive, as
+// they would anywhere else.
+const HANG_UP = `for e in /proc/[0-9]*/environ; do
+  grep -qzxF "${SESSION_ENV}=$1" "$e" 2>/dev/null || continue
+  p=\${e#/proc/}
+  kill -HUP "\${p%/environ}" 2>/dev/null
+done
+true`;
 
 /**
  * Browser terminal: a WebSocket bridged to an interactive `docker exec` in the learner
@@ -17,6 +35,8 @@ export function attachTerminal(
   { getPort, workstation = DEFAULT_WORKSTATION, docker = new Docker() } = {},
 ) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+  // Set on shutdown: the workstation is about to stop, which ends every session anyway.
+  let shuttingDown = false;
   server.on("upgrade", (req, socket, head) => {
     const allowed =
       req.url === "/ws/terminal" &&
@@ -29,8 +49,26 @@ export function attachTerminal(
   wss.on("connection", async (ws) => {
     let exec;
     let stream;
+    let shellExited = false;
+    const sessionId = randomUUID();
+    const hangUp = async () => {
+      if (shellExited || shuttingDown) return;
+      try {
+        const reaper = await docker.getContainer(workstation).exec({
+          Cmd: ["sh", "-c", HANG_UP, "sh", sessionId],
+          User: "learner",
+        });
+        await reaper.start({ Detach: true });
+      } catch (error) {
+        console.error("Terminal session cleanup:", error.message);
+      }
+    };
     // Registered first so a browser that disconnects while the exec is starting is cleaned up.
-    ws.on("close", () => stream?.destroy());
+    ws.on("close", () => {
+      if (!stream) return; // still starting: handled right after the exec starts
+      stream.destroy();
+      hangUp();
+    });
 
     // Terminal size invariant: the PTY must always end up at the last size the browser
     // reported. The browser sends its fitted size the instant the socket opens, which is
@@ -98,7 +136,7 @@ export function attachTerminal(
         Cmd: ["/bin/bash", "-l"],
         User: "learner",
         WorkingDir: "/home/learner",
-        Env: ["TERM=xterm-256color"],
+        Env: ["TERM=xterm-256color", `${SESSION_ENV}=${sessionId}`],
       });
       // `Tty: true` must be repeated on start. The daemon decides between a raw stream and
       // its multiplexed stdout/stderr framing from the *start* request, not from the exec
@@ -114,7 +152,11 @@ export function attachTerminal(
         Tty: true,
         ...(wanted ? { ConsoleSize: [wanted.h, wanted.w] } : {}),
       });
-      if (ws.readyState !== 1) return stream.destroy();
+      if (ws.readyState !== 1) {
+        stream.destroy();
+        hangUp();
+        return;
+      }
       stream.on("data", (buf) => {
         if (retryOnOutput) {
           retryOnOutput = false;
@@ -129,7 +171,10 @@ export function attachTerminal(
       });
       // Close codes tell the browser why the session ended (see PracticeTerminal):
       // 1000 = the shell exited, 1011 = no shell could be started, 1001 = shutdown.
-      stream.on("end", () => ws.close(1000, "Shell exited"));
+      stream.on("end", () => {
+        shellExited = true;
+        ws.close(1000, "Shell exited");
+      });
     } catch (error) {
       console.error("Terminal could not start:", error.message);
       if (ws.readyState === 1) {
@@ -145,6 +190,7 @@ export function attachTerminal(
      * Sends close frames and waits up to 2 seconds before force-terminating stragglers.
      */
     closeSessions() {
+      shuttingDown = true;
       return new Promise((resolve) => {
         const clients = [...wss.clients];
         if (clients.length === 0) {

@@ -10,7 +10,7 @@ const quiet = { warn() {}, error() {} };
 
 // Sized to reproduce the reported glitch: Docker's multiplexed frame header ends with the
 // payload length, and 86 = "V", 80 = "P" — the stray letters seen before the prompt and `bin`.
-const PROMPT = "learner@workstation:~$ ".padEnd(86, " ");
+const PROMPT = "learner:~$ ".padEnd(86, " ");
 const LS_ROW = "bin   dev  home  lib64  mnt  proc  run   srv  tmp  var".padEnd(78, " ") + "\r\n";
 
 /**
@@ -19,32 +19,37 @@ const LS_ROW = "bin   dev  home  lib64  mnt  proc  run   srv  tmp  var".padEnd(7
  * request's `Tty`, not by the exec's create options.
  */
 function daemonLikeDocker({ chunks = [PROMPT, LS_ROW], endAfter = false } = {}) {
+  const execs = [];
   const starts = [];
   const resizes = [];
   return {
+    execs,
     starts,
     resizes,
     getContainer: () => ({
-      exec: async () => ({
-        start: async (options) => {
-          starts.push(options);
-          const stream = new PassThrough();
-          const frame = (text) => {
-            const payload = Buffer.from(text);
-            if (options.Tty) return payload;
-            const header = Buffer.alloc(8);
-            header[0] = 1; // stdout
-            header.writeUInt32BE(payload.length, 4);
-            return Buffer.concat([header, payload]);
-          };
-          setTimeout(() => {
-            for (const chunk of chunks) stream.write(frame(chunk));
-            if (endAfter) setTimeout(() => stream.end(), 20);
-          }, 20);
-          return stream;
-        },
-        resize: async (dims) => resizes.push(dims),
-      }),
+      exec: async (options) => (
+        execs.push(options),
+        {
+          start: async (options) => {
+            starts.push(options);
+            const stream = new PassThrough();
+            const frame = (text) => {
+              const payload = Buffer.from(text);
+              if (options.Tty) return payload;
+              const header = Buffer.alloc(8);
+              header[0] = 1; // stdout
+              header.writeUInt32BE(payload.length, 4);
+              return Buffer.concat([header, payload]);
+            };
+            setTimeout(() => {
+              for (const chunk of chunks) stream.write(frame(chunk));
+              if (endAfter) setTimeout(() => stream.end(), 20);
+            }, 20);
+            return stream;
+          },
+          resize: async (dims) => resizes.push(dims),
+        }
+      ),
     }),
   };
 }
@@ -94,7 +99,7 @@ test("terminal output reaches the browser byte-for-byte, with no stream-frame he
   assert.equal(docker.starts[0].Tty, true);
   const text = Buffer.concat(received).toString("latin1");
   assert.equal(text, expected);
-  assert.ok(text.startsWith("learner@"), "no stray length byte before the prompt");
+  assert.ok(text.startsWith("learner:"), "no stray length byte before the prompt");
   const bytes = [...Buffer.concat(received)];
   assert.ok(
     bytes.every((b) => b > 8),
@@ -244,6 +249,37 @@ test("a shell that exits closes the socket with 1000 so the UI can say why", asy
   await serve(daemonLikeDocker({ endAfter: true }));
   const { closed } = open();
   assert.equal(await closed, 1000);
+});
+
+// Closing the attach stream does not end an exec, so without this every closed tab or page
+// reload left a shell (and its foreground program) running in the workstation.
+test("closing the tab hangs up that session's processes, and only that session's", async () => {
+  const docker = daemonLikeDocker();
+  await serve(docker);
+  const first = open();
+  const second = open();
+  await until(() => first.received.length > 0 && second.received.length > 0);
+  const sessionOf = (exec) =>
+    exec.Env.find((entry) => entry.startsWith("FEATHERLAB_TERMINAL_SESSION="));
+  const [firstSession, secondSession] = docker.execs.map(sessionOf);
+  assert.ok(firstSession && secondSession && firstSession !== secondSession);
+
+  first.ws.close();
+  await until(() => docker.execs.length === 3);
+  const reaper = docker.execs[2];
+  assert.equal(reaper.User, "learner");
+  assert.equal(reaper.Cmd.at(-1), firstSession.split("=")[1]);
+  assert.match(reaper.Cmd[2], /kill -HUP/);
+  second.ws.close();
+});
+
+test("a shell that exited on its own needs no hangup", async () => {
+  const docker = daemonLikeDocker({ endAfter: true });
+  await serve(docker);
+  const { closed } = open();
+  assert.equal(await closed, 1000);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(docker.execs.length, 1);
 });
 
 test("a shell that cannot start closes the socket with 1011", async () => {
