@@ -1,6 +1,6 @@
-// One panel: a toolbar, a hairline divider, then the terminal canvas. The panel itself draws
+// One panel: a tab strip, a status bar, then the terminal canvas. The panel itself draws
 // no border — the workspace split handle is its only edge — so there is no frame-in-a-frame.
-// Toolbar colours use the theme-independent --terminal-* tokens because the shell stays
+// All chrome colours use the theme-independent --terminal-* tokens because the shell stays
 // dark in both themes; app text tokens would lose contrast on it in light mode.
 .terminal-shell {
   display: flex;
@@ -9,6 +9,85 @@
   min-height: 0;
   flex-direction: column;
   background: var(--terminal-bg);
+  position: relative; // anchors .terminal-copy-flash
+}
+
+// Tab strip
+.terminal-tabs {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 30px;
+  background: var(--terminal-chrome);
+  border-bottom: 1px solid var(--terminal-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.terminal-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--terminal-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  border-right: 1px solid var(--terminal-border);
+  user-select: none;
+
+  &.is-active {
+    color: var(--terminal-fg);
+    background: var(--terminal-bg);
+  }
+
+  &:hover:not(.is-active) {
+    background: var(--terminal-control-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--terminal-fg);
+    outline-offset: -2px;
+  }
+}
+
+.terminal-tab-close {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--terminal-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 2px;
+
+  &:hover {
+    background: var(--terminal-control-hover);
+    color: var(--terminal-fg);
+  }
+}
+
+.terminal-tab-add {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--terminal-muted);
+  font-size: 16px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--terminal-control-hover);
+    color: var(--terminal-fg);
+  }
 }
 
 .terminal-bar {
@@ -108,6 +187,91 @@
   // grid, so the padding and the fractional-cell remainder showed as a black inner frame.
   .xterm .xterm-viewport {
     background-color: var(--terminal-bg);
+  }
+}
+
+// Shown for a moment when a selection is copied (copy on select). Sits in the top-right
+// corner of the canvas, below the tab strip (30px) and the status bar (34px), and never
+// takes pointer events, so it cannot get in the way of the next selection.
+.terminal-copy-flash {
+  position: absolute;
+  top: calc(30px + 34px + 8px);
+  right: 14px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--terminal-border);
+  border-radius: var(--radius-sm);
+  background: var(--terminal-chrome);
+  color: var(--terminal-fg);
+  pointer-events: none;
+  opacity: 0;
+  animation: copy-flash 900ms var(--ease-out) forwards;
+}
+
+@keyframes copy-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  15%,
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-copy-flash {
+    // The global reduced-motion reset shortens every animation to nothing, which would
+    // hide the confirmation entirely; it stays for its full time, without the scale.
+    animation-name: copy-flash-still;
+    animation-duration: 900ms !important;
+  }
+  @keyframes copy-flash-still {
+    0%,
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+// Font size controls
+.terminal-font-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.terminal-font-btn {
+  border: none;
+  background: transparent;
+  color: var(--terminal-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: 1;
+  transition: background var(--dur-fast) var(--ease-out);
+
+  &:hover:not(:disabled) {
+    background: var(--terminal-control-hover);
+    color: var(--terminal-fg);
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: default;
   }
 }
 
