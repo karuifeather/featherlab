@@ -74,7 +74,7 @@ Later launches reuse the existing cluster and workstation.
 ### What happens on start
 
 1. FeatherLab checks prerequisites and provisions the kind cluster if it does not exist.
-2. A non-root workstation container joins the cluster's Docker network. This is where you run `kubectl`.
+2. A non-root workstation container joins the cluster's Docker network. This is where you run `kubectl`. Its shell is set up like the exam hosts: the `k` alias, tab completion, `yq`, and `man`. Aliases you set are remembered.
 3. A local HTTP server starts and opens the browser workspace.
 4. The launcher shows your progress and resume state. Select an exercise to begin.
 

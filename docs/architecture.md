@@ -196,6 +196,32 @@ server (src/api/terminal.mjs) ──hold latest size until the exec exists──
 - Neither side sends or applies the same size twice, so layout churn never loops.
 - Hidden hosts (inactive mobile tab) are never fitted: a 0-wide box would collapse the grid.
 
+## Learner shell
+
+Each terminal tab is its own `docker exec` of `bash -l` in the workstation: separate shell,
+working directory and environment, on a shared filesystem.
+
+The workstation image matches what the exam hosts provide: `kubectl` with the `k` alias and
+Bash completion, `yq`, `curl`, `wget`, and `man` with man pages. Shell defaults live in
+`docker/shell.sh`, installed as `/etc/featherlab/shell.sh` and sourced from
+`/etc/bash.bashrc`. They are deliberately not in the home directory: `/home/learner` is copied
+across workstation upgrades, so a baked-in `~/.bashrc` would be replaced by the learner's
+older copy.
+
+- **Aliases are remembered.** An alias set (or removed) at the prompt is written to
+  `~/.featherlab_aliases` and applied in every later shell, after the rc files. Only the
+  learner's changes are stored. Tabs share the file: each shell merges its own changes into
+  the file's current contents, so an idle tab never erases another tab's alias, and picks up
+  the others' changes at its next prompt. Functions and variables are not captured; those
+  belong in `~/.bashrc`, which also persists.
+- **History is appended after every command**, not on exit, so it survives a closed tab or a
+  reload and tabs do not overwrite each other.
+- **A closed socket hangs up its session.** Closing the attach stream does not end an exec;
+  the daemon keeps the PTY open. The server tags each session's processes with
+  `FEATHERLAB_TERMINAL_SESSION` and sends them `SIGHUP` when the socket closes, as a closing
+  terminal would. The container runs with `--init` so orphans are reaped rather than left as
+  zombies. Both matter because the workstation has a pids limit.
+
 ## Lifecycle
 
 ```text
