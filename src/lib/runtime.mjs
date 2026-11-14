@@ -54,6 +54,9 @@ function buildWorkstationRunArgs(config, kubeconfigPath) {
     "--name",
     config.workstation,
     ...Object.entries(config.labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+    // An init process as PID 1 reaps orphans. Programs left behind by a closed terminal
+    // would otherwise stay as zombies and count against the pids limit below.
+    "--init",
     "--network",
     "kind",
     "--security-opt",
@@ -69,7 +72,7 @@ function buildWorkstationRunArgs(config, kubeconfigPath) {
     "-e",
     "KUBECONFIG=/home/learner/.kube/config",
     "--mount",
-    `type=bind,src=${kubeconfigPath},dst=/home/learner/.kube/config,readonly`,
+    `type=bind,src=${kubeconfigPath},dst=/home/learner/.kube/base-config,readonly`,
     config.image,
   ];
 }
@@ -183,6 +186,69 @@ function _upgradeWorkstation(config, kubeconfigPath, exec, log) {
   }
 
   return { backupDir };
+}
+
+/**
+ * Returns true when the existing workstation container uses the old readonly bind mount at
+ * /home/learner/.kube/config instead of the new base-config path. Uses docker inspect so it
+ * works whether the container is running or stopped. Non-fatal: returns false on any error.
+ */
+function _needsMountMigration(config, exec) {
+  try {
+    const raw = exec("docker", [
+      "inspect",
+      "--format",
+      "{{json .Mounts}}",
+      config.workstation,
+    ]).trim();
+    const mounts = JSON.parse(raw);
+    return (
+      !Array.isArray(mounts) ||
+      !mounts.some((m) => m.Destination === "/home/learner/.kube/base-config")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Seeds /home/learner/.kube/config from the read-only base-config mount when missing or when
+ * the cluster was recreated (server address changed). Preserves learner customisations (e.g.
+ * a default namespace) across normal restarts. Non-fatal: silently skips on any error.
+ */
+function _seedLearnerKubeconfig(config, exec) {
+  try {
+    exec("docker", ["exec", config.workstation, "test", "-f", "/home/learner/.kube/base-config"]);
+  } catch {
+    return; // base-config absent (old layout, container unavailable, etc.) — skip
+  }
+  try {
+    const serverLine = (file) =>
+      exec("docker", [
+        "exec",
+        config.workstation,
+        "sh",
+        "-c",
+        `grep -m1 'server:' /home/learner/.kube/${file} 2>/dev/null`,
+      ]).trim();
+    const baseServer = serverLine("base-config");
+    let configServer;
+    try {
+      configServer = serverLine("config");
+    } catch {
+      /* config does not exist yet */
+    }
+    if (baseServer && baseServer === configServer) return; // already up to date
+    exec("docker", [
+      "exec",
+      config.workstation,
+      "cp",
+      "/home/learner/.kube/base-config",
+      "/home/learner/.kube/config",
+    ]);
+  } catch {
+    // Non-fatal: learner will see kubectl errors and can manually copy the file
+  }
 }
 
 /**
@@ -310,6 +376,7 @@ export function createRuntime(
         log.log("Recovering workstation from interrupted upgrade...");
         exec("docker", ["rename", backupName, config.workstation]);
         exec("docker", ["start", config.workstation]);
+        _seedLearnerKubeconfig(config, exec);
         return;
       }
     }
@@ -333,14 +400,32 @@ export function createRuntime(
         log.log(`Upgrading workstation: ${wsImage} → ${config.image}`);
         const { backupDir } = _upgradeWorkstation(config, kubeconfigPath, exec, log);
         log.log(`Workstation upgraded successfully. Files preserved at: ${backupDir}`);
+        _seedLearnerKubeconfig(config, exec);
         return;
       }
     }
 
-    if (status === "true") return;
+    // Mount-layout migration: containers created before this version had the kubeconfig
+    // bind-mounted read-only directly at .kube/config, preventing `kubectl config set-context`.
+    // Migrate by recreating the container (preserving /home/learner) with the new layout where
+    // base-config is the read-only mount and .kube/config is a writable learner-owned copy.
+    if ((status === "true" || status === "false") && !process.env.FEATHERLAB_IMAGE) {
+      if (_needsMountMigration(config, exec)) {
+        log.log("Migrating workstation to writable kubeconfig layout...");
+        _upgradeWorkstation(config, kubeconfigPath, exec, log);
+        _seedLearnerKubeconfig(config, exec);
+        return;
+      }
+    }
+
+    if (status === "true") {
+      _seedLearnerKubeconfig(config, exec);
+      return;
+    }
     if (status === "false") {
       log.log("Starting existing workstation...");
       exec("docker", ["start", config.workstation]);
+      _seedLearnerKubeconfig(config, exec);
       return;
     }
 
@@ -361,6 +446,7 @@ export function createRuntime(
 
     log.log("Creating isolated learner workstation...");
     exec("docker", ["run", "-d", ...buildWorkstationRunArgs(config, kubeconfigPath)]);
+    _seedLearnerKubeconfig(config, exec);
   }
 
   async function stop() {

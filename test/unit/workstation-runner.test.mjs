@@ -20,7 +20,15 @@ test("runs kubectl through docker exec with no shell", async () => {
   const result = await runner.run(["kubectl", "get", "pods"]);
   assert.deepEqual(result, { stdout: "out", stderr: "", exitCode: 0 });
   assert.equal(seen.file, "docker");
-  assert.deepEqual(seen.args, ["exec", "ws", "kubectl", "get", "pods"]);
+  assert.deepEqual(seen.args, [
+    "exec",
+    "-e",
+    "KUBECONFIG=/home/learner/.kube/base-config",
+    "ws",
+    "kubectl",
+    "get",
+    "pods",
+  ]);
 });
 
 test("stdin switches on docker exec -i and is delivered", async () => {
@@ -31,7 +39,13 @@ test("stdin switches on docker exec -i and is delivered", async () => {
       stdin: "{}",
     },
   );
-  assert.deepEqual(seen.args.slice(0, 3), ["exec", "-i", "ws"]);
+  assert.deepEqual(seen.args.slice(0, 5), [
+    "exec",
+    "-i",
+    "-e",
+    "KUBECONFIG=/home/learner/.kube/base-config",
+    "ws",
+  ]);
   assert.equal(seen.stdin, "{}");
 });
 

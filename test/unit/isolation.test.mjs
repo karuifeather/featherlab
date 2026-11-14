@@ -147,7 +147,7 @@ test("the learner workstation never gets the Docker socket or elevated privilege
     ]);
     assert.ok(run.includes("no-new-privileges"));
     const mount = run[run.indexOf("--mount") + 1];
-    assert.match(mount, /dst=\/home\/learner\/\.kube\/config,readonly$/);
+    assert.match(mount, /dst=\/home\/learner\/\.kube\/base-config,readonly$/);
   } finally {
     env.teardown();
   }

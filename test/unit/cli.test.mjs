@@ -38,7 +38,9 @@ test("`reset` defaults to k8s-0001 and only addresses that exercise's namespace"
     out.calls.every((c) => !/ -n default\b| delete pods /.test(c)),
     "never touches default",
   );
-  assert.ok(out.calls.every((c) => /^exec (-i )?featherlab-workstation kubectl /.test(c)));
+  assert.ok(
+    out.calls.every((c) => /^exec (-i )?-e KUBECONFIG=\S+ featherlab-workstation kubectl /.test(c)),
+  );
 });
 
 test("`reset <id>` resets the named exercise and nothing else", () => {

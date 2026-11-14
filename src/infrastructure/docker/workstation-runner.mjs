@@ -31,7 +31,14 @@ export function createWorkstationRunner({
     run(argv, { stdin, timeoutMs = 30_000, signal } = {}) {
       if (!allowedBinaries.includes(argv[0]))
         return Promise.reject(new Error(`Binary "${argv[0]}" is not permitted.`));
-      const args = ["exec", ...(stdin === undefined ? [] : ["-i"]), container, ...argv];
+      const args = [
+        "exec",
+        ...(stdin === undefined ? [] : ["-i"]),
+        "-e",
+        "KUBECONFIG=/home/learner/.kube/base-config",
+        container,
+        ...argv,
+      ];
       return new Promise((resolve, reject) => {
         const child = execFile(
           "docker",

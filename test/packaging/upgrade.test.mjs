@@ -173,7 +173,7 @@ test("`reset` (no-arg) only addresses the workstation, never a raw Docker or kin
   const out = cliWithFakeDocker(["reset"]);
   assert.equal(out.status, 0, out.stderr);
   assert.ok(
-    out.calls.every((c) => /^exec (-i )?featherlab-workstation kubectl /.test(c)),
+    out.calls.every((c) => /^exec (-i )?-e KUBECONFIG=\S+ featherlab-workstation kubectl /.test(c)),
     "every docker call must be exec-into-workstation",
   );
 });
