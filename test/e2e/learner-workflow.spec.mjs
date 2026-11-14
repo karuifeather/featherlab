@@ -60,8 +60,8 @@ test("launcher offers the Kubernetes track, in curriculum order across five leve
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kubernetes" })).toBeVisible();
   await page.getByRole("button", { name: /^(Start|Continue) Learning$/ }).click();
-  // Level 0 is open by default. Expand Level 1–5 so the full
-  // list of 124 labs is in the DOM and can be addressed by index.
+  // Level 0 is open by default. Expand Level 1–5 so their 124 labs are in the DOM and can
+  // be addressed by index. Levels 6 and 7 stay collapsed.
   const levelHeaders = page.locator(".level-header");
   await expect(page.locator(".level-label")).toHaveText([
     "Level 0",
@@ -70,6 +70,8 @@ test("launcher offers the Kubernetes track, in curriculum order across five leve
     "Level 3",
     "Level 4",
     "Level 5",
+    "Level 6",
+    "Level 7",
   ]);
   await levelHeaders.nth(1).click(); // expand Level 1
   await levelHeaders.nth(2).click(); // expand Level 2
@@ -124,10 +126,43 @@ test("the first exercise is loaded dynamically from the API", async () => {
 
 test("a real terminal connects and runs kubectl against the test cluster", async () => {
   await expect(terminalConnected()).toBeVisible({ timeout: 30_000 });
+  await expect(terminalText()).toContainText("Welcome to FeatherLab");
   await runInTerminal("export FL_MARK=session-one");
   await runInTerminal("kubectl get nodes");
   await expect(terminalText()).toContainText("control-plane", { timeout: 60_000 });
   await expect(terminalText()).toContainText("Ready");
+});
+
+// The exam hosts provide `k` with completion, yq and man; the workstation matches them.
+test("the shell has the k alias, kubectl completion and the exam's tools", async () => {
+  await runInTerminal("clear; k get nodes -o name");
+  await expect(terminalText()).toContainText("node/", { timeout: 60_000 });
+  // Tab completes the subcommand through the alias: `k ver` becomes `k version`.
+  await page.keyboard.type("clear; k ver");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("--client");
+  await page.keyboard.press("Enter");
+  await expect(terminalText()).toContainText("Client Version");
+  await runInTerminal("clear; yq -n '.tool = \"yq-works\"'; man -w ls bash");
+  await expect(terminalText()).toContainText("tool: yq-works");
+  await expect(terminalText()).toContainText("/man1/ls.1");
+  await expect(terminalText()).toContainText("/man1/bash.1");
+  await runInTerminal("clear");
+});
+
+// Closing the attach stream does not end the shell, so a closed tab used to leave its bash
+// running in the workstation until the pids limit was reached.
+test("a closed tab takes its shell with it", async () => {
+  const tabs = page.getByRole("tablist", { name: "Terminal tabs" }).getByRole("tab");
+  await page.getByRole("button", { name: "New terminal" }).click();
+  await expect(tabs).toHaveCount(2);
+  await page.getByRole("button", { name: "Close tab 2" }).click();
+  await expect(tabs).toHaveCount(1);
+  await expect(async () => {
+    await runInTerminal("clear; echo shells=$(pgrep -cx bash)");
+    await expect(terminalText()).toContainText("shells=1", { timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
+  await runInTerminal("clear");
 });
 
 // Regression: the exec stream was Docker-multiplexed, so each chunk's 8-byte frame header
@@ -140,8 +175,11 @@ test("real shell output reaches xterm without stray frame bytes", async () => {
   const listing = texts.find((t) => /\bproc\b/.test(t) && /\bbin\b/.test(t));
   expect(listing, texts.join("\n")).toBeDefined();
   expect(listing.startsWith("bin")).toBe(true);
-  for (const prompt of texts.filter((t) => t.includes("learner@")))
-    expect(prompt.startsWith("learner@"), prompt).toBe(true);
+  // The prompt is `learner:~$`: no `@<container id>` (see docker/shell.sh).
+  const prompts = texts.filter((t) => t.includes("learner:"));
+  expect(prompts.length, texts.join("\n")).toBeGreaterThan(0);
+  for (const prompt of prompts) expect(prompt.startsWith("learner:"), prompt).toBe(true);
+  expect(texts.filter((t) => t.includes("learner@"))).toEqual([]);
 });
 
 const gridRows = () => page.locator(".xterm-rows > div").count();
@@ -356,6 +394,7 @@ test("a manifest written in the terminal solves Working With YAML and unlocks De
 });
 
 test("a dropped terminal can be reconnected", async () => {
+  await runInTerminal("alias flsaved='echo alias-$((40+2))'");
   await runInTerminal("exit");
   await expect(page.getByText(/Terminal disconnected/)).toBeVisible();
   await page.getByRole("button", { name: "Reconnect" }).click();
@@ -365,6 +404,12 @@ test("a dropped terminal can be reconnected", async () => {
   // A fresh shell: the variable from the first session is gone.
   await runInTerminal('echo "[$FL_MARK]"');
   await expect(terminalText()).toContainText("[]");
+  // An alias set in the first session is remembered, and so is its history.
+  await runInTerminal("flsaved");
+  await expect(terminalText()).toContainText("alias-42");
+  // The bracket keeps this command from matching itself in the history.
+  await runInTerminal("clear; echo saved=$(history | grep -c 'alias [f]lsaved=')");
+  await expect(terminalText()).toContainText("saved=1");
   // The new shell starts at the panel's real size, not a default.
   await expectPtyMatchesGrid();
 });
