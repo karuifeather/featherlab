@@ -143,13 +143,16 @@ not write them as ordinary exercises.
 The learner's home directory in the workstation persists across exercises (shell history,
 manifests they wrote). FeatherLab never deletes it. This cannot leak a pass: a stale
 manifest that names a namespace of a previous exercise fails (`namespaces "..." not found`),
-and one without a namespace lands in `default`, which no check reads. Do not write checks
-or setup that read files in the workstation.
+and one without a namespace lands in the context's namespace (`default` unless the learner
+changed it), which is only the current exercise's if the learner pointed it there. Do not
+write checks or setup that read files in the workstation.
 
 #### Telling the learner where to work
 
-The workstation's kubeconfig is mounted read-only, so `kubectl config set-context --current
---namespace=...` fails there, and FeatherLab does not rewrite it. Every exercise therefore:
+The learner's kubeconfig is writable, so `kubectl config set-context --current
+--namespace=...` works, but FeatherLab never sets or resets it: kubectl uses `default` until
+the learner changes it, and a namespace set for one exercise is still current in the next.
+Never assume the context points at the exercise's namespace. Every exercise therefore:
 
 - states its namespace(s) as the **first requirement**;
 - explains `-n <namespace>` / `metadata.namespace` in its description (in detail in the

@@ -76,9 +76,11 @@ you no longer want them: `kubectl delete pod web -n default`, `kubectl delete na
 
 ## Known limitation: shared cluster-admin credential
 
-The learner's terminal and the application's grader/lifecycle driver use the **same kubeconfig**: the
+The learner's terminal and the application's grader/lifecycle driver use the **same credential**: the
 kind `kubernetes-admin` client certificate (`~/.featherlab/workstation-kubeconfig`, mounted read-only
-at `/home/learner/.kube/config`).
+at `/home/learner/.kube/base-config`). The grader/lifecycle driver reads that mount directly; the
+learner's terminal uses a writable copy at `/home/learner/.kube/config`, so changes the learner makes
+there (for example a default namespace) do not affect grading.
 
 **Actual risk**
 
