@@ -361,12 +361,12 @@ export async function stubApi(
     setTimeout(() => {
       ws.send("Welcome to the FeatherLab practice workstation (isolated kind cluster)\r\n");
       ws.send(`session-${session}\r\n`);
-      ws.send("learner@workstation:~$ kubectl get pods\r\n");
+      ws.send("learner:~$ kubectl get pods\r\n");
       ws.send("NAME   READY   STATUS    RESTARTS   AGE\r\n");
       ws.send("web    1/1     Running   0          12s\r\n");
-      ws.send("learner@workstation:~$ ls /\r\n");
+      ws.send("learner:~$ ls /\r\n");
       ws.send("bin   dev  home  lib64  mnt  proc  run   srv  tmp  var\r\n");
-      ws.send("learner@workstation:~$ ");
+      ws.send("learner:~$ ");
       if (session === 1 && firstSessionCloseCode)
         setTimeout(() => ws.close({ code: firstSessionCloseCode, reason: "stub" }), 200);
     }, 100);

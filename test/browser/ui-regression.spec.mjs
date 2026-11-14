@@ -253,11 +253,14 @@ test("terminal toolbar has only functional controls and no fake window buttons",
   const bar = page.locator(".terminal-bar");
   await expect(bar).toContainText("Linux workstation");
   await expect(page.locator(".terminal-dots")).toHaveCount(0);
-  // Every button in the toolbar has an accessible name.
+  // Every button in the toolbar has an accessible name and there are no decorative controls.
   const names = await bar
     .getByRole("button")
     .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label") || el.textContent.trim()));
-  expect(names).toEqual(["Maximize terminal"]);
+  expect(names.every((n) => n.length > 0)).toBe(true);
+  expect(names).toContain("Maximize terminal");
+  expect(names).toContain("Decrease font size");
+  expect(names).toContain("Increase font size");
 });
 
 test("terminal rows render raw output exactly, including after a pane resize", async ({
@@ -272,7 +275,7 @@ test("terminal rows render raw output exactly, including after a pane resize", a
   const check = async () => {
     const texts = await rowTexts();
     expect(texts).toContain("bin   dev  home  lib64  mnt  proc  run   srv  tmp  var");
-    expect(texts.filter((t) => t.startsWith("learner@workstation:~$")).length).toBe(3);
+    expect(texts.filter((t) => t.startsWith("learner:~$")).length).toBe(3);
   };
   await check();
 
@@ -603,4 +606,49 @@ test("k8s-0011 description renders table and https links without raw Markdown", 
   await page.setViewportSize({ width: 390, height: 844 });
   const overflow = await panel.evaluate((el) => el.scrollWidth - el.clientWidth);
   expect(overflow).toBeLessThanOrEqual(2);
+});
+
+// Copy on select: releasing the mouse on a selection copies it and flashes a copy icon.
+// The clipboard is stubbed because Firefox cannot be granted clipboard-read in Playwright.
+test("selecting terminal text copies it and flashes the copy icon", async ({ page, baseURL }) => {
+  await page.addInitScript(() => {
+    window.__copied = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text) => void window.__copied.push(text) },
+    });
+  });
+  await enterWorkspace(page, baseURL);
+  await expect(page.locator(".xterm-rows")).toContainText("bin   dev");
+  const flash = page.getByTestId("terminal-copy-flash");
+
+  // A plain click selects nothing: no copy, no flash.
+  const screen = await page.locator(".xterm-screen").boundingBox();
+  await page.mouse.click(screen.x + screen.width - 20, screen.y + screen.height - 20);
+  await expect(flash).toHaveCount(0);
+  expect(await page.evaluate(() => window.__copied)).toEqual([]);
+
+  // Drag across the whole `ls /` row.
+  const row = page.locator(".xterm-rows > div").filter({ hasText: "bin   dev" }).first();
+  const box = await row.boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(screen.x + 1, y);
+  await page.mouse.down();
+  await page.mouse.move(screen.x + screen.width - 2, y, { steps: 8 });
+  await expect(flash).toHaveCount(0); // not while the drag is still in progress
+  await page.mouse.up();
+
+  await expect(flash).toBeVisible();
+  expect(await page.evaluate(() => window.__copied)).toEqual([
+    "bin   dev  home  lib64  mnt  proc  run   srv  tmp  var",
+  ]);
+  // It is a flash: it removes itself.
+  await expect(flash).toHaveCount(0);
+  // The overlay must not change the grid's box.
+  const fits = await page.locator(".terminal-host").evaluate((host) => {
+    const s = host.querySelector(".xterm-screen").getBoundingClientRect();
+    const h = host.getBoundingClientRect();
+    return s.bottom <= h.bottom + 0.5 && s.right <= h.right + 0.5;
+  });
+  expect(fits).toBe(true);
 });
