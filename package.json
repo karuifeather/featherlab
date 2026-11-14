@@ -38,6 +38,7 @@
     "build": "vite build --config web/vite.config.js",
     "test": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./test/reporters/bail.mjs --test-reporter-destination=stderr \"test/unit/**/*.test.mjs\" \"test/packaging/**/*.test.mjs\"",
     "dev:web": "vite --config web/vite.config.js",
+    "build:workstation": "docker build -t ghcr.io/karuifeather/featherlab-workstation:$(node -p 'require(\"./package.json\").version') docker/",
     "start": "node bin/featherlab.mjs",
     "pack:check": "node scripts/check-package.mjs",
     "prepare": "husky",

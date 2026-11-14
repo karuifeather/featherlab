@@ -46,6 +46,8 @@ jobs:
           done
           curl -fsS http://127.0.0.1:4317/api/status
           docker exec featherlab-workstation kubectl cluster-info
+          # The learner shell: `k` alias with completion, and the exam's tools with man pages.
+          docker exec featherlab-workstation bash -ic 'type k && test -s /usr/share/bash-completion/completions/k && yq --version && man -w ls bash'
           # Open the exercise first: only the exercise that owns the environment is graded.
           curl -fsS -X POST http://127.0.0.1:4317/api/exercises/k8s-0001/activate | tee activate.json
           node -e 'if (JSON.parse(require("fs").readFileSync("activate.json","utf8")).environment !== "fresh") process.exit(1)'
