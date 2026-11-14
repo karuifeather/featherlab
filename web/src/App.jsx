@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Launcher } from "./features/launcher/Launcher.jsx";
 import { Workspace } from "./features/workspace/Workspace.jsx";
 
+const ISSUES_URL = "https://github.com/karuifeather/featherlab/issues";
+
 /** Theme override stored on <html data-theme>; unset means "follow the OS". */
 function useTheme() {
   const [override, setOverride] = useState(() => {
@@ -72,6 +74,20 @@ export function App() {
             )}
           </div>
           <div className="topbar-right">
+            {trackState && (
+              <a
+                className="topbar-link"
+                href={ISSUES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Report an issue on GitHub (opens in a new tab)"
+                title="Problem with a lab? Submit an issue on GitHub"
+                data-testid="report-issue"
+              >
+                <span aria-hidden="true">⚑</span>
+                <span className="topbar-link-label">Report an issue</span>
+              </a>
+            )}
             <span className="local">Local</span>
             <button
               type="button"

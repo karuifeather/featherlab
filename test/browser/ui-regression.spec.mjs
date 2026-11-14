@@ -56,6 +56,31 @@ test("maximizing the terminal fills the pane and keeps the shell visible", async
   await expect(page.getByTestId("exercise-panel")).toBeVisible();
 });
 
+// The workspace header links to GitHub issues in a new tab; the launcher header does not.
+test("workspace header offers a report-an-issue link that opens GitHub in a new tab", async ({
+  page,
+  baseURL,
+}) => {
+  await page.goto(baseURL);
+  await expect(page.locator(".track-row")).toBeVisible();
+  await expect(page.getByTestId("report-issue")).toHaveCount(0);
+
+  await enterWorkspace(page, baseURL);
+  const link = page.locator(".topbar").getByRole("link", { name: /report an issue/i });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", "https://github.com/karuifeather/featherlab/issues");
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", /noopener/);
+
+  // Still fits in the header on a phone-width screen.
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect(link).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
 // Progress: first-time learner sees Start Learning and real (zero) progress.
 test("first-time learner sees Start Learning, not Continue", async ({ page, baseURL }) => {
   // resume is the backend fallback with nothing completed → first-time learner

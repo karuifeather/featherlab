@@ -123,6 +123,45 @@
   }
 }
 
+// Text link styled as a quiet topbar control (e.g. "Report an issue").
+.topbar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+
+  &:hover {
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+  }
+}
+
+// On narrow screens the link collapses to its icon; the aria-label still names it.
+@media (max-width: 600px) {
+  .topbar-link {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .topbar-link-label {
+    display: none;
+  }
+}
+
 // Shared utility classes.
 .muted {
   color: var(--text-muted);
